@@ -201,14 +201,12 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
 /* ── INPUT BAR (bottom, Grok-style) ── */
 #input-bar{padding:10px 20px 16px;flex-shrink:0;display:flex;justify-content:center;}
 .uni-bar{width:100%;max-width:660px;position:relative;}
-.uni-input{width:100%;background:var(–bg2);border:1px solid var(–border2);border-radius:24px;padding:14px 56px 14px 20px;font-family:var(–font);font-size:14.5px;color:var(–text);outline:none;transition:border-color .14s;resize:none;max-height:160px;line-height:1.6;display:block;}
+.uni-input{width:100%;background:var(–bg2);border:1px solid var(–border2);border-radius:24px;padding:14px 56px 14px 20px;font-family:var(–font);font-size:14.5px;color:var(–text);outline:none;transition:border-color .14s;resize:none;max-height:160px;line-height:1.6;display:block;-webkit-appearance:none;}
 .uni-input:focus{border-color:#333;}
 .uni-input::placeholder{color:var(–text3);}
-.uni-send{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:38px;height:38px;border-radius:50%;background:var(–text);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:opacity .14s;flex-shrink:0;}
+.uni-send{position:absolute;right:10px;bottom:10px;width:38px;height:38px;border-radius:50%;background:var(–text);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:opacity .14s;flex-shrink:0;}
 .uni-send:hover{opacity:.8;}
 .uni-send svg{color:#000;width:14px;height:14px;}
-#txt{flex:1;background:none;border:none;outline:none;color:var(–text);font-family:var(–font);font-size:14px;resize:none;max-height:140px;line-height:1.6;}
-#txt::placeholder{color:var(–text3);}
 
 /* ── CODE PANEL ── */
 #code-wrap{display:flex;flex:1;overflow:hidden;min-height:0;}
@@ -327,26 +325,6 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
 #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(–bg3);color:var(–text);padding:8px 16px;border-radius:8px;font-size:12px;z-index:9999;border:1px solid var(–border2);opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;}
 
 @keyframes fu{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}
-/* ── MOBILE ── */
-#mob-bar{display:none;position:fixed;top:0;left:0;right:0;height:52px;background:var(–bg);border-bottom:1px solid var(–border);z-index:500;align-items:center;padding:0 14px;gap:10px;}
-#mob-bar .mob-logo{font-family:var(–kode);font-size:15px;font-weight:600;letter-spacing:.5px;cursor:pointer;display:flex;align-items:center;gap:7px;flex:1;}
-#mob-bar .mob-logo svg{width:18px;height:18px;}
-.mob-icon-btn{background:none;border:none;color:var(–text2);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;justify-content:center;}
-.mob-icon-btn:hover{background:var(–bg3);}
-.mob-icon-btn svg{width:18px;height:18px;}
-#sb-close-btn{display:none;background:none;border:none;color:var(–text3);cursor:pointer;padding:4px 8px;margin-left:auto;margin-right:6px;border-radius:6px;font-size:18px;line-height:1;}
-#sb-close-btn:hover{color:var(–text2);}
-@media(max-width:768px){
-#mob-bar{display:flex;}
-#sb-icons{position:fixed;left:0;top:0;bottom:0;z-index:600;transform:translateX(-100%);transition:transform .22s ease;box-shadow:4px 0 24px rgba(0,0,0,.6);}
-#sb-icons.open{transform:translateX(0);}
-#sb-overlay{display:block;}
-#sb-close-btn{display:block;}
-#main{margin-top:52px;}
-#app{flex-direction:column;}
-#sb-drawer{display:none;}
-}
-#sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:590;backdrop-filter:blur(2px);}
 
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
 .fu{animation:fu .2s ease forwards;}
@@ -380,27 +358,15 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
   </div>
 </div>
 
-<!-- ── MOBILE TOPBAR ── -->
-
-<div id="mob-bar">
-  <div class="mob-logo" onclick="newChat();siNav('chat');closeSidebar();">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-    KEMLLM
-  </div>
-  <button class="mob-icon-btn" onclick="openSidebar()" title="Menu">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-  </button>
-</div>
-<div id="sb-overlay" onclick="closeSidebar()"></div>
 <!-- ── MAIN APP ── -->
+
 <div id="app">
 
   <!-- ── ICON SIDEBAR ── -->
 
   <div id="sb-icons">
-    <button id="sb-close-btn" onclick="closeSidebar()" title="Close sidebar">✕</button>
     <!-- Logo -->
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 14px;cursor:pointer;" onclick="newChat();siNav('chat');closeSidebar();">
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 14px;cursor:pointer;" onclick="newChat();siNav('chat')">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
       <span style="font-family:var(--kode);font-size:14px;font-weight:600;letter-spacing:.5px;">KEMLLM</span>
     </div>
@@ -1146,15 +1112,6 @@ let drawerOpen=false;
 function toggleDrawer(){siNav('chats');}
 function closeDrawer(){}
 
-// ── MOBILE SIDEBAR ──
-function openSidebar(){
-  document.getElementById('sb-icons').classList.add('open');
-  document.getElementById('sb-overlay').style.display='block';
-}
-function closeSidebar(){
-  document.getElementById('sb-icons').classList.remove('open');
-  document.getElementById('sb-overlay').style.display='none';
-}
 
 // ── PANELS / NAV ──
 function siNav(p){
@@ -1165,8 +1122,6 @@ function siNav(p){
   if(map[p])document.getElementById(map[p]).classList.add('active');
   closeAllDrops();
   if(p!=='chat') closeDrawer();
-  // close mobile sidebar after nav
-  if(window.innerWidth<=768) closeSidebar();
 }
 
 // ── HOME/CHAT TOGGLE ──

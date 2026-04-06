@@ -322,6 +322,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
 #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bg3);color:var(--text);padding:8px 16px;border-radius:8px;font-size:12px;z-index:9999;border:1px solid var(--border2);opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;}
 
 @keyframes fu{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
 .fu{animation:fu .2s ease forwards;}
 </style>
 </head>
@@ -338,18 +339,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
       <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
       Sign in with GitHub
     </button>
-    <button class="lbtn lbtn-new" onclick="showNewProfile()">+ Create new profile</button>
     <div style="font-size:10px;color:var(--text3);margin-top:14px;line-height:1.6;">Each profile is private to this device.<br>Add your Replicate key in Settings.</div>
-  </div>
-</div>
-
-<!-- ── NEW PROFILE MODAL ── -->
-<div class="modal-overlay" id="new-profile-modal" onclick="if(event.target===this)closeNewProfile()">
-  <div class="modal-box">
-    <h3>Create Profile</h3>
-    <div class="mf"><label>Name</label><input class="mi" id="np-name" placeholder="e.g. KK" maxlength="24"></div>
-    <div class="mf"><label>PIN (4 digits, optional)</label><input class="mi" id="np-pin" type="password" placeholder="1234" maxlength="4" inputmode="numeric"></div>
-    <div class="mbtns"><button class="mbtn2 sec" onclick="closeNewProfile()">Cancel</button><button class="mbtn2 pri" onclick="createProfile()">Create</button></div>
   </div>
 </div>
 
@@ -374,7 +364,6 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
       <span style="font-family:var(--kode);font-size:14px;font-weight:600;letter-spacing:.5px;">KEMLLM</span>
     </div>
     <!-- Nav icons -->
-    <div class="si" id="si-chats" onclick="siNav('chats')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="si-label">Chats</span></div>
     <div class="si active" id="si-chat" onclick="siNav('chat')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="si-label">Chat</span>
     </div>
@@ -386,6 +375,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
     </div>
     <div class="si" id="si-models" onclick="siNav('models')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg><span class="si-label">Models</span>
+    </div>
+    <div class="si" id="si-agent" onclick="siNav('agent')" style="position:relative;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><circle cx="12" cy="10" r="2"/><path d="M12 8v0M12 12v0"/></svg><span class="si-label">Agent</span>
+      <div id="e2b-live-dot" style="display:none;position:absolute;top:4px;right:4px;width:7px;height:7px;background:var(--green);border-radius:50%;border:1.5px solid var(--bg);animation:pulse 2s infinite;"></div>
     </div>
     <div class="si" id="si-settings" onclick="siNav('settings')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="si-label">Settings</span>
@@ -411,7 +404,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
         <!-- model buttons -->
         <div class="tb-model" onclick="openDrop('mdrop',this)" id="btn-model" style="border:1.5px solid var(--blue);" style="border:1.5px solid var(--blue)!important;">
           <div class="mdot" id="mdot" style="background:#4a9eff;"></div>
-          <span id="cur-mn" style="font-size:12px;">Claude Sonnet 4.6</span>
+          <span id="cur-mn" style="font-size:12px;">Claude Sonnet 4.5</span>
           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div class="tb-model" onclick="openDrop('img-drop',this)" id="btn-img" style="border-color:rgba(244,114,182,.2);">
@@ -443,9 +436,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
         <span style="background:rgba(74,222,128,.1);color:var(--green);font-size:9px;padding:1px 5px;border-radius:7px;font-weight:700;">REPLICATE</span>All models via Replicate
       </div>
       <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://www.anthropic.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">Anthropic — Claude</div>
-      <div class="mdi sel" onclick="setModel('Claude Sonnet 4.6','anthropic/claude-sonnet-4.6','#4a9eff','Anthropic',this)"><div class="mdot" style="background:#4a9eff;"></div><div><div class="mdi-n">Claude Sonnet 4.6</div><div class="mdi-s">Latest · Smart & fast</div></div></div>
-      <div class="mdi" onclick="setModel('Claude Opus 4.6','anthropic/claude-opus-4.6','#a78bfa','Anthropic',this)"><div class="mdot" style="background:#a78bfa;"></div><div><div class="mdi-n">Claude Opus 4.6</div><div class="mdi-s">Most powerful</div></div></div>
-      <div class="mdi" onclick="setModel('Claude Haiku 4.5','anthropic/claude-haiku-4.5','#4ade80','Anthropic',this)"><div class="mdot" style="background:#4ade80;"></div><div><div class="mdi-n">Claude Haiku 4.5</div><div class="mdi-s">Ultra fast</div></div></div>
+      <div class="mdi sel" onclick="setModel('Claude Sonnet 4.5','anthropic/claude-4.5-sonnet','#4a9eff','Anthropic',this)"><div class="mdot" style="background:#4a9eff;"></div><div><div class="mdi-n">Claude Sonnet 4.5</div><div class="mdi-s">Latest · Smart & fast</div></div></div>
+      <div class="mdi" onclick="setModel('Claude Opus 4.5','anthropic/claude-4.5-sonnet','#a78bfa','Anthropic',this)"><div class="mdot" style="background:#a78bfa;"></div><div><div class="mdi-n">Claude Opus 4.5</div><div class="mdi-s">Most powerful</div></div></div>
+      <div class="mdi" onclick="setModel('Claude Haiku 4.5','anthropic/claude-4.5-haiku','#4ade80','Anthropic',this)"><div class="mdot" style="background:#4ade80;"></div><div><div class="mdi-n">Claude Haiku 4.5</div><div class="mdi-s">Ultra fast</div></div></div>
       <div class="mdsep"></div>
       <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">OpenAI — GPT</div>
       <div class="mdi" onclick="setModel('GPT-5','openai/gpt-5','#19c37d','OpenAI',this)"><div class="mdot" style="background:#19c37d;"></div><div><div class="mdi-n">GPT-5</div><div class="mdi-s">Flagship · Mar 2026</div></div></div>
@@ -454,9 +447,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
       <div class="mdi" onclick="setModel('GPT-4o','openai/gpt-4o','#0a5240','OpenAI',this)"><div class="mdot" style="background:#0a5240;"></div><div><div class="mdi-n">GPT-4o</div><div class="mdi-s">Classic multimodal</div></div></div>
       <div class="mdsep"></div>
       <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">Google — Gemini</div>
-      <div class="mdi" onclick="setModel('Gemini 2.5 Pro','google/gemini-2.5-pro','#4285f4','Google',this)"><div class="mdot" style="background:#4285f4;"></div><div><div class="mdi-n">Gemini 2.5 Pro</div><div class="mdi-s">Flagship · Feb 2026</div></div></div>
-      <div class="mdi" onclick="setModel('Gemini 2.5 Flash','google/gemini-2.5-flash','#5a95f5','Google',this)"><div class="mdot" style="background:#5a95f5;"></div><div><div class="mdi-n">Gemini 2.5 Flash</div><div class="mdi-s">Fast Gemini 3</div></div></div>
-      <div class="mdi" onclick="setModel('Gemini 2.5 Pro','google/gemini-2.5-pro','#3a75e4','Google',this)"><div class="mdot" style="background:#3a75e4;"></div><div><div class="mdi-n">Gemini 2.5 Pro</div><div class="mdi-s">Previous Pro</div></div></div>
+      <div class="mdi" onclick="setModel('Gemini 3.1 Pro','google/gemini-3.1-pro','#4285f4','Google',this)"><div class="mdot" style="background:#4285f4;"></div><div><div class="mdi-n">Gemini 3.1 Pro</div><div class="mdi-s">Flagship · Feb 2026</div></div></div>
+      <div class="mdi" onclick="setModel('Gemini 3 Pro','google/gemini-3-pro','#3a75e4','Google',this)"><div class="mdot" style="background:#3a75e4;"></div><div><div class="mdi-n">Gemini 3 Pro</div><div class="mdi-s">Agentic coding · #1 WebDev</div></div></div>
+      <div class="mdi" onclick="setModel('Gemini 3 Flash','google/gemini-3-flash','#5a95f5','Google',this)"><div class="mdot" style="background:#5a95f5;"></div><div><div class="mdi-n">Gemini 3 Flash</div><div class="mdi-s">Fast Gemini 3</div></div></div>
+      <div class="mdi" onclick="setModel('Gemini 3.1 Pro','google/gemini-3.1-pro','#3a75e4','Google',this)"><div class="mdot" style="background:#3a75e4;"></div><div><div class="mdi-n">Gemini 3.1 Pro</div><div class="mdi-s">Previous Pro</div></div></div>
       <div class="mdsep"></div>
       <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://x.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">xAI — Grok</div>
       <div class="mdi" onclick="setModel('Grok 4','xai/grok-4','#e879f9','xAI',this)"><div class="mdot" style="background:#e879f9;"></div><div><div class="mdi-n">Grok 4</div><div class="mdi-s">Flagship · Multi-agent</div></div></div>
@@ -472,7 +466,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
       <div class="mdsep"></div>
       <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://www.deepseek.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">DeepSeek</div>
       <div class="mdi" onclick="setModel('DeepSeek R1','deepseek-ai/deepseek-r1','#00b4d8','DeepSeek',this)"><div class="mdot" style="background:#00b4d8;"></div><div><div class="mdi-n">DeepSeek R1</div><div class="mdi-s">Reasoning · 2026</div></div></div>
-      <div class="mdi" onclick="setModel('DeepSeek V3','deepseek-ai/deepseek-v3','#0096c7','DeepSeek',this)"><div class="mdot" style="background:#0096c7;"></div><div><div class="mdi-n">DeepSeek V3</div><div class="mdi-s">Strong & efficient</div></div></div>
+      <div class="mdi" onclick="setModel('DeepSeek R1','deepseek-ai/deepseek-v3','#0096c7','DeepSeek',this)"><div class="mdot" style="background:#0096c7;"></div><div><div class="mdi-n">DeepSeek R1</div><div class="mdi-s">Strong & efficient</div></div></div>
     </div>
 
     <div class="drop" id="img-drop">
@@ -545,7 +539,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
           <span style="font-size:11px;color:var(--text3);">Model:</span>
           <div class="hs-mbtn" onclick="openDrop('mdrop',this)">
             <div class="mdot" id="hs-mdot" style="background:#4a9eff;"></div>
-            <span id="hs-mn">Claude Sonnet 4.6</span>
+            <span id="hs-mn">Claude Sonnet 4.5</span>
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
           </div>
         </div>
@@ -632,17 +626,17 @@ import sys; print(f"Python {sys.version.split()[0]}")</div>
     <!-- ── MODELS PANEL ── -->
     <div class="panel" id="models-panel">
       <div class="mp-h" style="margin-top:0;">Text Models</div>
-      <div class="mc-grid"><div class="mc cur" onclick="setModelFromCard(this,'Claude Sonnet 4.6','anthropic/claude-sonnet-4.6','#4a9eff','Anthropic')"><div class="cur-badge">Active</div><div class="mc-top"><div class="mc-ico" style="background:rgba(74,158,255,.12);"><img src="https://www.anthropic.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Claude Sonnet 4.6</div><div class="mc-p">Anthropic · Latest</div></div></div><div class="mc-d">Smart, fast, balanced. Best for most tasks.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag f">Fast</span><span class="tag c">Code</span></div></div>
-        <div class="mc" onclick="setModelFromCard(this,'Claude Opus 4.6','anthropic/claude-opus-4.6','#a78bfa','Anthropic')"><div class="mc-top"><div class="mc-ico" style="background:rgba(167,139,250,.12);"><img src="https://www.anthropic.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Claude Opus 4.6</div><div class="mc-p">Anthropic · Most Powerful</div></div></div><div class="mc-d">Most capable Claude. Agentic coding.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag r">Reasoning</span></div></div>
-        <div class="mc" onclick="setModelFromCard(this,'Claude Haiku 4.5','anthropic/claude-haiku-4.5','#4ade80','Anthropic')"><div class="mc-top"><div class="mc-ico" style="background:rgba(74,222,128,.12);"><img src="https://www.anthropic.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Claude Haiku 4.5</div><div class="mc-p">Anthropic · Ultra Fast</div></div></div><div class="mc-d">Fastest Claude for high volume tasks.</div><div class="mc-tags"><span class="tag f">Fast</span></div></div>
+      <div class="mc-grid"><div class="mc cur" onclick="setModelFromCard(this,'Claude Sonnet 4.5','anthropic/claude-4.5-sonnet','#4a9eff','Anthropic')"><div class="cur-badge">Active</div><div class="mc-top"><div class="mc-ico" style="background:rgba(74,158,255,.12);"><img src="https://www.anthropic.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Claude Sonnet 4.5</div><div class="mc-p">Anthropic · Latest</div></div></div><div class="mc-d">Smart, fast, balanced. Best for most tasks.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag f">Fast</span><span class="tag c">Code</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Claude Opus 4.5','anthropic/claude-4.5-sonnet','#a78bfa','Anthropic')"><div class="mc-top"><div class="mc-ico" style="background:rgba(167,139,250,.12);"><img src="https://www.anthropic.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Claude Opus 4.5</div><div class="mc-p">Anthropic · Most Powerful</div></div></div><div class="mc-d">Most capable Claude. Agentic coding.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag r">Reasoning</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Claude Haiku 4.5','anthropic/claude-4.5-haiku','#4ade80','Anthropic')"><div class="mc-top"><div class="mc-ico" style="background:rgba(74,222,128,.12);"><img src="https://www.anthropic.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Claude Haiku 4.5</div><div class="mc-p">Anthropic · Ultra Fast</div></div></div><div class="mc-d">Fastest Claude for high volume tasks.</div><div class="mc-tags"><span class="tag f">Fast</span></div></div>
         <div class="mc" onclick="setModelFromCard(this,'GPT-5','openai/gpt-5','#19c37d','OpenAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(25,195,125,.12);"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">GPT-5</div><div class="mc-p">OpenAI · Flagship Mar 2026</div></div></div><div class="mc-d">Latest flagship. 1M context. Computer use.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag v">Vision</span></div></div>
         <div class="mc" onclick="setModelFromCard(this,'GPT-5 Mini','openai/gpt-5-mini','#22d3a0','OpenAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(34,211,160,.12);"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">GPT-5 Mini</div><div class="mc-p">OpenAI · Fast</div></div></div><div class="mc-d">Fast and affordable. 400K context.</div><div class="mc-tags"><span class="tag f">Fast</span><span class="tag c">Code</span></div></div>
         <div class="mc" onclick="setModelFromCard(this,'GPT-5 Nano','openai/gpt-5-nano','#2ae0b0','OpenAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(42,224,176,.12);"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">GPT-5 Nano</div><div class="mc-p">OpenAI · Cheapest</div></div></div><div class="mc-d">Cheapest GPT-5.4 class.</div><div class="mc-tags"><span class="tag f">Fast</span></div></div>
         <div class="mc" onclick="setModelFromCard(this,'GPT-5','openai/gpt-5','#0f8060','OpenAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(15,128,96,.12);"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">GPT-5</div><div class="mc-p">OpenAI · Aug 2025</div></div></div><div class="mc-d">Original GPT-5. Still highly capable.</div><div class="mc-tags"><span class="tag s">Smart</span></div></div>
         <div class="mc" onclick="setModelFromCard(this,'GPT-4o','openai/gpt-4o','#0a5240','OpenAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(10,82,64,.15);"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">GPT-4o</div><div class="mc-p">OpenAI · Classic</div></div></div><div class="mc-d">Multimodal classic. Great everyday model.</div><div class="mc-tags"><span class="tag v">Vision</span><span class="tag f">Fast</span></div></div>
-        <div class="mc" onclick="setModelFromCard(this,'Gemini 2.5 Pro','google/gemini-2.5-pro','#4285f4','Google')"><div class="mc-top"><div class="mc-ico" style="background:rgba(66,133,244,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Gemini 2.5 Pro</div><div class="mc-p">Google · Feb 2026</div></div></div><div class="mc-d">77.1% ARC-AGI-2. #1 on 12 benchmarks.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag r">Reasoning</span></div></div>
-        <div class="mc" onclick="setModelFromCard(this,'Gemini 2.5 Flash','google/gemini-2.5-flash','#5a95f5','Google')"><div class="mc-top"><div class="mc-ico" style="background:rgba(90,149,245,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Gemini 2.5 Flash</div><div class="mc-p">Google · Fast</div></div></div><div class="mc-d">Fast Gemini 3 series model.</div><div class="mc-tags"><span class="tag f">Fast</span><span class="tag c">Code</span></div></div>
-        <div class="mc" onclick="setModelFromCard(this,'Gemini 2.5 Pro','google/gemini-2.5-pro','#3a75e4','Google')"><div class="mc-top"><div class="mc-ico" style="background:rgba(58,117,228,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Gemini 2.5 Pro</div><div class="mc-p">Google · Previous Pro</div></div></div><div class="mc-d">Strong reasoning at lower cost.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag v">Vision</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Gemini 3.1 Pro','google/gemini-3.1-pro','#4285f4','Google')"><div class="mc-top"><div class="mc-ico" style="background:rgba(66,133,244,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Gemini 3.1 Pro</div><div class="mc-p">Google · Feb 2026</div></div></div><div class="mc-d">77.1% ARC-AGI-2. #1 on 12 benchmarks.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag r">Reasoning</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Gemini 3 Flash','google/gemini-3-flash','#5a95f5','Google')"><div class="mc-top"><div class="mc-ico" style="background:rgba(90,149,245,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Gemini 3 Flash</div><div class="mc-p">Google · Fast</div></div></div><div class="mc-d">Fast Gemini 3 series model.</div><div class="mc-tags"><span class="tag f">Fast</span><span class="tag c">Code</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Gemini 3.1 Pro','google/gemini-3.1-pro','#3a75e4','Google')"><div class="mc-top"><div class="mc-ico" style="background:rgba(58,117,228,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Gemini 3.1 Pro</div><div class="mc-p">Google · Previous Pro</div></div></div><div class="mc-d">Strong reasoning at lower cost.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag v">Vision</span></div></div>
         <div class="mc" onclick="setModelFromCard(this,'Grok 4','xai/grok-4','#e879f9','xAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(232,121,249,.12);"><img src="https://x.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Grok 4</div><div class="mc-p">xAI · Current Flagship</div></div></div><div class="mc-d">4-agent multi-agent system. Feb 2026.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag r">Reasoning</span></div></div>
         <div class="mc" onclick="setModelFromCard(this,'Grok 4','xai/grok-4','#c026d3','xAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(192,38,211,.12);"><img src="https://x.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Grok 4</div><div class="mc-p">xAI · Refined</div></div></div><div class="mc-d">65% fewer hallucinations.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag f">Fast</span></div></div>
         <div class="mc" onclick="setModelFromCard(this,'Grok 4','xai/grok-4','#86198f','xAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(134,25,143,.12);"><img src="https://x.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Grok 4</div><div class="mc-p">xAI · Reasoning</div></div></div><div class="mc-d">RL reasoning + real-time search.</div><div class="mc-tags"><span class="tag r">Reasoning</span></div></div>
@@ -651,7 +645,7 @@ import sys; print(f"Python {sys.version.split()[0]}")</div>
         <div class="mc" onclick="setModelFromCard(this,'Mistral 7B','mistralai/mistral-7b-instruct-v0.2','#ff6b35','Mistral')"><div class="mc-top"><div class="mc-ico" style="background:rgba(255,107,53,.12);"><img src="https://mistral.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Mistral 7B</div><div class="mc-p">Mistral AI · Flagship</div></div></div><div class="mc-d">Most capable Mistral model.</div><div class="mc-tags"><span class="tag s">Smart</span></div></div>
         <div class="mc" onclick="setModelFromCard(this,'Mixtral 8x7B','mistralai/mixtral-8x7b-instruct-v0.1','#ff8c5a','Mistral')"><div class="mc-top"><div class="mc-ico" style="background:rgba(255,140,90,.12);"><img src="https://mistral.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Mixtral 8x7B</div><div class="mc-p">Mistral AI · MoE</div></div></div><div class="mc-d">Mixture of experts powerhouse.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag f">Fast</span></div></div>
         <div class="mc" onclick="setModelFromCard(this,'DeepSeek R1','deepseek-ai/deepseek-r1','#00b4d8','DeepSeek')"><div class="mc-top"><div class="mc-ico" style="background:rgba(0,180,216,.12);"><img src="https://www.deepseek.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">DeepSeek R1</div><div class="mc-p">DeepSeek · Reasoning 2026</div></div></div><div class="mc-d">Advanced reasoning. 1T params.</div><div class="mc-tags"><span class="tag r">Reasoning</span><span class="tag s">Smart</span></div></div>
-        <div class="mc" onclick="setModelFromCard(this,'DeepSeek V3','deepseek-ai/deepseek-v3','#0096c7','DeepSeek')"><div class="mc-top"><div class="mc-ico" style="background:rgba(0,150,199,.12);"><img src="https://www.deepseek.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">DeepSeek V3</div><div class="mc-p">DeepSeek · Strong & Fast</div></div></div><div class="mc-d">Best overall DeepSeek. Great at code.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag c">Code</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'DeepSeek R1','deepseek-ai/deepseek-v3','#0096c7','DeepSeek')"><div class="mc-top"><div class="mc-ico" style="background:rgba(0,150,199,.12);"><img src="https://www.deepseek.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">DeepSeek R1</div><div class="mc-p">DeepSeek · Strong & Fast</div></div></div><div class="mc-d">Best overall DeepSeek. Great at code.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag c">Code</span></div></div>
         </div>
       <div class="mp-h">Image Models — click to select, then say "generate an image of..." in chat</div>
       <div class="mc-grid"><div class="mc" onclick="setImgModel('Nano Banana Pro','google/nano-banana-pro','#f472b6',null);showToast('Image → Nano Banana Pro')"><div class="mc-top"><div class="mc-ico" style="background:rgba(244,114,182,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Nano Banana Pro</div><div class="mc-p">Google · Gemini Image</div></div></div><div class="mc-d">Best Google image gen.</div><div class="mc-tags"><span class="tag i">Image</span><span class="tag s">Smart</span></div></div>
@@ -690,9 +684,64 @@ import sys; print(f"Python {sys.version.split()[0]}")</div>
         <div id="all-chats-list" style="display:flex;flex-direction:column;gap:6px;"></div>
       </div>
     </div>
+
+    <!-- ── AGENT PANEL ── -->
+    <div class="panel" id="agent-panel">
+      <div style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
+        <!-- Agent topbar -->
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;">
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:700;">AI Agent</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:1px;" id="agent-status-text">Sandbox not started</div>
+          </div>
+          <button id="agent-start-btn" onclick="agentToggleSandbox()" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:7px 14px;font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;">▶ Start Sandbox</button>
+          <button onclick="agentClear()" style="background:var(--bg3);color:var(--text2);border:1px solid var(--border2);border-radius:8px;padding:7px 10px;font-family:var(--font);font-size:12px;cursor:pointer;">Clear</button>
+        </div>
+        <!-- Agent messages -->
+        <div id="agent-msgs" style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:12px;"></div>
+        <!-- Agent input -->
+        <div style="padding:12px 20px 16px;flex-shrink:0;">
+          <div class="iw">
+            <div class="ir">
+              <textarea id="agent-txt" rows="1" placeholder="Tell the agent what to do... e.g. 'Write a Python script to fetch BTC price and plot it'" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();agentSend();}" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px';" style="flex:1;background:none;border:none;outline:none;color:var(--text);font-family:var(--font);font-size:13.5px;resize:none;max-height:140px;line-height:1.6;"></textarea>
+              <button onclick="agentSend()" style="width:32px;height:32px;border-radius:50%;background:var(--text);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-left:8px;flex-shrink:0;"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ── SETTINGS PANEL ── -->
     <div class="panel" id="settings-panel">
       <div class="sp-h">Settings</div>
+      <div class="ss">
+        <h3>E2B API Key <span style="font-size:10px;background:rgba(74,222,128,.1);color:var(--green);padding:2px 6px;border-radius:5px;margin-left:6px;">Agent Sandbox</span></h3>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">Gives the AI a real Linux sandbox to run code in — it sees the output and keeps going.<br>Get free key: <a href="https://e2b.dev/dashboard" target="_blank" style="color:var(--blue);">e2b.dev/dashboard</a></div>
+        <div class="key-row"><input class="si2" type="password" id="e2b-key" placeholder="e2b_..." style="font-family:var(--mono);"><button class="save-btn" onclick="saveE2BKey()">Save</button></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:7px;" id="e2b-status">Not configured</div>
+      </div>
+      <div class="ss">
+        <h3>Direct API Keys <span style="font-size:10px;background:rgba(74,158,255,.1);color:var(--blue);padding:2px 6px;border-radius:5px;margin-left:6px;">Optional</span></h3>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.6;">Add your own keys to use providers directly instead of through Replicate. Leave blank to use Replicate.</div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div>
+            <div style="font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;">Anthropic (Claude)</div>
+            <div class="key-row"><input class="si2" type="password" id="key-anthropic" placeholder="sk-ant-..." style="font-family:var(--mono);"><button class="save-btn" onclick="saveExtKey('anthropic')">Save</button></div>
+          </div>
+          <div>
+            <div style="font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;">OpenAI (GPT)</div>
+            <div class="key-row"><input class="si2" type="password" id="key-openai" placeholder="sk-..." style="font-family:var(--mono);"><button class="save-btn" onclick="saveExtKey('openai')">Save</button></div>
+          </div>
+          <div>
+            <div style="font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;">Google (Gemini)</div>
+            <div class="key-row"><input class="si2" type="password" id="key-google" placeholder="AIza..." style="font-family:var(--mono);"><button class="save-btn" onclick="saveExtKey('google')">Save</button></div>
+          </div>
+          <div>
+            <div style="font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;">xAI (Grok)</div>
+            <div class="key-row"><input class="si2" type="password" id="key-xai" placeholder="xai-..." style="font-family:var(--mono);"><button class="save-btn" onclick="saveExtKey('xai')">Save</button></div>
+          </div>
+        </div>
+      </div>
       <div class="ss">
         <h3>Replicate API Key</h3>
         <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">Runs all models — Claude, GPT, Gemini, Grok, image gen, video gen.<br>Get free key: <a href="https://replicate.com/account/api-tokens" target="_blank" style="color:var(--blue);">replicate.com/account/api-tokens</a></div>
@@ -887,6 +936,11 @@ function activateProfile(id){
   _s('sp-sub','textContent',p.github?`GitHub: ${p.github}`:'Local · this device only');
   const k=profileGet('rep-key')||'';
   if(k)document.getElementById('rep-key').value=k;
+  ['anthropic','openai','google','xai'].forEach(p=>{
+    const v=profileGet('key-'+p)||'';
+    const el=document.getElementById('key-'+p);
+    if(el&&v)el.value=v;
+  });
   loadHistory();createStars();updLns();loadMCPState();
   renderCustomModels();injectCustomModels();
 }
@@ -909,7 +963,7 @@ function githubLogin(){
 }
 
 // ── STATE ──
-let curModel='Claude Sonnet 4.6',curModelId='anthropic/claude-sonnet-4.6',curProvider='Anthropic';
+let curModel='Claude Sonnet 4.5',curModelId='anthropic/claude-4.5-sonnet',curProvider='Anthropic';
 let curImgModel='Nano Banana Pro',curImgModelId='google/nano-banana-pro';
 let curVidModel='Veo 3',curVidModelId='google/veo-3';
 let wsEnabled=false,msgs=[],isHome=true,sbCollapsed=false,curLang='python';
@@ -985,7 +1039,7 @@ function siNav(p){
   document.querySelectorAll('.si').forEach(x=>x.classList.remove('active'));
   const sid=document.getElementById('si-'+p);if(sid)sid.classList.add('active');
   document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
-  const map={chat:'chat-panel',chats:'chats-panel',code:'code-panel',models:'models-panel',settings:'settings-panel'};
+  const map={chat:'chat-panel',chats:'chats-panel',code:'code-panel',models:'models-panel',settings:'settings-panel',agent:'agent-panel'};
   if(map[p])document.getElementById(map[p]).classList.add('active');
   closeAllDrops();
   if(p!=='chat') closeDrawer();
@@ -1112,9 +1166,26 @@ async function send(){
     let reply='';
     const sys=document.getElementById('sys-prompt')?.value||'You are KEMLLM. Be helpful and precise. Use markdown with code blocks.';
     const repKey=getRepKey();
-    if(curProvider==='Anthropic'&&!repKey){
-      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:curModelId.replace('anthropic/',''),max_tokens:2000,system:sys,messages:msgs})});
+    const anthropicKey=getExtKey('anthropic');
+    const openaiKey=getExtKey('openai');
+    const googleKey=getExtKey('google');
+    const xaiKey=getExtKey('xai');
+
+    if(curProvider==='Anthropic'&&(anthropicKey||!repKey)){
+      const key=anthropicKey;
+      if(!key)throw new Error('NO_KEY');
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:curModelId.replace('anthropic/',''),max_tokens:2000,system:sys,messages:msgs})});
       const d=await r.json();if(d.error)throw new Error(d.error.message||JSON.stringify(d.error));reply=d.content?.[0]?.text||'';
+    }else if(curProvider==='OpenAI'&&openaiKey){
+      const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+openaiKey},body:JSON.stringify({model:curModelId.replace('openai/',''),max_tokens:2000,messages:[{role:'system',content:sys},...msgs]})});
+      const d=await r.json();if(d.error)throw new Error(d.error.message||JSON.stringify(d.error));reply=d.choices?.[0]?.message?.content||'';
+    }else if(curProvider==='Google'&&googleKey){
+      const geminiModel=curModelId.replace('google/','');
+      const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${googleKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:msgs.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]})),systemInstruction:{parts:[{text:sys}]}})});
+      const d=await r.json();if(d.error)throw new Error(d.error.message||JSON.stringify(d.error));reply=d.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    }else if(curProvider==='xAI'&&xaiKey){
+      const r=await fetch('https://api.x.ai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+xaiKey},body:JSON.stringify({model:curModelId.replace('xai/',''),max_tokens:2000,messages:[{role:'system',content:sys},...msgs]})});
+      const d=await r.json();if(d.error)throw new Error(d.error.message||JSON.stringify(d.error));reply=d.choices?.[0]?.message?.content||'';
     }else if(repKey){
       const pred=await repCreate(curModelId,{prompt:text,system_prompt:sys,max_tokens:2000});
       const result=await repPoll(pred.id);const out=result.output;
@@ -1140,7 +1211,10 @@ const aiSVG=`<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.
 function addMsgDOM(role,text,animate){
   const el=document.createElement('div');el.className='msg'+(animate?' fu':'');
   if(role==='user'){el.innerHTML=`<div class="msg-u"><div class="bubble">${esc(text)}</div></div>`;}
-  else{el.innerHTML=`<div class="msg-a"><div class="ai-av">${aiSVG}</div><div class="ai-body"><div class="ai-tag">${curModel}</div><div class="ai-txt">${fmt(text)}</div><div class="ai-acts"><button class="aa" onclick="cpMsg(this)">📋 Copy</button><button class="aa" onclick="regen()">↺ Retry</button></div></div></div>`;}
+  else{
+    const fmtd=fmt(text);
+    el.innerHTML=`<div class="msg-a"><div class="ai-av">${aiSVG}</div><div class="ai-body"><div class="ai-tag">${curModel}</div><div class="ai-txt">${fmtd}</div><div class="ai-acts"><button class="aa" onclick="cpMsg(this)">📋 Copy</button><button class="aa" onclick="regen()">↺ Retry</button>${hasCode(text)?`<button class="aa" onclick="agentRun(this)">▶ Run Agent</button>`:''}</div></div></div>`;
+  }
   document.getElementById('msgs').appendChild(el);scrollBot();
 }
 function addImgMsg(url,prompt,model){
@@ -1172,6 +1246,64 @@ function newChat(){
   siNav('chat');
 }
 
+function hasCode(t){return t.includes("```python")||t.includes("```javascript")||t.includes("```js")||t.includes("```typescript")||t.includes("```bash");}
+async function agentRun(btn){
+  const body=btn.closest('.ai-body');
+  const pre=body.querySelector('pre code');
+  if(!pre)return;
+  const code=pre.innerText;
+  btn.textContent='⏳ Running...';btn.disabled=true;
+
+  // detect language
+  let lang='python';
+  const bodyHTML=body.querySelector('.ai-txt').innerHTML;
+  const lm=bodyHTML.match(/```(python|javascript|js|typescript|ts|bash)/i);
+  if(lm){const l=lm[1].toLowerCase();lang=l==='js'?'javascript':l==='ts'?'typescript':l==='sh'?'bash':l;}
+
+  const conf=pistonConf[lang]||pistonConf['python'];
+  let output='';
+  try{
+    const res=await fetch('https://emkc.org/api/v2/piston/execute',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({language:conf.language,version:conf.version,files:[{name:'main.'+conf.ext,content:code}]})
+    });
+    const data=await res.json();
+    output=(data.run?.stdout||'')+(data.run?.stderr||'');
+    if(!output)output='(no output)';
+    btn.textContent='✓ Ran';
+  }catch(e){
+    output='Error: '+e.message;
+    btn.textContent='✗ Error';
+  }
+
+  // Inject output as a new user message and continue the conversation
+  const resultMsg='Code output:\n```\n'+output.trim()+'\n```\nAnalyze this output and continue.';
+  msgs.push({role:'user',content:resultMsg});
+
+  // Show the output in chat
+  const outEl=document.createElement('div');outEl.className='msg fu';
+  outEl.innerHTML=`<div style="max-width:760px;margin:0 auto;padding:0 20px;"><div style="background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:10px 14px;font-family:var(--mono);font-size:12px;color:var(--green);">▶ Output\n${esc(output.trim())}</div></div>`;
+  document.getElementById('msgs').appendChild(outEl);
+
+  // Now send back to AI to analyze
+  const tid='agent'+Date.now();
+  addTyping(tid,'Analyzing output...');
+  try{
+    const sys=document.getElementById('sys-prompt')?.value||'You are KEMLLM.';
+    const repKey=getRepKey();
+    let reply='';
+    if(repKey){
+      const pred=await repCreate(curModelId,{prompt:resultMsg,system_prompt:sys,max_tokens:2000});
+      const result=await repPoll(pred.id);
+      const out=result.output;
+      reply=Array.isArray(out)?out.join(''):String(out||'');
+    }
+    removeTyping(tid);
+    msgs.push({role:'assistant',content:reply});
+    addMsgDOM('ai',reply,true);
+  }catch(e){removeTyping(tid);addErrMsg(e,'chat');}
+  scrollBot();
+}
 function fmt(t){
   t=t.replace(/```(\w*)\n?([\s\S]*?)```/g,(_,l,c)=>`<pre><code>${esc(c.trim())}</code></pre>`);
   t=t.replace(/`([^`\n]+)`/g,'<code>$1</code>');
@@ -1236,6 +1368,14 @@ function openUserModal(){document.getElementById('user-modal').classList.add('op
 function closeUserModal(){document.getElementById('user-modal').classList.remove('open');}
 
 // ── SETTINGS ──
+function saveExtKey(provider){
+  const el=document.getElementById('key-'+provider);
+  if(!el)return;
+  const v=el.value.trim();
+  profileSet('key-'+provider,v);
+  showToast(v?provider+' key saved ✓':provider+' key cleared');
+}
+function getExtKey(provider){return profileGet('key-'+provider)||'';}
 function saveRepKey(){const v=document.getElementById('rep-key').value.trim();if(!v){showToast('Enter a key');return;}if(!v.startsWith('r8_')){showToast('Key should start with r8_');return;}profileSet('rep-key',v);showToast('Replicate key saved ✓');}
 function setAccent(c,el){el.closest('.swatches').querySelectorAll('.sw').forEach(s=>s.classList.remove('on'));el.classList.add('on');document.documentElement.style.setProperty('--blue',c);}
 
@@ -1378,11 +1518,226 @@ function injectCustomModels(){
   });
 }
 
+
+// ── E2B KEY ──
+function getE2BKey(){return profileGet('e2b-key')||'';}
+function saveE2BKey(){
+  const v=document.getElementById('e2b-key').value.trim();
+  if(!v){showToast('Enter a key');return;}
+  profileSet('e2b-key',v);
+  document.getElementById('e2b-status').textContent='Key saved ✓';
+  document.getElementById('e2b-status').style.color='var(--green)';
+  showToast('E2B key saved ✓');
+}
+
+// ── AGENT STATE ──
+let agentSandboxId=null;
+let agentMsgs=[];
+let agentRunning=false;
+
+function agentLog(role,content,type='text'){
+  const el=document.getElementById('agent-msgs');
+  const div=document.createElement('div');
+  div.style.cssText='display:flex;flex-direction:column;gap:4px;';
+  const colors={user:'var(--blue)',ai:'var(--text2)',system:'var(--text3)',output:'var(--green)',error:'var(--red)'};
+  const labels={user:'You',ai:'Agent',system:'System',output:'Output',error:'Error'};
+  const col=colors[role]||'var(--text2)';
+  const lbl=labels[role]||role;
+  if(type==='code'){
+    div.innerHTML=`<div style="font-size:10px;font-weight:700;color:${col};letter-spacing:.5px;text-transform:uppercase;">${lbl}</div><pre style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:12px;color:var(--green);overflow-x:auto;white-space:pre-wrap;word-break:break-all;">${esc(content)}</pre>`;
+  } else {
+    div.innerHTML=`<div style="font-size:10px;font-weight:700;color:${col};letter-spacing:.5px;text-transform:uppercase;">${lbl}</div><div style="font-size:13px;line-height:1.65;color:var(--text2);">${fmt(content)}</div>`;
+  }
+  el.appendChild(div);
+  el.scrollTop=el.scrollHeight;
+}
+
+function agentClear(){
+  document.getElementById('agent-msgs').innerHTML='';
+  agentMsgs=[];
+}
+
+async function agentToggleSandbox(){
+  const btn=document.getElementById('agent-start-btn');
+  const status=document.getElementById('agent-status-text');
+  const dot=document.getElementById('e2b-live-dot');
+  if(agentSandboxId){
+    // Kill sandbox
+    try{
+      await fetch(`https://kemllmx.karimghannam2014.workers.dev/e2b/v1/sandboxes/${agentSandboxId}`,{
+        method:'DELETE',headers:{'X-API-Key':getE2BKey()}
+      });
+    }catch(e){}
+    agentSandboxId=null;
+    btn.textContent='▶ Start Sandbox';
+    btn.style.background='var(--green)';
+    status.textContent='Sandbox stopped';
+    dot.style.display='none';
+    agentLog('system','Sandbox stopped.');
+    return;
+  }
+  const key=getE2BKey();
+  if(!key){showToast('Add E2B key in Settings first');siNav('settings');return;}
+  btn.textContent='Starting...';btn.disabled=true;
+  status.textContent='Spinning up sandbox...';
+  agentLog('system','Starting E2B sandbox...');
+  try{
+    const r=await fetch('https://kemllmx.karimghannam2014.workers.dev/e2b/v1/sandboxes',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-API-Key':key},
+      body:JSON.stringify({templateID:'base',timeout:300})
+    });
+    const data=await r.json();
+    if(!data.sandboxID)throw new Error(data.message||JSON.stringify(data));
+    agentSandboxId=data.sandboxID;
+    btn.textContent='■ Stop Sandbox';
+    btn.style.background='var(--red)';
+    btn.disabled=false;
+    status.textContent='Sandbox live: '+agentSandboxId.slice(0,12)+'...';
+    dot.style.display='block';
+    agentLog('system','✓ Sandbox ready! Python, Node.js, bash all available.');
+  }catch(e){
+    btn.textContent='▶ Start Sandbox';btn.disabled=false;
+    status.textContent='Failed to start';
+    agentLog('error','Failed to start sandbox: '+e.message);
+  }
+}
+
+async function e2bRun(code,lang='python'){
+  if(!agentSandboxId)return{stdout:'',stderr:'No sandbox running'};
+  const key=getE2BKey();
+  let cmd=code;
+  if(lang==='python')cmd=`python3 -c ${JSON.stringify(code)}`;
+  else if(lang==='javascript')cmd=`node -e ${JSON.stringify(code)}`;
+  else if(lang==='bash')cmd=code;
+  try{
+    const r=await fetch(`https://kemllmx.karimghannam2014.workers.dev/e2b/v1/sandboxes/${agentSandboxId}/commands`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-API-Key':key},
+      body:JSON.stringify({cmd,timeout:30})
+    });
+    const data=await r.json();
+    return{stdout:data.stdout||'',stderr:data.stderr||''};
+  }catch(e){
+    return{stdout:'',stderr:e.message};
+  }
+}
+
+async function agentSend(){
+  if(agentRunning)return;
+  const inp=document.getElementById('agent-txt');
+  const task=inp.value.trim();if(!task)return;
+  inp.value='';inp.style.height='auto';
+
+  if(!agentSandboxId){
+    agentLog('system','Starting sandbox first...');
+    await agentToggleSandbox();
+    if(!agentSandboxId)return;
+  }
+
+  agentLog('user',task);
+  agentMsgs.push({role:'user',content:task});
+  agentRunning=true;
+
+  const systemPrompt=`You are an AI agent with access to a live Linux sandbox. You can execute Python, JavaScript, and bash commands.
+
+When you need to run code, output it in this EXACT format (nothing else on that line):
+EXECUTE_PYTHON:
+\`\`\`python
+# your code here
+\`\`\`
+
+Or for bash:
+EXECUTE_BASH:
+\`\`\`bash
+# your command
+\`\`\`
+
+After seeing output, continue your analysis. You can run multiple rounds of code.
+When you are done, just respond normally without any EXECUTE_ blocks.
+The sandbox has Python 3, Node.js, pip, curl, wget, and common libraries available.`;
+
+  let rounds=0;
+  const maxRounds=6;
+
+  while(rounds<maxRounds){
+    rounds++;
+    // Show typing
+    const tid='agent'+Date.now();
+    const typingEl=document.createElement('div');
+    typingEl.id=tid;typingEl.style.cssText='display:flex;gap:6px;align-items:center;padding:4px 0;';
+    typingEl.innerHTML='<div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Agent</div><div class="typing"><div class="td"></div><div class="td"></div><div class="td"></div></div>';
+    document.getElementById('agent-msgs').appendChild(typingEl);
+    document.getElementById('agent-msgs').scrollTop=99999;
+
+    let reply='';
+    try{
+      const repKey=getRepKey();
+      if(!repKey)throw new Error('NO_KEY');
+      const pred=await repCreate(curModelId,{
+        prompt:agentMsgs[agentMsgs.length-1].content,
+        system_prompt:systemPrompt,
+        max_tokens:2000
+      });
+      const result=await repPoll(pred.id);
+      const out=result.output;
+      reply=Array.isArray(out)?out.join(''):String(out||'');
+    }catch(e){
+      document.getElementById(tid)?.remove();
+      agentLog('error',e.message==='NO_KEY'?'Add Replicate key in Settings':'Error: '+e.message);
+      break;
+    }
+    document.getElementById(tid)?.remove();
+    agentMsgs.push({role:'assistant',content:reply});
+
+    // Check for EXECUTE_ blocks
+    const pyMatch=reply.match(/EXECUTE_PYTHON:\s*```python\s*([\s\S]*?)```/);
+    const bashMatch=reply.match(/EXECUTE_BASH:\s*```bash\s*([\s\S]*?)```/);
+    const jsMatch=reply.match(/EXECUTE_JS:\s*```javascript\s*([\s\S]*?)```/);
+
+    if(pyMatch||bashMatch||jsMatch){
+      // Show agent's text before the execute block
+      const textBefore=reply.split(/EXECUTE_(PYTHON|BASH|JS):/)[0].trim();
+      if(textBefore)agentLog('ai',textBefore);
+
+      const code=pyMatch?pyMatch[1].trim():bashMatch?bashMatch[1].trim():jsMatch[1].trim();
+      const lang=pyMatch?'python':bashMatch?'bash':'javascript';
+      agentLog(lang==='bash'?'system':'ai',code,'code');
+      agentLog('system',`Running ${lang}...`);
+
+      const {stdout,stderr}=await e2bRun(code,lang);
+      const output=(stdout+stderr).trim()||'(no output)';
+      agentLog('output',output,'code');
+
+      // Feed output back
+      agentMsgs.push({role:'user',content:`Execution output:
+${output}
+
+Continue.`});
+    } else {
+      // No more code to run - final response
+      agentLog('ai',reply);
+      break;
+    }
+  }
+  if(rounds>=maxRounds)agentLog('system','Max rounds reached.');
+  agentRunning=false;
+}
+
 // ── TOAST ──
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.opacity='1';clearTimeout(t._t);t._t=setTimeout(()=>t.style.opacity='0',2500);}
 
 // ── INIT ──
-renderProfileList();updLns();
+// Auto-login: if there's exactly one profile with no PIN, activate it directly
+(function(){
+  const profiles=getProfiles();
+  if(profiles.length===1&&!profiles[0].pin){
+    activateProfile(profiles[0].id);
+    return;
+  }
+  renderProfileList();
+})();
+updLns();
 
 // ── Handle GitHub OAuth callback ──
 (function(){

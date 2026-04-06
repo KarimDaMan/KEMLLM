@@ -1,0 +1,1346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>KEMLLM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#000;--bg2:#0d0d0d;--bg3:#161616;--bg4:#1e1e1e;
+  --border:#1a1a1a;--border2:#242424;
+  --text:#fff;--text2:#888;--text3:#444;
+  --blue:#4a9eff;--green:#4ade80;--purple:#a78bfa;
+  --orange:#fb923c;--red:#f87171;--pink:#f472b6;
+  --font:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:'JetBrains Mono','Courier New',monospace;
+  --kode:'Kode Mono','Courier New',monospace;
+  --sb:240px;
+  --sb-open:240px;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh;display:flex;overflow:hidden;}
+
+/* ── LOGIN ── */
+#login{position:fixed;inset:0;background:var(--bg);z-index:9000;display:flex;align-items:center;justify-content:center;}
+.login-box{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:36px;width:360px;text-align:center;}
+.login-logo{font-family:var(--kode);font-size:24px;font-weight:600;letter-spacing:1px;margin-bottom:4px;}
+.login-sub{font-size:12px;color:var(--text2);margin-bottom:26px;}
+.login-profiles{display:flex;flex-direction:column;gap:7px;margin-bottom:14px;}
+.profile-btn{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;cursor:pointer;transition:all .14s;text-align:left;}
+.profile-btn:hover{border-color:#333;background:var(--bg4);}
+.profile-ava{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;}
+.profile-name{font-size:13px;font-weight:600;}
+.profile-sub{font-size:10px;color:var(--text3);}
+.login-or{display:flex;align-items:center;gap:8px;color:var(--text3);font-size:11px;margin:6px 0;}
+.login-or::before,.login-or::after{content:'';flex:1;height:1px;background:var(--border2);}
+.lbtn{width:100%;padding:11px;border-radius:9px;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .14s;display:flex;align-items:center;justify-content:center;gap:8px;}
+.lbtn-gh{background:#fff;color:#000;}
+.lbtn-gh:hover{opacity:.88;}
+.lbtn-new{background:var(--bg3);color:var(--text2);border:1px solid var(--border2);margin-top:7px;}
+.lbtn-new:hover{background:var(--bg4);color:var(--text);}
+
+/* ── MODALS ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9500;display:none;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal-box{background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:26px;width:310px;}
+.modal-box h3{font-size:14px;font-weight:700;margin-bottom:16px;}
+.mf{margin-bottom:12px;}
+.mf label{font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:4px;}
+.mi{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;padding:8px 11px;font-family:var(--font);font-size:12.5px;color:var(--text);outline:none;}
+.mi:focus{border-color:#333;}
+.mbtns{display:flex;gap:7px;margin-top:16px;}
+.mbtn2{flex:1;padding:8px;border-radius:7px;font-family:var(--font);font-size:12.5px;font-weight:600;cursor:pointer;border:none;}
+.mbtn2.pri{background:var(--blue);color:#fff;}
+.mbtn2.sec{background:var(--bg3);color:var(--text2);border:1px solid var(--border2);}
+
+/* ── LAYOUT ── */
+#app{display:flex;height:100vh;width:100%;overflow:hidden;}
+
+/* ── LEFT ICON SIDEBAR (always visible, Grok-style) ── */
+#sb-icons{width:var(--sb);min-width:var(--sb);background:var(--bg);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:10px 0;gap:2px;z-index:100;flex-shrink:0;}
+.si-logo{width:36px;height:36px;display:flex;align-items:center;justify-content:center;margin-bottom:8px;cursor:pointer;}
+.si-logo svg{width:22px;height:22px;}
+.si{display:flex;align-items:center;gap:10px;padding:7px 12px;margin:1px 8px;border-radius:9px;cursor:pointer;transition:background .14s;color:var(--text3);position:relative;font-size:13px;white-space:nowrap;}
+.si:hover{background:var(--bg3);color:var(--text2);}
+.si.active{background:var(--bg3);color:var(--text);}
+.si svg{width:17px;height:17px;flex-shrink:0;}
+.si-label{flex:1;}
+.si-spacer{flex:1;}
+.si-ava{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;cursor:pointer;margin-top:4px;flex-shrink:0;}
+.si-badge{position:absolute;top:3px;right:3px;width:7px;height:7px;background:var(--blue);border-radius:50%;border:1.5px solid var(--bg);}
+
+/* ── HISTORY DRAWER (slides in over content) ── */
+#sb-drawer{width:var(--sb-open);background:var(--bg);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;transition:width .2s ease,min-width .2s ease;flex-shrink:0;}
+#sb-drawer.closed{width:0;min-width:0;}
+.dr-top{padding:14px 14px 8px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.dr-title{font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.3px;white-space:nowrap;}
+.dr-close{background:none;border:none;color:var(--text3);cursor:pointer;padding:3px;border-radius:5px;display:flex;}
+.dr-close:hover{color:var(--text2);}
+.dr-new{margin:0 10px 8px;display:flex;align-items:center;gap:7px;padding:8px 10px;border-radius:8px;background:var(--bg3);border:1px solid var(--border2);cursor:pointer;font-size:12.5px;color:var(--text2);transition:all .14s;white-space:nowrap;}
+.dr-new:hover{color:var(--text);border-color:#333;}
+.dr-section{font-size:9.5px;font-weight:700;color:var(--text3);letter-spacing:1px;text-transform:uppercase;padding:10px 14px 4px;white-space:nowrap;}
+.hist-list{flex:1;overflow-y:auto;padding:0 8px 8px;}
+.hist-list::-webkit-scrollbar{width:2px;}
+.hist-list::-webkit-scrollbar-thumb{background:var(--border2);}
+.hi{display:flex;align-items:center;padding:7px 8px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--text3);transition:all .14s;position:relative;white-space:nowrap;overflow:hidden;}
+.hi:hover{background:var(--bg3);color:var(--text2);}
+.hi.active{background:var(--bg3);color:var(--text2);}
+.hi-txt{flex:1;overflow:hidden;text-overflow:ellipsis;}
+.hi-del{display:none;padding:1px 4px;border-radius:3px;font-size:10px;flex-shrink:0;}
+.hi:hover .hi-del{display:block;}
+.hi-del:hover{background:rgba(248,113,113,.15);color:var(--red);}
+
+/* ── MAIN ── */
+#main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;position:relative;}
+
+/* ── TOPBAR (minimal, Grok-style) ── */
+#topbar{height:52px;display:flex;align-items:center;padding:0 18px;gap:8px;flex-shrink:0;justify-content:flex-end;}
+.tb-model{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-family:var(--font);color:var(--text2);transition:background .14s;border:1px solid transparent;}
+.tb-model:hover{background:var(--bg3);border-color:var(--border2);color:var(--text);}
+.tb-right{display:flex;align-items:center;gap:6px;}
+.ib{background:none;border:1px solid var(--border2);border-radius:8px;color:var(--text2);cursor:pointer;padding:5px 10px;font-size:11.5px;font-family:var(--font);display:flex;align-items:center;gap:5px;transition:all .14s;white-space:nowrap;}
+.ib:hover,.ib.on{background:var(--bg3);color:var(--text);}
+.ib.on{border-color:var(--blue);color:var(--blue);}
+.ib svg{width:12px;height:12px;}
+.ib-icon{background:none;border:none;width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text3);transition:all .14s;}
+.ib-icon:hover{background:var(--bg3);color:var(--text2);}
+.ib-icon svg{width:15px;height:15px;}
+/* Private badge top right (like Grok) */
+.tb-private{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;font-size:11.5px;color:var(--text3);border:1px solid var(--border2);}
+.tb-private svg{width:12px;height:12px;}
+
+/* ── DROPDOWNS ── */
+.drop{position:fixed;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:4px;z-index:8000;display:none;box-shadow:0 16px 56px rgba(0,0,0,.9);overflow-y:auto;}
+.drop.open{display:block;}
+.drop::-webkit-scrollbar{width:2px;}
+.drop::-webkit-scrollbar-thumb{background:var(--border2);}
+#mdrop{width:310px;max-height:520px;}
+#img-drop{width:285px;max-height:480px;}
+#vid-drop{width:265px;max-height:420px;}
+.mds{font-size:9.5px;font-weight:700;color:var(--text3);letter-spacing:1.1px;text-transform:uppercase;padding:8px 11px 3px;}
+.mdi{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;transition:background .12s;}
+.mdi:hover,.mdi.sel{background:var(--bg3);}
+.mdi-n{font-size:12px;font-weight:600;}
+.mdi-s{font-size:10.5px;color:var(--text3);}
+.mdsep{height:1px;background:var(--border2);margin:3px 0;}
+.mdot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+
+/* ── PANELS ── */
+.panel{display:none;overflow:hidden;flex-direction:column;}
+.panel.active{display:flex;flex:1;}
+
+/* ── HOME (Grok-style: centered logo + big search) ── */
+#home-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:40px 20px;gap:0;}
+.hs-logo{font-family:var(--kode);font-size:42px;font-weight:600;letter-spacing:2px;margin-bottom:40px;display:flex;align-items:center;gap:14px;}
+.hs-logo svg{width:44px;height:44px;}
+/* Big Grok-style search bar */
+.hs-input-wrap{width:100%;max-width:660px;position:relative;}
+.hs-input{width:100%;background:var(--bg2);border:1px solid var(--border2);border-radius:24px;padding:16px 56px 16px 20px;font-family:var(--font);font-size:15px;color:var(--text);outline:none;transition:border-color .14s;}
+.hs-input:focus{border-color:#333;}
+.hs-input::placeholder{color:var(--text3);}
+.hs-send{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:38px;height:38px;border-radius:50%;background:var(--text);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:opacity .14s;}
+.hs-send:hover{opacity:.8;}
+.hs-send svg{color:#000;width:14px;height:14px;}
+.hs-chips{display:none;}
+.hs-chip{display:none;}
+.hs-chip:hover{background:var(--bg3);color:var(--text);border-color:#333;}
+/* model row under search */
+.hs-models{display:flex;align-items:center;gap:8px;margin-top:14px;}
+.hs-mbtn{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:none;font-family:var(--font);font-size:11.5px;color:var(--text2);cursor:pointer;transition:all .14s;}
+.hs-mbtn:hover{background:var(--bg3);color:var(--text);}
+
+/* ── CHAT ── */
+#chat-area{flex:1;overflow-y:auto;position:relative;min-height:0;}
+#chat-area::-webkit-scrollbar{width:3px;}
+#chat-area::-webkit-scrollbar-thumb{background:var(--border2);}
+#stars-bg{position:absolute;inset:0;pointer-events:none;overflow:hidden;}
+.star{position:absolute;border-radius:50%;background:#fff;animation:twinkle var(--d,3s) ease-in-out infinite;}
+@keyframes twinkle{0%,100%{opacity:var(--a,.06);}50%{opacity:var(--b,.4);}}
+#msgs{padding:16px 0;position:relative;}
+.msg{max-width:760px;margin:0 auto 14px;padding:0 20px;}
+.msg-u{display:flex;justify-content:flex-end;}
+.bubble{background:var(--bg3);border:1px solid var(--border2);border-radius:18px 18px 4px 18px;padding:11px 16px;font-size:13.5px;line-height:1.65;max-width:72%;}
+.msg-a{display:flex;gap:10px;}
+.ai-av{width:26px;height:26px;border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;}
+.ai-av svg{width:13px;height:13px;}
+.ai-body{flex:1;min-width:0;}
+.ai-tag{font-size:10px;color:var(--text3);margin-bottom:5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;}
+.ai-txt{font-size:13.5px;line-height:1.72;color:var(--text2);}
+.ai-txt strong{color:var(--text);font-weight:600;}
+.ai-txt em{color:var(--text2);font-style:italic;}
+.ai-txt code{font-family:var(--mono);background:var(--bg3);padding:1px 5px;border-radius:4px;font-size:12px;color:var(--blue);}
+.ai-txt pre{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:14px 16px;margin:10px 0;overflow-x:auto;}
+.ai-txt pre code{background:none;padding:0;color:#cbd5e1;font-size:12px;}
+.ai-txt ul,.ai-txt ol{padding-left:18px;margin:6px 0;}
+.ai-txt li{margin-bottom:3px;}
+.ai-txt h1,.ai-txt h2,.ai-txt h3{color:var(--text);font-weight:600;margin:10px 0 5px;}
+.ai-txt h1{font-size:16px;}.ai-txt h2{font-size:14px;}.ai-txt h3{font-size:13px;}
+.ai-acts{display:flex;gap:4px;margin-top:7px;}
+.aa{background:none;border:none;color:var(--text3);cursor:pointer;font-size:10.5px;font-family:var(--font);display:flex;align-items:center;gap:3px;padding:3px 7px;border-radius:6px;transition:all .14s;text-decoration:none;}
+.aa:hover{color:var(--text2);background:var(--bg3);}
+.typing{display:flex;gap:4px;align-items:center;padding:2px 0;}
+.td{width:4px;height:4px;border-radius:50%;background:var(--text3);animation:tb .75s ease-in-out infinite;}
+.td:nth-child(2){animation-delay:.13s;}.td:nth-child(3){animation-delay:.26s;}
+@keyframes tb{0%,100%{transform:translateY(0);}50%{transform:translateY(-4px);}}
+.media-wrap{margin-top:8px;border-radius:12px;overflow:hidden;max-width:480px;border:1px solid var(--border2);}
+.media-wrap img{width:100%;display:block;cursor:pointer;}
+.media-wrap video{width:100%;display:block;}
+
+/* ── INPUT BAR (bottom, Grok-style) ── */
+#input-bar{padding:12px 20px 16px;flex-shrink:0;}
+.iw{max-width:760px;margin:0 auto;background:var(--bg2);border:1px solid var(--border2);border-radius:18px;transition:border-color .14s;}
+.iw:focus-within{border-color:#2a2a2a;}
+.ir{display:flex;align-items:flex-end;padding:12px 12px 8px;}
+#txt{flex:1;background:none;border:none;outline:none;color:var(--text);font-family:var(--font);font-size:13.5px;resize:none;max-height:140px;line-height:1.6;}
+#txt::placeholder{color:var(--text3);}
+.send-btn{width:32px;height:32px;border-radius:50%;background:var(--text);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-left:8px;flex-shrink:0;transition:opacity .14s;}
+.send-btn:hover{opacity:.8;}
+.send-btn svg{color:#000;width:12px;height:12px;}
+.if{display:flex;align-items:center;padding:0 12px 10px;gap:4px;}
+.ia{background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;font-family:var(--font);display:flex;align-items:center;gap:3px;padding:3px 7px;border-radius:6px;transition:all .14s;}
+.ia:hover{background:var(--bg3);color:var(--text2);}
+.ia svg{width:11px;height:11px;}
+#tok{margin-left:auto;font-size:10.5px;color:var(--text3);}
+
+/* ── CODE PANEL ── */
+#code-wrap{display:flex;flex:1;overflow:hidden;min-height:0;}
+#code-files{width:170px;border-right:1px solid var(--border);background:var(--bg);display:flex;flex-direction:column;padding:8px 6px;gap:2px;flex-shrink:0;}
+.cf-lbl{font-size:9.5px;font-weight:700;color:var(--text3);letter-spacing:1px;text-transform:uppercase;padding:2px 8px 7px;}
+.cf{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11.5px;color:var(--text2);transition:all .14s;}
+.cf:hover,.cf.active{background:var(--bg3);color:var(--text);}
+.cfdot{width:6px;height:6px;border-radius:2px;flex-shrink:0;}
+.cf-add{color:var(--text3);font-size:11.5px;padding:5px 8px;cursor:pointer;border-radius:6px;transition:background .14s;}
+.cf-add:hover{background:var(--bg3);color:var(--text2);}
+#code-main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+#code-tb{height:42px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:7px;flex-shrink:0;}
+.run-btn{background:var(--green);color:#000;border:none;border-radius:7px;padding:5px 12px;font-size:11.5px;font-weight:700;font-family:var(--font);cursor:pointer;display:flex;align-items:center;gap:4px;transition:opacity .14s;}
+.run-btn:hover{opacity:.85;}
+.run-btn.running{background:var(--orange);}
+.lang-sel{background:var(--bg3);border:1px solid var(--border2);border-radius:7px;padding:4px 9px;font-size:11.5px;color:var(--text);font-family:var(--font);outline:none;cursor:pointer;}
+.lang-sel option{background:var(--bg2);}
+.code-ia{background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer;padding:4px 9px;font-size:11px;font-family:var(--font);transition:all .14s;}
+.code-ia:hover{background:var(--bg3);}
+#eed{display:flex;flex:1;overflow:hidden;}
+#lns{background:var(--bg);padding:14px 0;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text3);text-align:right;user-select:none;border-right:1px solid var(--border);min-width:40px;overflow:hidden;flex-shrink:0;}
+.ln{padding:0 8px;}
+#ced{flex:1;background:var(--bg);padding:14px;font-family:var(--mono);font-size:12px;color:#e2e8f0;outline:none;overflow:auto;line-height:1.7;white-space:pre;tab-size:4;}
+#ced::-webkit-scrollbar{width:3px;height:3px;}
+#ced::-webkit-scrollbar-thumb{background:var(--border2);}
+#out-panel{height:175px;border-top:1px solid var(--border);background:var(--bg2);overflow-y:auto;flex-shrink:0;}
+.out-hdr{display:flex;align-items:center;gap:7px;padding:7px 13px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3);}
+.out-hdr span{font-weight:600;}
+.out-clr{margin-left:auto;cursor:pointer;}
+.out-clr:hover{color:var(--text2);}
+.out-lines{padding:9px 13px;font-family:var(--mono);font-size:11.5px;line-height:1.7;}
+.ol{color:var(--text2);}
+.ol.ok{color:var(--green);}
+.ol.err{color:var(--red);}
+.ol.inf{color:var(--blue);}
+.ol.warn{color:var(--orange);}
+
+/* ── MODELS / SETTINGS PANELS ── */
+#models-panel,#settings-panel{overflow-y:auto;}
+#models-panel::-webkit-scrollbar,#settings-panel::-webkit-scrollbar{width:3px;}
+#models-panel::-webkit-scrollbar-thumb,#settings-panel::-webkit-scrollbar-thumb{background:var(--border2);}
+#models-panel{padding:20px 24px;}
+#settings-panel{padding:22px 24px;max-width:620px;}
+.mp-h{font-size:10px;font-weight:700;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin:18px 0 10px;}
+.mc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin-bottom:4px;}
+.mc{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:14px;cursor:pointer;transition:all .14s;position:relative;}
+.mc:hover{border-color:#2a2a2a;background:var(--bg3);}
+.mc.cur{border-color:var(--blue);}
+.mc-top{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+.mc-ico{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.mc-n{font-size:12.5px;font-weight:600;}
+.mc-p{font-size:10.5px;color:var(--text3);}
+.mc-d{font-size:11.5px;color:var(--text2);line-height:1.5;margin-bottom:8px;}
+.mc-tags{display:flex;gap:4px;flex-wrap:wrap;}
+.tag{font-size:10px;padding:2px 7px;border-radius:18px;font-weight:500;}
+.tag.s{background:rgba(74,158,255,.1);color:var(--blue);}
+.tag.f{background:rgba(74,222,128,.1);color:var(--green);}
+.tag.v{background:rgba(167,139,250,.1);color:var(--purple);}
+.tag.c{background:rgba(251,146,60,.1);color:var(--orange);}
+.tag.r{background:rgba(248,113,113,.1);color:var(--red);}
+.tag.i{background:rgba(244,114,182,.1);color:var(--pink);}
+.cur-badge{position:absolute;top:9px;right:9px;background:var(--blue);color:#fff;font-size:9px;padding:2px 6px;border-radius:14px;font-weight:700;}
+.sp-h{font-size:17px;font-weight:700;margin-bottom:18px;}
+.ss{margin-bottom:24px;}
+.ss h3{font-size:12.5px;font-weight:700;margin-bottom:11px;padding-bottom:7px;border-bottom:1px solid var(--border2);}
+.sr{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border2);}
+.sl{font-size:13px;}
+.sd{font-size:11px;color:var(--text3);margin-top:2px;}
+.toggle{width:36px;height:20px;background:var(--bg4);border-radius:10px;cursor:pointer;position:relative;transition:background .18s;flex-shrink:0;}
+.toggle.on{background:var(--blue);}
+.toggle::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .18s;}
+.toggle.on::after{transform:translateX(16px);}
+.si2{background:var(--bg3);border:1px solid var(--border2);border-radius:7px;padding:7px 10px;font-family:var(--font);font-size:12.5px;color:var(--text);outline:none;transition:border-color .14s;width:100%;}
+.si2:focus{border-color:#333;}
+.key-row{display:flex;gap:6px;margin-top:6px;}
+.save-btn{background:var(--bg3);border:1px solid var(--border2);border-radius:7px;padding:7px 12px;font-family:var(--font);font-size:12px;color:var(--text);cursor:pointer;white-space:nowrap;transition:all .14s;}
+.save-btn:hover{background:var(--bg4);}
+.swatches{display:flex;gap:6px;flex-wrap:wrap;}
+.sw{width:24px;height:24px;border-radius:5px;cursor:pointer;border:2px solid transparent;transition:all .14s;}
+.sw:hover,.sw.on{border-color:#fff;}
+
+/* ── MCP MODAL ── */
+#mcp-modal{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:7000;display:none;align-items:center;justify-content:center;}
+#mcp-modal.open{display:flex;}
+.mcp-box{background:var(--bg2);border:1px solid var(--border2);border-radius:14px;width:460px;max-height:78vh;display:flex;flex-direction:column;}
+.mcp-hdr{padding:16px 18px;border-bottom:1px solid var(--border2);display:flex;align-items:center;justify-content:space-between;}
+.mcp-hdr h2{font-size:14px;font-weight:700;}
+.mcp-close{background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:1px 6px;line-height:1;}
+.mcp-body{padding:14px 18px;overflow-y:auto;flex:1;}
+.mcp-sec{font-size:9.5px;font-weight:700;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin:12px 0 7px;}
+.mcp-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;margin-bottom:7px;}
+.mcp-ico{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.mcp-info{flex:1;}
+.mcp-name{font-size:12.5px;font-weight:600;}
+.mcp-desc{font-size:10.5px;color:var(--text3);margin-top:1px;}
+.mcp-btn{background:var(--bg4);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;font-size:11px;font-family:var(--font);color:var(--text2);cursor:pointer;white-space:nowrap;transition:all .14s;}
+.mcp-btn:hover{background:var(--bg3);color:var(--text);}
+.mcp-btn.conn{background:rgba(74,222,128,.08);border-color:var(--green);color:var(--green);}
+
+/* ── USER MODAL ── */
+#user-modal{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:7000;display:none;align-items:center;justify-content:center;}
+#user-modal.open{display:flex;}
+.um-box{background:var(--bg2);border:1px solid var(--border2);border-radius:14px;width:300px;overflow:hidden;}
+.um-top{padding:16px 18px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:11px;}
+.um-ava{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;}
+.um-name{font-size:14px;font-weight:700;}
+.um-email{font-size:11px;color:var(--text3);}
+.um-actions{padding:7px;}
+.um-item{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:7px;cursor:pointer;font-size:12.5px;color:var(--text2);transition:all .14s;}
+.um-item:hover{background:var(--bg3);color:var(--text);}
+.um-item svg{width:14px;height:14px;}
+.um-item.danger{color:var(--red);}
+.um-item.danger:hover{background:rgba(248,113,113,.08);}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bg3);color:var(--text);padding:8px 16px;border-radius:8px;font-size:12px;z-index:9999;border:1px solid var(--border2);opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;}
+
+@keyframes fu{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}
+.fu{animation:fu .2s ease forwards;}
+</style>
+</head>
+<body>
+
+<!-- ── LOGIN ── -->
+<div id="login">
+  <div class="login-box">
+    <div class="login-logo">KEMLLM</div>
+    <div class="login-sub">Every model. One workspace.</div>
+    <div class="login-profiles" id="profile-list"></div>
+    <div class="login-or">or</div>
+    <button class="lbtn lbtn-gh" onclick="githubLogin()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
+      Sign in with GitHub
+    </button>
+    <button class="lbtn lbtn-new" onclick="showNewProfile()">+ Create new profile</button>
+    <div style="font-size:10px;color:var(--text3);margin-top:14px;line-height:1.6;">Each profile is private to this device.<br>Add your Replicate key in Settings.</div>
+  </div>
+</div>
+
+<!-- ── NEW PROFILE MODAL ── -->
+<div class="modal-overlay" id="new-profile-modal" onclick="if(event.target===this)closeNewProfile()">
+  <div class="modal-box">
+    <h3>Create Profile</h3>
+    <div class="mf"><label>Name</label><input class="mi" id="np-name" placeholder="e.g. KK" maxlength="24"></div>
+    <div class="mf"><label>PIN (4 digits, optional)</label><input class="mi" id="np-pin" type="password" placeholder="1234" maxlength="4" inputmode="numeric"></div>
+    <div class="mbtns"><button class="mbtn2 sec" onclick="closeNewProfile()">Cancel</button><button class="mbtn2 pri" onclick="createProfile()">Create</button></div>
+  </div>
+</div>
+
+<!-- ── PIN MODAL ── -->
+<div class="modal-overlay" id="pin-modal" onclick="if(event.target===this)closePinModal()">
+  <div class="modal-box">
+    <h3>PIN for <span id="pin-profile-name"></span></h3>
+    <div class="mf"><label>PIN</label><input class="mi" id="pin-input" type="password" placeholder="••••" maxlength="4" inputmode="numeric" onkeydown="if(event.key==='Enter')submitPin()"></div>
+    <div style="color:var(--red);font-size:11px;margin-top:2px;display:none;" id="pin-error">Wrong PIN</div>
+    <div class="mbtns"><button class="mbtn2 sec" onclick="closePinModal()">Cancel</button><button class="mbtn2 pri" onclick="submitPin()">Unlock</button></div>
+  </div>
+</div>
+
+<!-- ── MAIN APP ── -->
+<div id="app">
+
+  <!-- ── ICON SIDEBAR ── -->
+  <div id="sb-icons">
+    <!-- Logo -->
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 14px;cursor:pointer;" onclick="toggleDrawer()">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      <span style="font-family:var(--kode);font-size:14px;font-weight:600;letter-spacing:.5px;">KEMLLM</span>
+    </div>
+    <!-- Nav icons -->
+    <div class="si active" id="si-chat" onclick="siNav('chat')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="si-label">Chat</span>
+    </div>
+    <div class="si" id="si-code" onclick="siNav('code')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg><span class="si-label">Code</span>
+    </div>
+    <div class="si" id="si-models" onclick="siNav('models')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg><span class="si-label">Models</span>
+    </div>
+    <div class="si" id="si-settings" onclick="siNav('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="si-label">Settings</span>
+    </div>
+    <div class="si" onclick="openMCP()" style="position:relative;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg><span class="si-label">Connectors</span><div class="si-badge" id="mcp-badge-dot"></div>
+    </div>
+    <div class="si-spacer"></div>
+    <div class="si" id="si-ava" onclick="openUserModal()" style="margin:0 0 4px;"><div id="si-ava-inner" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;background:linear-gradient(135deg,#4a9eff,#a78bfa);"><span id="si-ava-init">?</span></div><span id="si-ava-name" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span></div>
+  </div>
+
+  <!-- ── HISTORY DRAWER ── -->
+  <div id="sb-drawer" class="closed">
+    <div class="dr-top">
+      <span class="dr-title">History</span>
+      <button class="dr-close" onclick="closeDrawer()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="dr-new" onclick="newChat()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Chat
+    </div>
+    <div class="dr-section">Recent</div>
+    <div class="hist-list" id="hist-list"></div>
+  </div>
+
+  <!-- ── MAIN CONTENT ── -->
+  <div id="main">
+    <!-- TOPBAR -->
+    <div id="topbar">
+      <div class="tb-right">
+        <!-- model buttons -->
+        <div class="tb-model" onclick="openDrop('mdrop',this)" id="btn-model" style="border:1.5px solid var(--blue);" style="border:1.5px solid var(--blue)!important;">
+          <div class="mdot" id="mdot" style="background:#4a9eff;"></div>
+          <span id="cur-mn" style="font-size:12px;">Claude Sonnet 4.6</span>
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="tb-model" onclick="openDrop('img-drop',this)" id="btn-img" style="border-color:rgba(244,114,182,.2);">
+          <div class="mdot" id="img-mdot" style="background:#f472b6;"></div>
+          <span id="img-mn" style="font-size:12px;max-width:110px;overflow:hidden;text-overflow:ellipsis;">Nano Banana Pro</span>
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="tb-model" onclick="openDrop('vid-drop',this)" id="btn-vid" style="border-color:rgba(74,222,128,.2);">
+          <div class="mdot" id="vid-mdot" style="background:#4ade80;"></div>
+          <span id="vid-mn" style="font-size:12px;">Veo 3</span>
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div style="width:1px;height:20px;background:var(--border2);margin:0 2px;"></div>
+        <button class="ib" id="ws-btn" onclick="this.classList.toggle('on');wsEnabled=!wsEnabled;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Search
+        </button>
+        <div style="width:1px;height:20px;background:var(--border2);margin:0 2px;"></div>
+        <!-- Private badge like Grok -->
+        <div class="tb-private">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Private
+        </div>
+      </div>
+    </div>
+
+    <!-- DROPDOWNS -->
+    <div class="drop" id="mdrop">
+      <div style="padding:6px 11px 2px;font-size:10px;color:var(--text3);display:flex;align-items:center;gap:5px;">
+        <span style="background:rgba(74,222,128,.1);color:var(--green);font-size:9px;padding:1px 5px;border-radius:7px;font-weight:700;">REPLICATE</span>All models via Replicate
+      </div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://www.anthropic.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">Anthropic — Claude</div>
+      <div class="mdi sel" onclick="setModel('Claude Sonnet 4.6','anthropic/claude-sonnet-4-6','#4a9eff','Anthropic',this)"><div class="mdot" style="background:#4a9eff;"></div><div><div class="mdi-n">Claude Sonnet 4.6</div><div class="mdi-s">Latest · Smart & fast</div></div></div>
+      <div class="mdi" onclick="setModel('Claude Opus 4.6','anthropic/claude-opus-4-6','#a78bfa','Anthropic',this)"><div class="mdot" style="background:#a78bfa;"></div><div><div class="mdi-n">Claude Opus 4.6</div><div class="mdi-s">Most powerful</div></div></div>
+      <div class="mdi" onclick="setModel('Claude Haiku 4.5','anthropic/claude-haiku-4-5','#4ade80','Anthropic',this)"><div class="mdot" style="background:#4ade80;"></div><div><div class="mdi-n">Claude Haiku 4.5</div><div class="mdi-s">Ultra fast</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">OpenAI — GPT</div>
+      <div class="mdi" onclick="setModel('GPT-5.4','openai/gpt-5.4','#19c37d','OpenAI',this)"><div class="mdot" style="background:#19c37d;"></div><div><div class="mdi-n">GPT-5.4</div><div class="mdi-s">Flagship · Mar 2026</div></div></div>
+      <div class="mdi" onclick="setModel('GPT-5.4 Mini','openai/gpt-5.4-mini','#22d3a0','OpenAI',this)"><div class="mdot" style="background:#22d3a0;"></div><div><div class="mdi-n">GPT-5.4 Mini</div><div class="mdi-s">Fast & affordable</div></div></div>
+      <div class="mdi" onclick="setModel('GPT-5','openai/gpt-5','#0f8060','OpenAI',this)"><div class="mdot" style="background:#0f8060;"></div><div><div class="mdi-n">GPT-5</div><div class="mdi-s">Original GPT-5</div></div></div>
+      <div class="mdi" onclick="setModel('GPT-4o','openai/gpt-4o','#0a5240','OpenAI',this)"><div class="mdot" style="background:#0a5240;"></div><div><div class="mdi-n">GPT-4o</div><div class="mdi-s">Classic multimodal</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">Google — Gemini</div>
+      <div class="mdi" onclick="setModel('Gemini 3.1 Pro','google/gemini-3.1-pro','#4285f4','Google',this)"><div class="mdot" style="background:#4285f4;"></div><div><div class="mdi-n">Gemini 3.1 Pro</div><div class="mdi-s">Flagship · Feb 2026</div></div></div>
+      <div class="mdi" onclick="setModel('Gemini 3 Flash','google/gemini-3-flash','#5a95f5','Google',this)"><div class="mdot" style="background:#5a95f5;"></div><div><div class="mdi-n">Gemini 3 Flash</div><div class="mdi-s">Fast Gemini 3</div></div></div>
+      <div class="mdi" onclick="setModel('Gemini 2.5 Pro','google/gemini-2.5-pro','#3a75e4','Google',this)"><div class="mdot" style="background:#3a75e4;"></div><div><div class="mdi-n">Gemini 2.5 Pro</div><div class="mdi-s">Previous Pro</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://x.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">xAI — Grok</div>
+      <div class="mdi" onclick="setModel('Grok 4.20','xai/grok-4.20','#e879f9','xAI',this)"><div class="mdot" style="background:#e879f9;"></div><div><div class="mdi-n">Grok 4.20</div><div class="mdi-s">Flagship · Multi-agent</div></div></div>
+      <div class="mdi" onclick="setModel('Grok 4.1','xai/grok-4.1','#c026d3','xAI',this)"><div class="mdot" style="background:#c026d3;"></div><div><div class="mdi-n">Grok 4.1</div><div class="mdi-s">65% fewer hallucinations</div></div></div>
+      <div class="mdi" onclick="setModel('Grok 4','xai/grok-4','#86198f','xAI',this)"><div class="mdot" style="background:#86198f;"></div><div><div class="mdi-n">Grok 4</div><div class="mdi-s">Reasoning</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://www.meta.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">Meta — Llama</div>
+      <div class="mdi" onclick="setModel('Llama 4 Scout','meta/llama-4-scout','#1a73e8','Meta',this)"><div class="mdot" style="background:#1a73e8;"></div><div><div class="mdi-n">Llama 4 Scout</div><div class="mdi-s">10M context · Free</div></div></div>
+      <div class="mdi" onclick="setModel('Llama 3.3 70B','meta/llama-3.3-70b-instruct','#0b4ab0','Meta',this)"><div class="mdot" style="background:#0b4ab0;"></div><div><div class="mdi-n">Llama 3.3 70B</div><div class="mdi-s">Open source</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://mistral.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">Mistral AI</div>
+      <div class="mdi" onclick="setModel('Mistral Large','mistralai/mistral-large-latest','#ff6b35','Mistral',this)"><div class="mdot" style="background:#ff6b35;"></div><div><div class="mdi-n">Mistral Large</div><div class="mdi-s">Most capable</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://www.deepseek.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">DeepSeek</div>
+      <div class="mdi" onclick="setModel('DeepSeek R2','deepseek/deepseek-r2','#00b4d8','DeepSeek',this)"><div class="mdot" style="background:#00b4d8;"></div><div><div class="mdi-n">DeepSeek R2</div><div class="mdi-s">Reasoning · 2026</div></div></div>
+      <div class="mdi" onclick="setModel('DeepSeek V3','deepseek/deepseek-v3-0324','#0096c7','DeepSeek',this)"><div class="mdot" style="background:#0096c7;"></div><div><div class="mdi-n">DeepSeek V3</div><div class="mdi-s">Strong & efficient</div></div></div>
+    </div>
+
+    <div class="drop" id="img-drop">
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">Google — Nano Banana</div>
+      <div class="mdi sel" onclick="setImgModel('Nano Banana Pro','google/nano-banana-pro','#f472b6',this)"><div class="mdot" style="background:#f472b6;"></div><div><div class="mdi-n">Nano Banana Pro</div><div class="mdi-s">Flagship · Latest</div></div></div>
+      <div class="mdi" onclick="setImgModel('Nano Banana 2','google/nano-banana-2','#fb7acc',this)"><div class="mdot" style="background:#fb7acc;"></div><div><div class="mdi-n">Nano Banana 2</div><div class="mdi-s">3.1 Flash Image</div></div></div>
+      <div class="mdi" onclick="setImgModel('Nano Banana','google/nano-banana','#fc82d4',this)"><div class="mdot" style="background:#fc82d4;"></div><div><div class="mdi-n">Nano Banana</div><div class="mdi-s">Original</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">Google — Imagen</div>
+      <div class="mdi" onclick="setImgModel('Imagen 4 Ultra','google-deepmind/imagen-4-ultra','#4285f4',this)"><div class="mdot" style="background:#4285f4;"></div><div><div class="mdi-n">Imagen 4 Ultra</div><div class="mdi-s">Highest quality</div></div></div>
+      <div class="mdi" onclick="setImgModel('Imagen 4','google-deepmind/imagen-4','#4a90f5',this)"><div class="mdot" style="background:#4a90f5;"></div><div><div class="mdi-n">Imagen 4</div><div class="mdi-s">Flagship</div></div></div>
+      <div class="mdi" onclick="setImgModel('Imagen 4 Fast','google-deepmind/imagen-4-fast','#5a9ff5',this)"><div class="mdot" style="background:#5a9ff5;"></div><div><div class="mdi-n">Imagen 4 Fast</div><div class="mdi-s">Speed optimized</div></div></div>
+      <div class="mdi" onclick="setImgModel('Imagen 3','google-deepmind/imagen-3','#3a75e4',this)"><div class="mdot" style="background:#3a75e4;"></div><div><div class="mdi-n">Imagen 3</div><div class="mdi-s">Previous gen</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">OpenAI</div>
+      <div class="mdi" onclick="setImgModel('GPT Image 1.5','openai/gpt-image-1.5','#19c37d',this)"><div class="mdot" style="background:#19c37d;"></div><div><div class="mdi-n">GPT Image 1.5</div><div class="mdi-s">Best GPT image</div></div></div>
+      <div class="mdi" onclick="setImgModel('DALL-E 3','openai/dall-e-3','#12957a',this)"><div class="mdot" style="background:#12957a;"></div><div><div class="mdi-n">DALL-E 3</div><div class="mdi-s">Classic · Detailed</div></div></div>
+      <div class="mdi" onclick="setImgModel('DALL-E 2','openai/dall-e-2','#0f8060',this)"><div class="mdot" style="background:#0f8060;"></div><div><div class="mdi-n">DALL-E 2</div><div class="mdi-s">Previous gen</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://stability.ai/favicon.ico" width="14" height="14" style="border-radius:2px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">Stability AI</div>
+      <div class="mdi" onclick="setImgModel('SD 3.5 Large','stability-ai/stable-diffusion-3.5-large','#ff9f00',this)"><div class="mdot" style="background:#ff9f00;"></div><div><div class="mdi-n">SD 3.5 Large</div><div class="mdi-s">Best quality</div></div></div>
+      <div class="mdi" onclick="setImgModel('SD 3.5 Turbo','stability-ai/stable-diffusion-3.5-large-turbo','#ffb020',this)"><div class="mdot" style="background:#ffb020;"></div><div><div class="mdi-n">SD 3.5 Turbo</div><div class="mdi-s">4-step fast</div></div></div>
+      <div class="mdi" onclick="setImgModel('SDXL','stability-ai/sdxl','#ffc840',this)"><div class="mdot" style="background:#ffc840;"></div><div><div class="mdi-n">SDXL</div><div class="mdi-s">Classic workhorse</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://blackforestlabs.ai/favicon.ico" width="14" height="14" style="border-radius:2px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">FLUX</div>
+      <div class="mdi" onclick="setImgModel('FLUX 1.1 Pro Ultra','black-forest-labs/flux-1.1-pro-ultra','#6366f1',this)"><div class="mdot" style="background:#6366f1;"></div><div><div class="mdi-n">FLUX 1.1 Pro Ultra</div><div class="mdi-s">4MP · Highest quality</div></div></div>
+      <div class="mdi" onclick="setImgModel('FLUX 1.1 Pro','black-forest-labs/flux-1.1-pro','#7c3aed',this)"><div class="mdot" style="background:#7c3aed;"></div><div><div class="mdi-n">FLUX 1.1 Pro</div><div class="mdi-s">Best overall</div></div></div>
+      <div class="mdi" onclick="setImgModel('FLUX Dev','black-forest-labs/flux-dev','#a78bfa',this)"><div class="mdot" style="background:#a78bfa;"></div><div><div class="mdi-n">FLUX Dev</div><div class="mdi-s">Open weights</div></div></div>
+      <div class="mdi" onclick="setImgModel('FLUX Schnell','black-forest-labs/flux-schnell','#c4b5fd',this)"><div class="mdot" style="background:#c4b5fd;"></div><div><div class="mdi-n">FLUX Schnell</div><div class="mdi-s">Fastest</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://ideogram.ai/favicon.ico" width="14" height="14" style="border-radius:2px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">Ideogram</div>
+      <div class="mdi" onclick="setImgModel('Ideogram V3','ideogram-ai/ideogram-v3','#f59e0b',this)"><div class="mdot" style="background:#f59e0b;"></div><div><div class="mdi-n">Ideogram V3</div><div class="mdi-s">Best text in images</div></div></div>
+    </div>
+
+    <div class="drop" id="vid-drop">
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">Google — Veo</div>
+      <div class="mdi sel" onclick="setVidModel('Veo 3','google/veo-3','#4ade80',this)"><div class="mdot" style="background:#4ade80;"></div><div><div class="mdi-n">Veo 3</div><div class="mdi-s">Latest · Audio</div></div></div>
+      <div class="mdi" onclick="setVidModel('Veo 2','google/veo-2','#5ae890',this)"><div class="mdot" style="background:#5ae890;"></div><div><div class="mdi-n">Veo 2</div><div class="mdi-s">Previous gen</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://runwayml.com/favicon.ico" width="14" height="14" style="border-radius:2px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">RunwayML</div>
+      <div class="mdi" onclick="setVidModel('Gen-4 Turbo','runwayml/gen-4-turbo','#fb923c',this)"><div class="mdot" style="background:#fb923c;"></div><div><div class="mdi-n">Gen-4 Turbo</div><div class="mdi-s">Ultra-fast professional</div></div></div>
+      <div class="mdi" onclick="setVidModel('Gen-4','runwayml/gen-4','#fba040',this)"><div class="mdot" style="background:#fba040;"></div><div><div class="mdi-n">Gen-4</div><div class="mdi-s">High quality</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://www.minimaxi.com/favicon.ico" width="14" height="14" style="border-radius:2px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">MiniMax</div>
+      <div class="mdi" onclick="setVidModel('Hailuo Video 02','minimax/hailuo-02','#a78bfa',this)"><div class="mdot" style="background:#a78bfa;"></div><div><div class="mdi-n">Hailuo Video 02</div><div class="mdi-s">Photorealistic · 6s</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://lumalabs.ai/favicon.ico" width="14" height="14" style="border-radius:2px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">Luma</div>
+      <div class="mdi" onclick="setVidModel('Dream Machine 1.6','luma/dream-machine','#f472b6',this)"><div class="mdot" style="background:#f472b6;"></div><div><div class="mdi-n">Dream Machine 1.6</div><div class="mdi-s">Cinematic</div></div></div>
+      <div class="mdi" onclick="setVidModel('Ray 2','luma/ray-2','#f580c0',this)"><div class="mdot" style="background:#f580c0;"></div><div><div class="mdi-n">Ray 2</div><div class="mdi-s">Fast generation</div></div></div>
+      <div class="mdsep"></div>
+      <div class="mds" style="display:flex;align-items:center;gap:6px;"><img src="https://klingai.com/favicon.ico" width="14" height="14" style="border-radius:2px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">Kling</div>
+      <div class="mdi" onclick="setVidModel('Kling 2.1 Master','klingai/kling-2.1-master','#4a9eff',this)"><div class="mdot" style="background:#4a9eff;"></div><div><div class="mdi-n">Kling 2.1 Master</div><div class="mdi-s">Highest quality</div></div></div>
+      <div class="mdi" onclick="setVidModel('Kling 1.6 Pro','klingai/kling-1.6-pro','#6abeff',this)"><div class="mdot" style="background:#6abeff;"></div><div><div class="mdi-n">Kling 1.6 Pro</div><div class="mdi-s">Affordable</div></div></div>
+    </div>
+
+    <!-- ── CHAT PANEL ── -->
+    <div class="panel active" id="chat-panel">
+      <!-- HOME SCREEN (shown until first message) -->
+      <div id="home-screen" style="position:relative;">
+      <div id="hs-stars" style="position:absolute;inset:0;pointer-events:none;overflow:hidden;border-radius:0;"></div>
+        <div class="hs-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          KEMLLM
+        </div>
+        <div class="hs-input-wrap">
+          <input class="hs-input" id="hs-txt" placeholder="What do you want to know?" onkeydown="if(event.key==='Enter')hsSend()">
+          <button class="hs-send" onclick="hsSend()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+        </div>
+        <div class="hs-models" style="margin-top:20px;">
+          <span style="font-size:11px;color:var(--text3);">Model:</span>
+          <div class="hs-mbtn" onclick="openDrop('mdrop',this)">
+            <div class="mdot" id="hs-mdot" style="background:#4a9eff;"></div>
+            <span id="hs-mn">Claude Sonnet 4.6</span>
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+        </div>
+      </div>
+      <!-- MESSAGES (hidden until first send) -->
+      <div id="chat-area" style="display:none;">
+        <div id="stars-bg"></div>
+        <div id="msgs"></div>
+      </div>
+      <!-- INPUT BAR (hidden on home, shown after first msg) -->
+      <div id="input-bar" style="display:none;">
+        <div class="iw">
+          <div class="ir">
+            <textarea id="txt" rows="1" placeholder="Message KEMLLM..." onkeydown="handleKey(event)" oninput="resizeTxt(this)"></textarea>
+            <button class="send-btn" onclick="send()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+          </div>
+          <div class="if">
+            <button class="ia"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>Attach</button>
+            <span id="tok">0 / 200k</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CODE PANEL ── -->
+    <div class="panel" id="code-panel">
+      <div id="code-wrap">
+        <div id="code-files">
+          <div class="cf-lbl">Files</div>
+          <div class="cf active" onclick="switchFile(this,'python')"><div class="cfdot" style="background:#4a9eff;"></div>main.py</div>
+          <div class="cf" onclick="switchFile(this,'javascript')"><div class="cfdot" style="background:#fb923c;"></div>app.js</div>
+          <div class="cf" onclick="switchFile(this,'c')"><div class="cfdot" style="background:#a78bfa;"></div>main.c</div>
+          <div class="cf" onclick="switchFile(this,'rust')"><div class="cfdot" style="background:#f87171;"></div>main.rs</div>
+          <div class="cf-add" onclick="newFile()">+ New file</div>
+        </div>
+        <div id="code-main">
+          <div id="code-tb">
+            <select class="lang-sel" id="lang-sel" onchange="changeLang(this.value)">
+              <option value="python">Python 3.12</option>
+              <option value="javascript">JavaScript</option>
+              <option value="typescript">TypeScript</option>
+              <option value="c">C</option><option value="cpp">C++</option>
+              <option value="rust">Rust</option><option value="go">Go</option>
+              <option value="java">Java</option><option value="csharp">C#</option>
+              <option value="bash">Bash</option><option value="lua">Lua</option>
+            </select>
+            <button class="run-btn" id="run-btn" onclick="runCode()">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>Run
+            </button>
+            <button class="code-ia" onclick="askCodeAI()">Ask AI</button>
+            <span id="exec-t" style="font-size:11px;color:var(--text3);margin-left:4px;"></span>
+          </div>
+          <div id="eed">
+            <div id="lns"></div>
+            <div id="ced" contenteditable="true" spellcheck="false" oninput="updLns()" onkeydown="edKey(event)"># KEMLLM Code Runner — Piston API
+def fibonacci(n):
+    a, b = 0, 1
+    result = []
+    for _ in range(n):
+        result.append(a)
+        a, b = b, a + b
+    return result
+
+nums = fibonacci(10)
+print("Fibonacci:", nums)
+print("Sum:", sum(nums))
+import sys; print(f"Python {sys.version.split()[0]}")</div>
+          </div>
+          <div id="out-panel">
+            <div class="out-hdr"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span>Output</span><span class="out-clr" onclick="clearOut()">clear</span></div>
+            <div class="out-lines" id="out-lines"><div class="ol inf">▶ Ready — click Run or Ctrl+Enter</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── MODELS PANEL ── -->
+    <div class="panel" id="models-panel">
+      <div class="mp-h" style="margin-top:0;">Text Models</div>
+      <div class="mc-grid"><div class="mc cur" onclick="setModelFromCard(this,'Claude Sonnet 4.6','anthropic/claude-sonnet-4-6','#4a9eff','Anthropic')"><div class="cur-badge">Active</div><div class="mc-top"><div class="mc-ico" style="background:rgba(74,158,255,.12);"><img src="https://www.anthropic.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Claude Sonnet 4.6</div><div class="mc-p">Anthropic · Latest</div></div></div><div class="mc-d">Smart, fast, balanced. Best for most tasks.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag f">Fast</span><span class="tag c">Code</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Claude Opus 4.6','anthropic/claude-opus-4-6','#a78bfa','Anthropic')"><div class="mc-top"><div class="mc-ico" style="background:rgba(167,139,250,.12);"><img src="https://www.anthropic.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Claude Opus 4.6</div><div class="mc-p">Anthropic · Most Powerful</div></div></div><div class="mc-d">Most capable Claude. Agentic coding.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag r">Reasoning</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Claude Haiku 4.5','anthropic/claude-haiku-4-5','#4ade80','Anthropic')"><div class="mc-top"><div class="mc-ico" style="background:rgba(74,222,128,.12);"><img src="https://www.anthropic.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Claude Haiku 4.5</div><div class="mc-p">Anthropic · Ultra Fast</div></div></div><div class="mc-d">Fastest Claude for high volume tasks.</div><div class="mc-tags"><span class="tag f">Fast</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'GPT-5.4','openai/gpt-5.4','#19c37d','OpenAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(25,195,125,.12);"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">GPT-5.4</div><div class="mc-p">OpenAI · Flagship Mar 2026</div></div></div><div class="mc-d">Latest flagship. 1M context. Computer use.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag v">Vision</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'GPT-5.4 Mini','openai/gpt-5.4-mini','#22d3a0','OpenAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(34,211,160,.12);"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">GPT-5.4 Mini</div><div class="mc-p">OpenAI · Fast</div></div></div><div class="mc-d">Fast and affordable. 400K context.</div><div class="mc-tags"><span class="tag f">Fast</span><span class="tag c">Code</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'GPT-5.4 Nano','openai/gpt-5.4-nano','#2ae0b0','OpenAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(42,224,176,.12);"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">GPT-5.4 Nano</div><div class="mc-p">OpenAI · Cheapest</div></div></div><div class="mc-d">Cheapest GPT-5.4 class.</div><div class="mc-tags"><span class="tag f">Fast</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'GPT-5','openai/gpt-5','#0f8060','OpenAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(15,128,96,.12);"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">GPT-5</div><div class="mc-p">OpenAI · Aug 2025</div></div></div><div class="mc-d">Original GPT-5. Still highly capable.</div><div class="mc-tags"><span class="tag s">Smart</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'GPT-4o','openai/gpt-4o','#0a5240','OpenAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(10,82,64,.15);"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">GPT-4o</div><div class="mc-p">OpenAI · Classic</div></div></div><div class="mc-d">Multimodal classic. Great everyday model.</div><div class="mc-tags"><span class="tag v">Vision</span><span class="tag f">Fast</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Gemini 3.1 Pro','google/gemini-3.1-pro','#4285f4','Google')"><div class="mc-top"><div class="mc-ico" style="background:rgba(66,133,244,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Gemini 3.1 Pro</div><div class="mc-p">Google · Feb 2026</div></div></div><div class="mc-d">77.1% ARC-AGI-2. #1 on 12 benchmarks.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag r">Reasoning</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Gemini 3 Flash','google/gemini-3-flash','#5a95f5','Google')"><div class="mc-top"><div class="mc-ico" style="background:rgba(90,149,245,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Gemini 3 Flash</div><div class="mc-p">Google · Fast</div></div></div><div class="mc-d">Fast Gemini 3 series model.</div><div class="mc-tags"><span class="tag f">Fast</span><span class="tag c">Code</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Gemini 2.5 Pro','google/gemini-2.5-pro','#3a75e4','Google')"><div class="mc-top"><div class="mc-ico" style="background:rgba(58,117,228,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Gemini 2.5 Pro</div><div class="mc-p">Google · Previous Pro</div></div></div><div class="mc-d">Strong reasoning at lower cost.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag v">Vision</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Grok 4.20','xai/grok-4.20','#e879f9','xAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(232,121,249,.12);"><img src="https://x.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Grok 4.20</div><div class="mc-p">xAI · Current Flagship</div></div></div><div class="mc-d">4-agent multi-agent system. Feb 2026.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag r">Reasoning</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Grok 4.1','xai/grok-4.1','#c026d3','xAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(192,38,211,.12);"><img src="https://x.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Grok 4.1</div><div class="mc-p">xAI · Refined</div></div></div><div class="mc-d">65% fewer hallucinations.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag f">Fast</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Grok 4','xai/grok-4','#86198f','xAI')"><div class="mc-top"><div class="mc-ico" style="background:rgba(134,25,143,.12);"><img src="https://x.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Grok 4</div><div class="mc-p">xAI · Reasoning</div></div></div><div class="mc-d">RL reasoning + real-time search.</div><div class="mc-tags"><span class="tag r">Reasoning</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Llama 4 Scout','meta/llama-4-scout','#1a73e8','Meta')"><div class="mc-top"><div class="mc-ico" style="background:rgba(26,115,232,.12);"><img src="https://www.meta.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Llama 4 Scout</div><div class="mc-p">Meta · Free · Open</div></div></div><div class="mc-d">10M context window. Apache 2.0.</div><div class="mc-tags"><span class="tag f">Fast</span><span class="tag c">Code</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Llama 3.3 70B','meta/llama-3.3-70b-instruct','#0b4ab0','Meta')"><div class="mc-top"><div class="mc-ico" style="background:rgba(11,74,176,.12);"><img src="https://www.meta.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Llama 3.3 70B</div><div class="mc-p">Meta · Open Source</div></div></div><div class="mc-d">Powerful open weights model.</div><div class="mc-tags"><span class="tag s">Smart</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Mistral Large','mistralai/mistral-large-latest','#ff6b35','Mistral')"><div class="mc-top"><div class="mc-ico" style="background:rgba(255,107,53,.12);"><img src="https://mistral.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Mistral Large</div><div class="mc-p">Mistral AI · Flagship</div></div></div><div class="mc-d">Most capable Mistral model.</div><div class="mc-tags"><span class="tag s">Smart</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'Mixtral 8x22B','mistralai/mixtral-8x22b-instruct','#ff8c5a','Mistral')"><div class="mc-top"><div class="mc-ico" style="background:rgba(255,140,90,.12);"><img src="https://mistral.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Mixtral 8x22B</div><div class="mc-p">Mistral AI · MoE</div></div></div><div class="mc-d">Mixture of experts powerhouse.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag f">Fast</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'DeepSeek R2','deepseek/deepseek-r2','#00b4d8','DeepSeek')"><div class="mc-top"><div class="mc-ico" style="background:rgba(0,180,216,.12);"><img src="https://www.deepseek.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">DeepSeek R2</div><div class="mc-p">DeepSeek · Reasoning 2026</div></div></div><div class="mc-d">Advanced reasoning. 1T params.</div><div class="mc-tags"><span class="tag r">Reasoning</span><span class="tag s">Smart</span></div></div>
+        <div class="mc" onclick="setModelFromCard(this,'DeepSeek V3','deepseek/deepseek-v3-0324','#0096c7','DeepSeek')"><div class="mc-top"><div class="mc-ico" style="background:rgba(0,150,199,.12);"><img src="https://www.deepseek.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">DeepSeek V3</div><div class="mc-p">DeepSeek · Strong & Fast</div></div></div><div class="mc-d">Best overall DeepSeek. Great at code.</div><div class="mc-tags"><span class="tag s">Smart</span><span class="tag c">Code</span></div></div>
+        </div>
+      <div class="mp-h">Image Models — click to select, then say "generate an image of..." in chat</div>
+      <div class="mc-grid"><div class="mc" onclick="setImgModel('Nano Banana Pro','google/nano-banana-pro','#f472b6',null);showToast('Image → Nano Banana Pro')"><div class="mc-top"><div class="mc-ico" style="background:rgba(244,114,182,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Nano Banana Pro</div><div class="mc-p">Google · Gemini Image</div></div></div><div class="mc-d">Best Google image gen.</div><div class="mc-tags"><span class="tag i">Image</span><span class="tag s">Smart</span></div></div>
+        <div class="mc" onclick="setImgModel('Nano Banana 2','google/nano-banana-2','#fb7acc',null);showToast('Image → Nano Banana 2')"><div class="mc-top"><div class="mc-ico" style="background:rgba(251,122,204,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Nano Banana 2</div><div class="mc-p">Google · 3.1 Flash Image</div></div></div><div class="mc-d">Fast Gemini image gen.</div><div class="mc-tags"><span class="tag i">Image</span><span class="tag f">Fast</span></div></div>
+        <div class="mc" onclick="setImgModel('Imagen 4 Ultra','google-deepmind/imagen-4-ultra','#4285f4',null);showToast('Image → Imagen 4 Ultra')"><div class="mc-top"><div class="mc-ico" style="background:rgba(66,133,244,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Imagen 4 Ultra</div><div class="mc-p">Google DeepMind</div></div></div><div class="mc-d">Highest quality Imagen.</div><div class="mc-tags"><span class="tag i">Image</span><span class="tag s">Smart</span></div></div>
+        <div class="mc" onclick="setImgModel('Imagen 4','google-deepmind/imagen-4','#4a90f5',null);showToast('Image → Imagen 4')"><div class="mc-top"><div class="mc-ico" style="background:rgba(74,144,245,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Imagen 4</div><div class="mc-p">Google DeepMind</div></div></div><div class="mc-d">Latest Imagen flagship.</div><div class="mc-tags"><span class="tag i">Image</span></div></div>
+        <div class="mc" onclick="setImgModel('Imagen 4 Fast','google-deepmind/imagen-4-fast','#5a9ff5',null);showToast('Image → Imagen 4 Fast')"><div class="mc-top"><div class="mc-ico" style="background:rgba(90,159,245,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Imagen 4 Fast</div><div class="mc-p">Google DeepMind</div></div></div><div class="mc-d">Speed optimized.</div><div class="mc-tags"><span class="tag i">Image</span><span class="tag f">Fast</span></div></div>
+        <div class="mc" onclick="setImgModel('GPT Image 1.5','openai/gpt-image-1.5','#19c37d',null);showToast('Image → GPT Image 1.5')"><div class="mc-top"><div class="mc-ico" style="background:rgba(25,195,125,.12);"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">GPT Image 1.5</div><div class="mc-p">OpenAI · Best</div></div></div><div class="mc-d">Best OpenAI image model.</div><div class="mc-tags"><span class="tag i">Image</span><span class="tag s">Smart</span></div></div>
+        <div class="mc" onclick="setImgModel('DALL-E 3','openai/dall-e-3','#12957a',null);showToast('Image → DALL-E 3')"><div class="mc-top"><div class="mc-ico" style="background:rgba(18,149,122,.12);"><img src="https://openai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">DALL-E 3</div><div class="mc-p">OpenAI · Classic</div></div></div><div class="mc-d">Highly detailed classic.</div><div class="mc-tags"><span class="tag i">Image</span></div></div>
+        <div class="mc" onclick="setImgModel('SD 3.5 Large','stability-ai/stable-diffusion-3.5-large','#ff9f00',null);showToast('Image → SD 3.5 Large')"><div class="mc-top"><div class="mc-ico" style="background:rgba(255,159,0,.12);"><img src="https://stability.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">SD 3.5 Large</div><div class="mc-p">Stability AI</div></div></div><div class="mc-d">Highest quality SD.</div><div class="mc-tags"><span class="tag i">Image</span><span class="tag s">Smart</span></div></div>
+        <div class="mc" onclick="setImgModel('FLUX 1.1 Pro Ultra','black-forest-labs/flux-1.1-pro-ultra','#6366f1',null);showToast('Image → FLUX 1.1 Pro Ultra')"><div class="mc-top"><div class="mc-ico" style="background:rgba(99,102,241,.12);"><img src="https://blackforestlabs.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">FLUX 1.1 Pro Ultra</div><div class="mc-p">Black Forest Labs · 4MP</div></div></div><div class="mc-d">4 megapixel output.</div><div class="mc-tags"><span class="tag i">Image</span><span class="tag s">Smart</span></div></div>
+        <div class="mc" onclick="setImgModel('FLUX 1.1 Pro','black-forest-labs/flux-1.1-pro','#7c3aed',null);showToast('Image → FLUX 1.1 Pro')"><div class="mc-top"><div class="mc-ico" style="background:rgba(124,58,237,.12);"><img src="https://blackforestlabs.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">FLUX 1.1 Pro</div><div class="mc-p">Black Forest Labs</div></div></div><div class="mc-d">Best overall FLUX.</div><div class="mc-tags"><span class="tag i">Image</span></div></div>
+        <div class="mc" onclick="setImgModel('FLUX Dev','black-forest-labs/flux-dev','#a78bfa',null);showToast('Image → FLUX Dev')"><div class="mc-top"><div class="mc-ico" style="background:rgba(167,139,250,.12);"><img src="https://blackforestlabs.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">FLUX Dev</div><div class="mc-p">Black Forest Labs · Open</div></div></div><div class="mc-d">Open weights FLUX.</div><div class="mc-tags"><span class="tag i">Image</span></div></div>
+        <div class="mc" onclick="setImgModel('FLUX Schnell','black-forest-labs/flux-schnell','#c4b5fd',null);showToast('Image → FLUX Schnell')"><div class="mc-top"><div class="mc-ico" style="background:rgba(196,181,253,.12);"><img src="https://blackforestlabs.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">FLUX Schnell</div><div class="mc-p">Black Forest Labs · Fastest</div></div></div><div class="mc-d">Fastest FLUX.</div><div class="mc-tags"><span class="tag i">Image</span><span class="tag f">Fast</span></div></div>
+        </div>
+      <div class="mp-h">Video Models — click to select, then say "generate a video of..." in chat</div>
+      <div class="mc-grid"><div class="mc" onclick="setVidModel('Veo 3','google/veo-3','#4ade80',null);showToast('Video → Veo 3')"><div class="mc-top"><div class="mc-ico" style="background:rgba(74,222,128,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Veo 3</div><div class="mc-p">Google · Latest</div></div></div><div class="mc-d">Best video gen with audio.</div><div class="mc-tags"><span class="tag i">Video</span><span class="tag s">Smart</span></div></div>
+        <div class="mc" onclick="setVidModel('Veo 2','google/veo-2','#5ae890',null);showToast('Video → Veo 2')"><div class="mc-top"><div class="mc-ico" style="background:rgba(90,232,144,.12);"><img src="https://www.google.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Veo 2</div><div class="mc-p">Google · Previous</div></div></div><div class="mc-d">Previous Veo generation.</div><div class="mc-tags"><span class="tag i">Video</span><span class="tag f">Fast</span></div></div>
+        <div class="mc" onclick="setVidModel('Gen-4 Turbo','runwayml/gen-4-turbo','#fb923c',null);showToast('Video → Gen-4 Turbo')"><div class="mc-top"><div class="mc-ico" style="background:rgba(251,146,60,.12);"><img src="https://runwayml.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Gen-4 Turbo</div><div class="mc-p">RunwayML · Ultra Fast</div></div></div><div class="mc-d">Ultra-fast professional video.</div><div class="mc-tags"><span class="tag i">Video</span><span class="tag f">Fast</span></div></div>
+        <div class="mc" onclick="setVidModel('Gen-4','runwayml/gen-4','#fba040',null);showToast('Video → Gen-4')"><div class="mc-top"><div class="mc-ico" style="background:rgba(251,160,64,.12);"><img src="https://runwayml.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Gen-4</div><div class="mc-p">RunwayML · High Quality</div></div></div><div class="mc-d">High quality video.</div><div class="mc-tags"><span class="tag i">Video</span></div></div>
+        <div class="mc" onclick="setVidModel('Hailuo Video 02','minimax/hailuo-02','#a78bfa',null);showToast('Video → Hailuo 02')"><div class="mc-top"><div class="mc-ico" style="background:rgba(167,139,250,.12);"><img src="https://www.minimaxi.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Hailuo Video 02</div><div class="mc-p">MiniMax · Photorealistic</div></div></div><div class="mc-d">Photorealistic 6s video.</div><div class="mc-tags"><span class="tag i">Video</span><span class="tag s">Smart</span></div></div>
+        <div class="mc" onclick="setVidModel('Dream Machine 1.6','luma/dream-machine','#f472b6',null);showToast('Video → Dream Machine 1.6')"><div class="mc-top"><div class="mc-ico" style="background:rgba(244,114,182,.12);"><img src="https://lumalabs.ai/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Dream Machine 1.6</div><div class="mc-p">Luma · Cinematic</div></div></div><div class="mc-d">Cinematic quality video.</div><div class="mc-tags"><span class="tag i">Video</span><span class="tag s">Smart</span></div></div>
+        <div class="mc" onclick="setVidModel('Kling 2.1 Master','klingai/kling-2.1-master','#4a9eff',null);showToast('Video → Kling 2.1 Master')"><div class="mc-top"><div class="mc-ico" style="background:rgba(74,158,255,.12);"><img src="https://klingai.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Kling 2.1 Master</div><div class="mc-p">Kling AI · Highest Quality</div></div></div><div class="mc-d">Highest Kling quality.</div><div class="mc-tags"><span class="tag i">Video</span><span class="tag s">Smart</span></div></div>
+        <div class="mc" onclick="setVidModel('Kling 1.6 Pro','klingai/kling-1.6-pro','#6abeff',null);showToast('Video → Kling 1.6 Pro')"><div class="mc-top"><div class="mc-ico" style="background:rgba(106,190,255,.12);"><img src="https://www.anthropic.com/favicon.ico" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'"></div><div><div class="mc-n">Kling 1.6 Pro</div><div class="mc-p">Kling AI · Affordable</div></div></div><div class="mc-d">Affordable quality video.</div><div class="mc-tags"><span class="tag i">Video</span><span class="tag f">Fast</span></div></div>
+        </div>
+    </div>
+
+    <!-- ── SETTINGS PANEL ── -->
+    <div class="panel" id="settings-panel">
+      <div class="sp-h">Settings</div>
+      <div class="ss">
+        <h3>Replicate API Key</h3>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">Runs all models — Claude, GPT, Gemini, Grok, image gen, video gen.<br>Get free key: <a href="https://replicate.com/account/api-tokens" target="_blank" style="color:var(--blue);">replicate.com/account/api-tokens</a></div>
+        <div class="key-row"><input class="si2" type="password" id="rep-key" placeholder="r8_..." style="font-family:var(--mono);"><button class="save-btn" onclick="saveRepKey()">Save</button></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:7px;">Stored only on this device in this profile.</div>
+      </div>
+      <div class="ss">
+        <h3>Profile</h3>
+        <div class="sr"><div><div class="sl" id="sp-name">Profile</div><div class="sd" id="sp-sub">this device only</div></div><button class="save-btn" onclick="switchProfile()">Switch</button></div>
+        <div class="sr"><div><div class="sl">GitHub</div><div class="sd">Link your GitHub identity</div></div><button class="save-btn" onclick="githubLogin()">Sign In</button></div>
+      </div>
+      <div class="ss">
+        <h3>Appearance</h3>
+        <div class="sr"><div><div class="sl">Stars background</div></div><div class="toggle on" id="stars-tog" onclick="this.classList.toggle('on');document.getElementById('stars-bg').style.display=this.classList.contains('on')?'block':'none';"></div></div>
+        <div class="sr"><div><div class="sl">Accent color</div></div>
+          <div class="swatches">
+            <div class="sw on" style="background:#4a9eff;" onclick="setAccent('#4a9eff',this)"></div>
+            <div class="sw" style="background:#a78bfa;" onclick="setAccent('#a78bfa',this)"></div>
+            <div class="sw" style="background:#4ade80;" onclick="setAccent('#4ade80',this)"></div>
+            <div class="sw" style="background:#fb923c;" onclick="setAccent('#fb923c',this)"></div>
+            <div class="sw" style="background:#f472b6;" onclick="setAccent('#f472b6',this)"></div>
+          </div>
+        </div>
+      </div>
+      <div class="ss">
+        <h3>System Prompt</h3>
+        <textarea class="si2" rows="4" id="sys-prompt" style="resize:vertical;">You are KEMLLM, a powerful AI assistant. Be helpful and precise. Use markdown with code blocks.</textarea>
+      </div>
+      <div class="ss">
+        <h3>Custom Models</h3>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.6;">Add any Replicate model. Find IDs at <a href="https://replicate.com/explore" target="_blank" style="color:var(--blue);">replicate.com/explore</a></div>
+
+        <!-- tabs -->
+        <div style="display:flex;gap:4px;margin-bottom:14px;">
+          <button id="cm-tab-basic" onclick="setCMTab('basic')" style="flex:1;padding:6px;border-radius:7px;border:1px solid var(--blue);background:var(--blue);color:#fff;font-family:var(--font);font-size:12px;cursor:pointer;">Basic</button>
+          <button id="cm-tab-advanced" onclick="setCMTab('advanced')" style="flex:1;padding:6px;border-radius:7px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-family:var(--font);font-size:12px;cursor:pointer;">Advanced</button>
+        </div>
+
+        <!-- basic tab -->
+        <div id="cm-basic">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div><div style="font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;">Display Name</div><input class="si2" id="cm-name" placeholder="My Model"></div>
+            <div><div style="font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;">Replicate ID</div><input class="si2" id="cm-id" placeholder="owner/model-name"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+            <div><div style="font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;">Type</div>
+              <select class="si2" id="cm-type">
+                <option value="text">Text / Chat</option>
+                <option value="image">Image Gen</option>
+                <option value="video">Video Gen</option>
+              </select>
+            </div>
+            <div><div style="font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;">Color</div>
+              <input type="color" id="cm-color" value="#4a9eff" style="width:100%;height:36px;border:1px solid var(--border2);border-radius:7px;background:var(--bg3);cursor:pointer;padding:2px;">
+            </div>
+            <div><div style="font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;">Icon URL</div>
+              <input class="si2" id="cm-icon" placeholder="https://..." style="font-size:11px;">
+            </div>
+          </div>
+          <div style="margin-bottom:10px;">
+            <div style="font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;">Provider / Description</div>
+            <input class="si2" id="cm-provider" placeholder="e.g. My Lab · Latest">
+          </div>
+        </div>
+
+        <!-- advanced tab -->
+        <div id="cm-advanced" style="display:none;">
+          <div style="font-size:11.5px;color:var(--text2);margin-bottom:8px;line-height:1.6;">Paste the full model config as JSON. Copy from an existing model's Replicate page.</div>
+          <textarea class="si2" id="cm-json" rows="8" style="font-family:var(--mono);font-size:11.5px;resize:vertical;" placeholder='{
+  "name": "My Model",
+  "id": "owner/model-name",
+  "type": "text",
+  "color": "#4a9eff",
+  "icon": "https://example.com/favicon.ico",
+  "provider": "My Lab · Latest",
+  "input": {
+    "prompt": "",
+    "system_prompt": "",
+    "max_tokens": 2000
+  }
+}'></textarea>
+        </div>
+
+        <button onclick="addCustomModel()" style="width:100%;padding:9px;border-radius:8px;background:var(--blue);color:#fff;border:none;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;margin-top:10px;">+ Add Model</button>
+        <div id="custom-model-list" style="margin-top:12px;display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+
+  </div><!-- end #main -->
+</div><!-- end #app -->
+
+<!-- ── MCP MODAL ── -->
+<div id="mcp-modal" onclick="if(event.target===this)closeMCP()">
+  <div class="mcp-box">
+    <div class="mcp-hdr"><h2>Connectors</h2><button class="mcp-close" onclick="closeMCP()">×</button></div>
+    <div class="mcp-body">
+      <div class="mcp-sec">Always Active</div>
+      <div class="mcp-item"><div class="mcp-ico" style="background:rgba(74,222,128,.1);">🔁</div><div class="mcp-info"><div class="mcp-name">Replicate</div><div class="mcp-desc">All AI models — add key in Settings</div></div><button class="mcp-btn conn">✓ Active</button></div>
+      <div class="mcp-item"><div class="mcp-ico" style="background:rgba(74,158,255,.1);">💻</div><div class="mcp-info"><div class="mcp-name">Piston Code Runner</div><div class="mcp-desc">Real code execution · 50+ languages</div></div><button class="mcp-btn conn">✓ Active</button></div>
+      <div class="mcp-sec">Available</div>
+      <div class="mcp-item"><div class="mcp-ico" style="background:rgba(167,139,250,.1);">🐙</div><div class="mcp-info"><div class="mcp-name">GitHub</div><div class="mcp-desc">Repos, issues, code management</div></div><button class="mcp-btn" onclick="mcpConnect('https://github.com/login/oauth/authorize?client_id=Iv1.a629723000b46bec&scope=repo,user',this)">Connect</button></div>
+      <div class="mcp-item"><div class="mcp-ico" style="background:rgba(251,146,60,.1);">🔍</div><div class="mcp-info"><div class="mcp-name">Perplexity</div><div class="mcp-desc">AI web search with citations</div></div><button class="mcp-btn" onclick="mcpConnect('https://www.perplexity.ai/settings/api',this)">Connect</button></div>
+      <div class="mcp-item"><div class="mcp-ico" style="background:rgba(74,158,255,.1);">📁</div><div class="mcp-info"><div class="mcp-name">Google Drive</div><div class="mcp-desc">Read and search Drive files</div></div><button class="mcp-btn" onclick="mcpConnect('https://accounts.google.com/o/oauth2/v2/auth?scope=https://www.googleapis.com/auth/drive.readonly&response_type=code',this)">Connect</button></div>
+      <div class="mcp-item"><div class="mcp-ico" style="background:rgba(74,222,128,.1);">📧</div><div class="mcp-info"><div class="mcp-name">Gmail</div><div class="mcp-desc">Search and draft emails</div></div><button class="mcp-btn" onclick="mcpConnect('https://accounts.google.com/o/oauth2/v2/auth?scope=https://www.googleapis.com/auth/gmail.readonly&response_type=code',this)">Connect</button></div>
+      <div class="mcp-item"><div class="mcp-ico" style="background:rgba(167,139,250,.1);">💬</div><div class="mcp-info"><div class="mcp-name">Slack</div><div class="mcp-desc">Messages and channels</div></div><button class="mcp-btn" onclick="mcpConnect('https://slack.com/oauth/v2/authorize?scope=channels:read,chat:write',this)">Connect</button></div>
+      <div class="mcp-item"><div class="mcp-ico" style="background:rgba(251,146,60,.1);">🎯</div><div class="mcp-info"><div class="mcp-name">Notion</div><div class="mcp-desc">Pages and databases</div></div><button class="mcp-btn" onclick="mcpConnect('https://api.notion.com/v1/oauth/authorize?response_type=code&owner=user',this)">Connect</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── USER MODAL ── -->
+<div id="user-modal" onclick="if(event.target===this)closeUserModal()">
+  <div class="um-box">
+    <div class="um-top">
+      <div class="um-ava" id="um-ava" style="background:linear-gradient(135deg,#4a9eff,#a78bfa);">?</div>
+      <div><div class="um-name" id="um-name">Profile</div><div class="um-email" id="um-email">this device only</div></div>
+    </div>
+    <div class="um-actions">
+      <div class="um-item" onclick="closeUserModal();siNav('code')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>Code Runner</div>
+      <div class="um-item" onclick="closeUserModal();siNav('models')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>Models</div>
+      <div class="um-item" onclick="closeUserModal();siNav('settings')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</div>
+      <div class="um-item" onclick="closeUserModal();openMCP()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Connectors</div>
+      <div class="um-item danger" onclick="switchProfile()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Switch Profile</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+// ── PROFILE SYSTEM ──
+let activeProfileId=null,pendingProfileId=null;
+function profileKey(k){return `p_${activeProfileId}_${k}`;}
+function profileGet(k){if(!activeProfileId)return null;return localStorage.getItem(profileKey(k));}
+function profileSet(k,v){if(!activeProfileId)return;localStorage.setItem(profileKey(k),v);}
+function hashPin(pin){let h=0;for(let c of pin){h=(h<<5)-h+c.charCodeAt(0);h|=0;}return String(h);}
+function getProfiles(){try{return JSON.parse(localStorage.getItem('llms_profiles')||'[]');}catch{return[];}}
+function saveProfiles(p){localStorage.setItem('llms_profiles',JSON.stringify(p));}
+
+function renderProfileList(){
+  const el=document.getElementById('profile-list');
+  const profiles=getProfiles();
+  el.innerHTML='';
+  if(!profiles.length){el.innerHTML='<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px 0;">No profiles yet</div>';return;}
+  profiles.forEach(p=>{
+    const btn=document.createElement('div');btn.className='profile-btn';
+    btn.innerHTML=`<div class="profile-ava" style="background:${p.color};">${p.name[0].toUpperCase()}</div><div><div class="profile-name">${p.name}</div><div class="profile-sub">${p.pin?'PIN protected':'No PIN'} · this device</div></div>`;
+    btn.onclick=()=>selectProfile(p.id,p.pin);
+    el.appendChild(btn);
+  });
+}
+function selectProfile(id,hasPinHash){
+  if(hasPinHash){
+    pendingProfileId=id;
+    const p=getProfiles().find(x=>x.id===id);
+    document.getElementById('pin-profile-name').textContent=p.name;
+    document.getElementById('pin-input').value='';
+    document.getElementById('pin-error').style.display='none';
+    document.getElementById('pin-modal').classList.add('open');
+  }else{activateProfile(id);}
+}
+function submitPin(){
+  const pin=document.getElementById('pin-input').value;
+  const p=getProfiles().find(x=>x.id===pendingProfileId);
+  if(p&&hashPin(pin)===p.pin){closePinModal();activateProfile(pendingProfileId);}
+  else{document.getElementById('pin-error').style.display='block';document.getElementById('pin-input').value='';}
+}
+function closePinModal(){document.getElementById('pin-modal').classList.remove('open');}
+
+function activateProfile(id){
+  activeProfileId=id;
+  const p=getProfiles().find(x=>x.id===id);
+  const name=p.name;
+  document.getElementById('login').style.display='none';
+  document.getElementById('si-ava-inner').style.background=p.color;
+  document.getElementById('si-ava-init').textContent=name[0].toUpperCase();
+  document.getElementById('si-ava-name').textContent=name;
+  document.getElementById('um-ava').textContent=name[0].toUpperCase();
+  document.getElementById('um-ava').style.background=p.color;
+  document.getElementById('um-name').textContent=name;
+  document.getElementById('um-email').textContent=p.github||'Local profile';
+  document.getElementById('sp-name').textContent=name;
+  document.getElementById('sp-sub').textContent=p.github?`GitHub: ${p.github}`:'Local · this device only';
+  const k=profileGet('rep-key')||'';
+  if(k)document.getElementById('rep-key').value=k;
+  loadHistory();createStars();updLns();loadMCPState();
+  renderCustomModels();injectCustomModels();
+}
+function showNewProfile(){document.getElementById('new-profile-modal').classList.add('open');setTimeout(()=>document.getElementById('np-name').focus(),100);}
+function closeNewProfile(){document.getElementById('new-profile-modal').classList.remove('open');}
+function createProfile(){
+  const name=document.getElementById('np-name').value.trim();
+  const pin=document.getElementById('np-pin').value.trim();
+  if(!name){showToast('Enter a name');return;}
+  if(pin&&pin.length!==4){showToast('PIN must be 4 digits');return;}
+  const colors=['linear-gradient(135deg,#4a9eff,#a78bfa)','linear-gradient(135deg,#f472b6,#fb923c)','linear-gradient(135deg,#4ade80,#4a9eff)','linear-gradient(135deg,#a78bfa,#f472b6)','linear-gradient(135deg,#fb923c,#fbbf24)'];
+  const profiles=getProfiles();
+  const id='prof_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+  profiles.push({id,name,pin:pin?hashPin(pin):'',color:colors[profiles.length%colors.length],github:''});
+  saveProfiles(profiles);closeNewProfile();activateProfile(id);
+}
+function switchProfile(){closeUserModal();activeProfileId=null;renderProfileList();document.getElementById('login').style.display='flex';}
+function githubLogin(){window.open('https://github.com/login/oauth/authorize?client_id=Iv1.a629723000b46bec&scope=user:email&state=llmstudio','_blank','width=600,height=700');showToast('GitHub opened — complete auth in the new tab');}
+
+// ── STATE ──
+let curModel='Claude Sonnet 4.6',curModelId='anthropic/claude-sonnet-4-6',curProvider='Anthropic';
+let curImgModel='Nano Banana Pro',curImgModelId='google/nano-banana-pro';
+let curVidModel='Veo 3',curVidModelId='google/veo-3';
+let wsEnabled=false,msgs=[],isHome=true,sbCollapsed=false,curLang='python';
+let chatHistory=[];
+function getRepKey(){return profileGet('rep-key')||'';}
+
+const files={
+  python:`# KEMLLM — Piston Code Runner\ndef fibonacci(n):\n    a, b = 0, 1\n    result = []\n    for _ in range(n):\n        result.append(a)\n        a, b = b, a + b\n    return result\n\nnums = fibonacci(10)\nprint("Fibonacci:", nums)\nprint("Sum:", sum(nums))\nimport sys; print(f"Python {sys.version.split()[0]}")`,
+  javascript:`// KEMLLM Code Runner\nconsole.log("Hello from Node.js!");\nconst fib=n=>n<=1?n:fib(n-1)+fib(n-2);\nconst r=Array.from({length:10},(_,i)=>fib(i));\nconsole.log("Fibonacci:",r);`,
+  c:`#include <stdio.h>\nint main(){\n    printf("Hello from C!\\n");\n    int a=0,b=1;\n    for(int i=0;i<10;i++){printf("%d ",a);int t=a;a=b;b=t+b;}\n    printf("\\n"); return 0;\n}`,
+  rust:`fn main(){\n    println!("Hello from Rust!");\n    let(mut a,mut b)=(0u64,1u64);\n    for _ in 0..10{print!("{} ",a);let t=a;a=b;b=t+b;}\n    println!();\n}`
+};
+const pistonConf={python:{language:'python',version:'3.12.0',ext:'py'},javascript:{language:'javascript',version:'18.15.0',ext:'js'},typescript:{language:'typescript',version:'5.0.3',ext:'ts'},c:{language:'c',version:'10.2.0',ext:'c'},cpp:{language:'c++',version:'10.2.0',ext:'cpp'},rust:{language:'rust',version:'1.68.2',ext:'rs'},go:{language:'go',version:'1.20.3',ext:'go'},java:{language:'java',version:'15.0.2',ext:'java'},csharp:{language:'csharp',version:'6.12.0',ext:'cs'},bash:{language:'bash',version:'5.2.0',ext:'sh'},lua:{language:'lua',version:'5.4.4',ext:'lua'}};
+
+// ── HISTORY ──
+function loadHistory(){try{chatHistory=JSON.parse(profileGet('history')||'[]');}catch{chatHistory=[];}renderHistory();}
+function saveHistory(){profileSet('history',JSON.stringify(chatHistory.slice(0,60)));}
+function renderHistory(){
+  const hl=document.getElementById('hist-list');hl.innerHTML='';
+  chatHistory.forEach((h,i)=>{
+    const d=document.createElement('div');d.className='hi'+(i===0&&!isHome?' active':'');
+    d.innerHTML=`<span class="hi-txt">${esc(h.title)}</span><span class="hi-del" onclick="event.stopPropagation();delHist(${i})">✕</span>`;
+    d.onclick=()=>loadHistChat(i);hl.appendChild(d);
+  });
+}
+function delHist(i){chatHistory.splice(i,1);saveHistory();renderHistory();}
+function loadHistChat(i){
+  const h=chatHistory[i];msgs=[...(h.msgs||[])];isHome=false;
+  showChatView();
+  document.getElementById('msgs').innerHTML='';
+  msgs.forEach(msg=>{if(msg.role!=='system')addMsgDOM(msg.role==='user'?'user':'ai',msg.content,false);});
+  document.querySelectorAll('.hi').forEach((el,j)=>el.classList.toggle('active',j===i));
+  scrollBot();
+}
+function addToHistory(title,msgArr){chatHistory.unshift({title:title.substring(0,45),msgs:[...msgArr],ts:Date.now()});saveHistory();renderHistory();}
+
+// ── STARS ──
+function createStars(){
+  ['stars-bg','hs-stars'].forEach(id=>{
+    const bg=document.getElementById(id);if(!bg)return;bg.innerHTML='';
+  for(let i=0;i<100;i++){
+    const s=document.createElement('div');s.className='star';const sz=Math.random()*1.5+0.3;
+    s.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*100}%;--d:${2+Math.random()*4}s;--a:${.03+Math.random()*.07};--b:${.2+Math.random()*.4};animation-delay:${Math.random()*5}s;`;
+    bg.appendChild(s);
+  }
+  });
+}
+
+// ── SIDEBAR / DRAWER ──
+let drawerOpen=false;
+function toggleDrawer(){drawerOpen=!drawerOpen;document.getElementById('sb-drawer').classList.toggle('closed',!drawerOpen);}
+function closeDrawer(){drawerOpen=false;document.getElementById('sb-drawer').classList.add('closed');}
+
+// ── PANELS / NAV ──
+function siNav(p){
+  document.querySelectorAll('.si').forEach(x=>x.classList.remove('active'));
+  const sid=document.getElementById('si-'+p);if(sid)sid.classList.add('active');
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+  const map={chat:'chat-panel',code:'code-panel',models:'models-panel',settings:'settings-panel'};
+  if(map[p])document.getElementById(map[p]).classList.add('active');
+  closeAllDrops();
+  if(p!=='chat') closeDrawer();
+}
+
+// ── HOME/CHAT TOGGLE ──
+function showChatView(){
+  document.getElementById('home-screen').style.display='none';
+  document.getElementById('chat-area').style.display='block';
+  document.getElementById('input-bar').style.display='block';
+}
+function hsSend(){
+  const t=document.getElementById('hs-txt').value.trim();if(!t)return;
+  document.getElementById('hs-txt').value='';
+  showChatView();
+  document.getElementById('txt').value=t;
+  send();
+}
+
+// ── DROPDOWNS ──
+function openDrop(id,btn){
+  const d=document.getElementById(id);const isOpen=d.classList.contains('open');
+  closeAllDrops();if(isOpen)return;
+  const r=btn.getBoundingClientRect();
+  d.style.left=Math.max(4,Math.min(r.left,window.innerWidth-320))+'px';
+  d.style.top=(r.bottom+4)+'px';
+  d.classList.add('open');
+}
+function closeAllDrops(){document.querySelectorAll('.drop').forEach(d=>d.classList.remove('open'));}
+document.addEventListener('click',e=>{if(!e.target.closest('.tb-model')&&!e.target.closest('.hs-mbtn')&&!e.target.closest('.drop'))closeAllDrops();});
+
+// ── MODELS ──
+function setModel(name,id,color,provider,el){
+  curModel=name;curModelId=id;curProvider=provider;
+  document.getElementById('cur-mn').textContent=name;
+  document.getElementById('mdot').style.background=color;
+  document.getElementById('hs-mn').textContent=name;
+  document.getElementById('hs-mdot').style.background=color;
+  document.querySelectorAll('#mdrop .mdi').forEach(d=>d.classList.remove('sel'));
+  if(el)el.classList.add('sel');closeAllDrops();
+}
+function setModelFromCard(card,name,id,color,provider){
+  setModel(name,id,color,provider,null);
+  document.querySelectorAll('.mc').forEach(c=>{c.classList.remove('cur');const b=c.querySelector('.cur-badge');if(b)b.remove();});
+  card.classList.add('cur');const b=document.createElement('div');b.className='cur-badge';b.textContent='Active';card.appendChild(b);
+  showToast('Model → '+name);
+}
+function setImgModel(name,id,color,el){
+  curImgModel=name;curImgModelId=id;
+  document.getElementById('img-mn').textContent=name;
+  document.getElementById('img-mdot').style.background=color||'#f472b6';
+  document.querySelectorAll('#img-drop .mdi').forEach(d=>d.classList.remove('sel'));
+  if(el)el.classList.add('sel');closeAllDrops();
+}
+function setVidModel(name,id,color,el){
+  curVidModel=name;curVidModelId=id;
+  document.getElementById('vid-mn').textContent=name;
+  document.getElementById('vid-mdot').style.background=color||'#4ade80';
+  document.querySelectorAll('#vid-drop .mdi').forEach(d=>d.classList.remove('sel'));
+  if(el)el.classList.add('sel');closeAllDrops();
+}
+
+// ── DETECT IMG/VID ──
+function isImgReq(t){return /\b(generate|make|create|draw|render|paint|show me|produce)\b.{0,30}\b(image|picture|photo|illustration|art|artwork|wallpaper|logo|portrait|landscape|painting)\b/i.test(t);}
+function isVidReq(t){return /\b(generate|make|create|render|animate|produce)\b.{0,30}\b(video|animation|clip|footage|movie|film)\b/i.test(t);}
+
+// ── REPLICATE ──
+async function repCreate(modelId,input){
+  const key=getRepKey();if(!key)throw new Error('NO_KEY');
+  const r=await fetch(`https://api.replicate.com/v1/models/${modelId}/predictions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Token '+key},body:JSON.stringify({input})});
+  if(!r.ok){const txt=await r.text();if(r.status===401)throw new Error('AUTH');if(r.status===404)throw new Error('MODEL_NOT_FOUND:'+modelId);throw new Error(`HTTP ${r.status}: ${txt.slice(0,200)}`);}
+  return r.json();
+}
+async function repPoll(predId){
+  const key=getRepKey();
+  for(let i=0;i<90;i++){
+    await new Promise(res=>setTimeout(res,i<10?1500:3000));
+    const r=await fetch(`https://api.replicate.com/v1/predictions/${predId}`,{headers:{'Authorization':'Token '+key}});
+    const d=await r.json();
+    if(d.status==='succeeded')return d;
+    if(d.status==='failed')throw new Error(d.error||'Prediction failed');
+    if(d.status==='canceled')throw new Error('Prediction canceled');
+  }
+  throw new Error('Timeout');
+}
+
+// ── CHAT ──
+function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}
+function resizeTxt(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,140)+'px';document.getElementById('tok').textContent=Math.round(el.value.length/4).toLocaleString()+' / 200k';}
+function chipSend(t){if(t.endsWith(' ')||t.endsWith('\n')){document.getElementById('hs-txt').value=t;document.getElementById('hs-txt').focus();return;}document.getElementById('hs-txt').value=t;hsSend();}
+
+async function send(){
+  const inp=document.getElementById('txt');const text=inp.value.trim();if(!text)return;
+  inp.value='';inp.style.height='auto';document.getElementById('tok').textContent='0 / 200k';
+  isHome=false;showChatView();
+  addMsgDOM('user',text,true);msgs.push({role:'user',content:text});
+  const tid='t'+Date.now();
+
+  if(isImgReq(text)){
+    addTyping(tid,'Generating image with '+curImgModel+'...');
+    try{
+      if(!getRepKey())throw new Error('NO_KEY');
+      const pred=await repCreate(curImgModelId,{prompt:text,aspect_ratio:'1:1'});
+      const result=await repPoll(pred.id);removeTyping(tid);
+      const url=Array.isArray(result.output)?result.output[0]:result.output;
+      if(url)addImgMsg(url,text,curImgModel);else addMsgDOM('ai','No output URL returned.',true);
+    }catch(err){removeTyping(tid);addErrMsg(err,'image');}
+    scrollBot();return;
+  }
+  if(isVidReq(text)){
+    addTyping(tid,'Generating video with '+curVidModel+'... (~2 min)');
+    try{
+      if(!getRepKey())throw new Error('NO_KEY');
+      const pred=await repCreate(curVidModelId,{prompt:text,duration:5,aspect_ratio:'16:9'});
+      const result=await repPoll(pred.id);removeTyping(tid);
+      const url=Array.isArray(result.output)?result.output[0]:result.output;
+      if(url)addVidMsg(url,text,curVidModel);else addMsgDOM('ai','No video URL returned.',true);
+    }catch(err){removeTyping(tid);addErrMsg(err,'video');}
+    scrollBot();return;
+  }
+
+  addTyping(tid);
+  try{
+    let reply='';
+    const sys=document.getElementById('sys-prompt')?.value||'You are KEMLLM. Be helpful and precise. Use markdown with code blocks.';
+    const repKey=getRepKey();
+    if(curProvider==='Anthropic'&&!repKey){
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:curModelId.replace('anthropic/',''),max_tokens:2000,system:sys,messages:msgs})});
+      const d=await r.json();if(d.error)throw new Error(d.error.message||JSON.stringify(d.error));reply=d.content?.[0]?.text||'';
+    }else if(repKey){
+      const pred=await repCreate(curModelId,{prompt:text,system_prompt:sys,max_tokens:2000});
+      const result=await repPoll(pred.id);const out=result.output;
+      reply=Array.isArray(out)?out.join(''):String(out||'');
+    }else{throw new Error('NO_KEY');}
+    removeTyping(tid);msgs.push({role:'assistant',content:reply});addMsgDOM('ai',reply,true);
+    if(msgs.length===2)addToHistory(text,msgs);else if(chatHistory.length>0){chatHistory[0].msgs=[...msgs];saveHistory();}
+  }catch(err){removeTyping(tid);addErrMsg(err,'chat');}
+  scrollBot();
+}
+
+function addErrMsg(err,type){
+  let msg='';
+  if(err.message==='NO_KEY')msg=`**Add your Replicate API key** in Settings to use ${type}.\n\nGet a free key at [replicate.com/account/api-tokens](https://replicate.com/account/api-tokens)\n\nYour key is private to this device and profile.`;
+  else if(err.message==='AUTH')msg='**Invalid Replicate key.** Check Settings — it should start with `r8_`';
+  else if(err.message.startsWith('MODEL_NOT_FOUND'))msg=`**Model not found:** \`${err.message.split(':')[1]}\` — try a different model from the dropdown.`;
+  else if(err.message.includes('Failed to fetch')||err.message.includes('NetworkError'))msg='**Network error.** Check your internet. Works best when hosted (GitHub Pages / Netlify).';
+  else msg=`**Error:** ${err.message}`;
+  addMsgDOM('ai',msg,true);
+}
+
+const aiSVG=`<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`;
+function addMsgDOM(role,text,animate){
+  const el=document.createElement('div');el.className='msg'+(animate?' fu':'');
+  if(role==='user'){el.innerHTML=`<div class="msg-u"><div class="bubble">${esc(text)}</div></div>`;}
+  else{el.innerHTML=`<div class="msg-a"><div class="ai-av">${aiSVG}</div><div class="ai-body"><div class="ai-tag">${curModel}</div><div class="ai-txt">${fmt(text)}</div><div class="ai-acts"><button class="aa" onclick="cpMsg(this)">📋 Copy</button><button class="aa" onclick="regen()">↺ Retry</button></div></div></div>`;}
+  document.getElementById('msgs').appendChild(el);scrollBot();
+}
+function addImgMsg(url,prompt,model){
+  const el=document.createElement('div');el.className='msg fu';
+  el.innerHTML=`<div class="msg-a"><div class="ai-av">${aiSVG}</div><div class="ai-body"><div class="ai-tag">${model}</div><div class="media-wrap"><img src="${url}" alt="${esc(prompt)}" onclick="window.open('${url}','_blank')" loading="lazy"></div><div class="ai-acts"><a class="aa" href="${url}" download target="_blank">⬇ Download</a><button class="aa" onclick="window.open('${url}','_blank')">🔗 Open</button></div></div></div>`;
+  document.getElementById('msgs').appendChild(el);scrollBot();
+}
+function addVidMsg(url,prompt,model){
+  const el=document.createElement('div');el.className='msg fu';
+  el.innerHTML=`<div class="msg-a"><div class="ai-av">${aiSVG}</div><div class="ai-body"><div class="ai-tag">${model}</div><div class="media-wrap"><video src="${url}" controls loop autoplay muted></video></div><div class="ai-acts"><a class="aa" href="${url}" download target="_blank">⬇ Download</a><button class="aa" onclick="window.open('${url}','_blank')">🔗 Open</button></div></div></div>`;
+  document.getElementById('msgs').appendChild(el);scrollBot();
+}
+function addTyping(id,label=''){
+  const el=document.createElement('div');el.className='msg';el.id=id;
+  el.innerHTML=`<div class="msg-a"><div class="ai-av">${aiSVG}</div><div class="ai-body">${label?`<div class="ai-tag" style="margin-bottom:5px;">${label}</div>`:''}<div class="typing"><div class="td"></div><div class="td"></div><div class="td"></div></div></div></div>`;
+  document.getElementById('msgs').appendChild(el);scrollBot();
+}
+function removeTyping(id){const e=document.getElementById(id);if(e)e.remove();}
+function scrollBot(){const a=document.getElementById('chat-area');a.scrollTop=a.scrollHeight;}
+function cpMsg(btn){const t=btn.closest('.ai-body').querySelector('.ai-txt').innerText;navigator.clipboard.writeText(t);btn.textContent='✓ Copied';setTimeout(()=>btn.textContent='📋 Copy',2000);}
+function regen(){if(msgs.length<2)return;msgs.pop();document.getElementById('msgs').lastElementChild?.remove();const ut=msgs.at(-1)?.content||'';document.getElementById('txt').value=ut;msgs.pop();send();}
+
+function newChat(){
+  msgs=[];isHome=true;
+  document.getElementById('msgs').innerHTML='';
+  document.getElementById('home-screen').style.display='flex';
+  document.getElementById('chat-area').style.display='none';
+  document.getElementById('input-bar').style.display='none';
+  siNav('chat');
+  document.querySelectorAll('.hi').forEach(h=>h.classList.remove('active'));
+}
+
+function fmt(t){
+  t=t.replace(/```(\w*)\n?([\s\S]*?)```/g,(_,l,c)=>`<pre><code>${esc(c.trim())}</code></pre>`);
+  t=t.replace(/`([^`\n]+)`/g,'<code>$1</code>');
+  t=t.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>');
+  t=t.replace(/\*([^*\n]+)\*/g,'<em>$1</em>');
+  t=t.replace(/^### (.+)$/gm,'<h3>$1</h3>');t=t.replace(/^## (.+)$/gm,'<h2>$1</h2>');t=t.replace(/^# (.+)$/gm,'<h1>$1</h1>');
+  t=t.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" style="color:var(--blue);">$1</a>');
+  t=t.replace(/^[-*] (.+)$/gm,'<li>$1</li>');t=t.replace(/(<li>[\s\S]*?<\/li>)/g,'<ul>$1</ul>');
+  t=t.replace(/\n/g,'<br>');return t;
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ── CODE ──
+let curLangFiles={...files};
+function updLns(){const ed=document.getElementById('ced');const lines=ed.innerText.split('\n').length;document.getElementById('lns').innerHTML=Array.from({length:lines},(_,i)=>`<div class="ln">${i+1}</div>`).join('');}
+function edKey(e){if(e.key==='Tab'){e.preventDefault();document.execCommand('insertText',false,'    ');}if(e.ctrlKey&&e.key==='Enter'){e.preventDefault();runCode();}setTimeout(updLns,10);}
+function changeLang(lang){curLangFiles[curLang]=document.getElementById('ced').innerText;curLang=lang;document.getElementById('ced').innerText=curLangFiles[lang]||`// ${lang}\n`;updLns();}
+function switchFile(el,lang){document.querySelectorAll('.cf').forEach(c=>c.classList.remove('active'));el.classList.add('active');changeLang(lang);document.getElementById('lang-sel').value=lang;}
+function newFile(){const name=prompt('File name:');if(!name)return;const ext=name.split('.').pop();const em={py:'python',js:'javascript',ts:'typescript',c:'c',cpp:'cpp',rs:'rust',go:'go',java:'java',cs:'csharp',sh:'bash',lua:'lua'};const lang=em[ext]||'python';const cf=document.getElementById('code-files');const d=document.createElement('div');d.className='cf';d.innerHTML=`<div class="cfdot" style="background:#aaa;"></div>${esc(name)}`;d.onclick=()=>switchFile(d,lang);cf.insertBefore(d,cf.querySelector('.cf-add'));d.click();}
+async function runCode(){
+  const code=document.getElementById('ced').innerText;
+  const btn=document.getElementById('run-btn');const oel=document.getElementById('out-lines');const et=document.getElementById('exec-t');
+  btn.classList.add('running');btn.textContent='■ Stop';
+  oel.innerHTML='<div class="ol inf">▶ Running via Piston...</div>';et.textContent='';
+  const start=Date.now();const conf=pistonConf[curLang];
+  try{
+    const res=await fetch('https://emkc.org/api/v2/piston/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language:conf.language,version:conf.version,files:[{name:`main.${conf.ext}`,content:code}]})});
+    const data=await res.json();const ms=Date.now()-start;et.textContent=`${ms}ms`;
+    btn.classList.remove('running');btn.innerHTML='<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>Run';
+    oel.innerHTML='';
+    if(data.run?.stdout)data.run.stdout.split('\n').filter(Boolean).forEach(l=>{const d=document.createElement('div');d.className='ol ok';d.textContent=l;oel.appendChild(d);});
+    if(data.run?.stderr)data.run.stderr.split('\n').filter(Boolean).forEach(l=>{const d=document.createElement('div');d.className='ol err';d.textContent=l;oel.appendChild(d);});
+    if(!data.run?.stdout&&!data.run?.stderr){const d=document.createElement('div');d.className='ol';d.textContent='(no output)';oel.appendChild(d);}
+    const ex=data.run?.code;const d=document.createElement('div');d.className=ex===0?'ol inf':'ol warn';d.textContent=ex===0?`✓ Exited 0 · ${ms}ms`:`⚠ Exit ${ex} · ${ms}ms`;oel.appendChild(d);
+  }catch(err){btn.classList.remove('running');btn.innerHTML='<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>Run';oel.innerHTML=`<div class="ol err">✗ ${err.message}</div>`;}
+}
+function clearOut(){document.getElementById('out-lines').innerHTML='<div class="ol inf">Cleared.</div>';}
+function askCodeAI(){const code=document.getElementById('ced').innerText;siNav('chat');showChatView();document.getElementById('txt').value=`Review this ${curLang} code:\n\`\`\`${curLang}\n${code.slice(0,1000)}\n\`\`\``;document.getElementById('txt').focus();}
+
+// ── MCP ──
+function openMCP(){document.getElementById('mcp-modal').classList.add('open');}
+function closeMCP(){document.getElementById('mcp-modal').classList.remove('open');}
+function mcpConnect(url,btn){
+  window.open(url,'_blank','width=620,height=720');
+  const name=btn.closest('.mcp-item').querySelector('.mcp-name').textContent;
+  btn.textContent='Opening...';btn.disabled=true;
+  setTimeout(()=>{
+    btn.textContent='✓ Connected';btn.className='mcp-btn conn';btn.disabled=false;
+    const c=JSON.parse(localStorage.getItem('llms_mcp')||'[]');
+    if(!c.includes(name))c.push(name);localStorage.setItem('llms_mcp',JSON.stringify(c));updateMCPBadge();
+  },3000);
+}
+function updateMCPBadge(){const c=JSON.parse(localStorage.getItem('llms_mcp')||'[]');document.getElementById('mcp-badge-dot').style.display=c.length?'block':'none';}
+function loadMCPState(){
+  const connected=JSON.parse(localStorage.getItem('llms_mcp')||'[]');
+  connected.forEach(name=>{document.querySelectorAll('.mcp-item').forEach(item=>{if(item.querySelector('.mcp-name')?.textContent===name){const btn=item.querySelector('.mcp-btn');if(btn&&!btn.classList.contains('conn')){btn.textContent='✓ Connected';btn.className='mcp-btn conn';}}});});
+  updateMCPBadge();
+}
+
+// ── USER MODAL ──
+function openUserModal(){document.getElementById('user-modal').classList.add('open');}
+function closeUserModal(){document.getElementById('user-modal').classList.remove('open');}
+
+// ── SETTINGS ──
+function saveRepKey(){const v=document.getElementById('rep-key').value.trim();if(!v){showToast('Enter a key');return;}if(!v.startsWith('r8_')){showToast('Key should start with r8_');return;}profileSet('rep-key',v);showToast('Replicate key saved ✓');}
+function setAccent(c,el){el.closest('.swatches').querySelectorAll('.sw').forEach(s=>s.classList.remove('on'));el.classList.add('on');document.documentElement.style.setProperty('--blue',c);}
+
+// ── CUSTOM MODELS ──
+function getCustomModels(){try{return JSON.parse(profileGet('custom_models')||'[]');}catch{return[];}}
+function saveCustomModels(m){profileSet('custom_models',JSON.stringify(m));}
+
+function setCMTab(tab){
+  document.getElementById('cm-basic').style.display=tab==='basic'?'block':'none';
+  document.getElementById('cm-advanced').style.display=tab==='advanced'?'block':'none';
+  document.getElementById('cm-tab-basic').style.background=tab==='basic'?'var(--blue)':'var(--bg3)';
+  document.getElementById('cm-tab-basic').style.color=tab==='basic'?'#fff':'var(--text2)';
+  document.getElementById('cm-tab-basic').style.borderColor=tab==='basic'?'var(--blue)':'var(--border2)';
+  document.getElementById('cm-tab-advanced').style.background=tab==='advanced'?'var(--blue)':'var(--bg3)';
+  document.getElementById('cm-tab-advanced').style.color=tab==='advanced'?'#fff':'var(--text2)';
+  document.getElementById('cm-tab-advanced').style.borderColor=tab==='advanced'?'var(--blue)':'var(--border2)';
+}
+
+function addCustomModel(){
+  const isAdv=document.getElementById('cm-advanced').style.display!=='none';
+  let m;
+  if(isAdv){
+    // parse JSON
+    try{
+      m=JSON.parse(document.getElementById('cm-json').value.trim());
+      if(!m.name||!m.id)throw new Error('missing name or id');
+      if(!m.id.includes('/'))throw new Error('ID must be owner/model-name');
+      m.type=m.type||'text';
+      m.color=m.color||'#4a9eff';
+    }catch(e){showToast('JSON error: '+e.message);return;}
+  }else{
+    const name=document.getElementById('cm-name').value.trim();
+    const id=document.getElementById('cm-id').value.trim();
+    const type=document.getElementById('cm-type').value;
+    const color=document.getElementById('cm-color').value;
+    const icon=document.getElementById('cm-icon').value.trim();
+    const provider=document.getElementById('cm-provider').value.trim();
+    if(!name){showToast('Enter a display name');return;}
+    if(!id||!id.includes('/')){showToast('Enter a valid Replicate ID (owner/model)');return;}
+    m={name,id,type,color,icon,provider};
+  }
+  const models=getCustomModels();
+  if(models.find(x=>x.id===m.id)){showToast('Model already added');return;}
+  models.push(m);
+  saveCustomModels(models);
+  // clear fields
+  ['cm-name','cm-id','cm-icon','cm-provider'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+  document.getElementById('cm-json').value='';
+  renderCustomModels();
+  injectCustomModels();
+  showToast('Added: '+m.name);
+}
+
+function removeCustomModel(id){
+  const models=getCustomModels().filter(m=>m.id!==id);
+  saveCustomModels(models);
+  renderCustomModels();
+  injectCustomModels();
+  showToast('Model removed');
+}
+
+function renderCustomModels(){
+  const list=document.getElementById('custom-model-list');
+  if(!list)return;
+  const models=getCustomModels();
+  list.innerHTML='';
+  if(!models.length){
+    list.innerHTML='<div style="font-size:11.5px;color:var(--text3);text-align:center;padding:10px 0;">No custom models yet</div>';
+    return;
+  }
+  models.forEach(m=>{
+    const el=document.createElement('div');
+    el.style.cssText='display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;';
+    const iconHtml=m.icon
+      ?`<img src="${m.icon}" width="16" height="16" style="border-radius:3px;object-fit:contain;flex-shrink:0;" onerror="this.style.display='none'">`
+      :`<div style="width:10px;height:10px;border-radius:50%;background:${m.color};flex-shrink:0;"></div>`;
+    el.innerHTML=`${iconHtml}<div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.name)}</div><div style="font-size:10.5px;color:var(--text3);">${esc(m.id)} · ${m.type}</div></div><button onclick="removeCustomModel('${esc(m.id)}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:0 4px;line-height:1;" title="Remove">×</button>`;
+    list.appendChild(el);
+  });
+}
+
+function injectCustomModels(){
+  const models=getCustomModels();
+  document.querySelectorAll('.custom-model-entry').forEach(e=>e.remove());
+  models.forEach(m=>{
+    const iconHtml=m.icon
+      ?`<img src="${m.icon}" width="14" height="14" style="border-radius:2px;object-fit:contain;" onerror="this.style.display='none'">`
+      :'';
+
+    if(m.type==='text'){
+      const drop=document.getElementById('mdrop');
+      if(drop){
+        let sec=drop.querySelector('.custom-mds');
+        if(!sec){
+          const sep=document.createElement('div');sep.className='mdsep custom-model-entry';drop.appendChild(sep);
+          sec=document.createElement('div');sec.className='mds custom-model-entry custom-mds';sec.innerHTML='Custom Models';drop.appendChild(sec);
+        }
+        const item=document.createElement('div');item.className='mdi custom-model-entry';
+        item.innerHTML=`${iconHtml}<div class="mdot" style="background:${m.color};${m.icon?'display:none':''}"></div><div><div class="mdi-n">${esc(m.name)}</div><div class="mdi-s">${esc(m.id)}</div></div>`;
+        item.onclick=()=>setModel(m.name,m.id,m.color,'Custom',item);
+        drop.appendChild(item);
+      }
+      const grid=document.querySelector('#models-panel .mc-grid');
+      if(grid){
+        const card=document.createElement('div');card.className='mc custom-model-entry';
+        const cardIcon=m.icon
+          ?`<img src="${m.icon}" width="16" height="16" style="border-radius:3px;object-fit:contain;" onerror="this.style.display='none'">`
+          :`<div style="width:10px;height:10px;border-radius:50%;background:${m.color};"></div>`;
+        card.innerHTML=`<div class="mc-top"><div class="mc-ico" style="background:${m.color}22;">${cardIcon}</div><div><div class="mc-n">${esc(m.name)}</div><div class="mc-p">${esc(m.provider||'Custom · '+m.id)}</div></div></div><div class="mc-d">Custom Replicate model.</div><div class="mc-tags"><span class="tag s">Custom</span></div>`;
+        card.onclick=()=>setModelFromCard(card,m.name,m.id,m.color,'Custom');
+        grid.appendChild(card);
+      }
+    } else if(m.type==='image'){
+      const drop=document.getElementById('img-drop');
+      if(drop){
+        let sec=drop.querySelector('.custom-mds');
+        if(!sec){
+          const sep=document.createElement('div');sep.className='mdsep custom-model-entry';drop.appendChild(sep);
+          sec=document.createElement('div');sec.className='mds custom-model-entry custom-mds';sec.innerHTML='Custom';drop.appendChild(sec);
+        }
+        const item=document.createElement('div');item.className='mdi custom-model-entry';
+        item.innerHTML=`${iconHtml}<div class="mdot" style="background:${m.color};${m.icon?'display:none':''}"></div><div><div class="mdi-n">${esc(m.name)}</div><div class="mdi-s">${esc(m.id)}</div></div>`;
+        item.onclick=()=>setImgModel(m.name,m.id,m.color,item);
+        drop.appendChild(item);
+      }
+    } else if(m.type==='video'){
+      const drop=document.getElementById('vid-drop');
+      if(drop){
+        let sec=drop.querySelector('.custom-mds');
+        if(!sec){
+          const sep=document.createElement('div');sep.className='mdsep custom-model-entry';drop.appendChild(sep);
+          sec=document.createElement('div');sec.className='mds custom-model-entry custom-mds';sec.innerHTML='Custom';drop.appendChild(sec);
+        }
+        const item=document.createElement('div');item.className='mdi custom-model-entry';
+        item.innerHTML=`${iconHtml}<div class="mdot" style="background:${m.color};${m.icon?'display:none':''}"></div><div><div class="mdi-n">${esc(m.name)}</div><div class="mdi-s">${esc(m.id)}</div></div>`;
+        item.onclick=()=>setVidModel(m.name,m.id,m.color,item);
+        drop.appendChild(item);
+      }
+    }
+  });
+}
+
+// ── TOAST ──
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.opacity='1';clearTimeout(t._t);t._t=setTimeout(()=>t.style.opacity='0',2500);}
+
+// ── INIT ──
+renderProfileList();updLns();
+</script>
+</body>
+</html>

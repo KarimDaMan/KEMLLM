@@ -9,8 +9,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;}
+*{margin:0;padding:0;box-sizing:border-box;color-scheme:dark;}
 :root{
+  color-scheme:dark;
   --bg:#000;--bg2:#0d0d0d;--bg3:#161616;--bg4:#1e1e1e;
   --border:#1a1a1a;--border2:#242424;
   --text:#fff;--text2:#888;--text3:#444;
@@ -201,7 +202,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
 /* ── INPUT BAR (bottom, Grok-style) ── */
 #input-bar{padding:10px 20px 16px;flex-shrink:0;display:flex;justify-content:center;}
 .uni-bar{width:100%;max-width:660px;position:relative;}
-.uni-input{width:100%;background:var(–bg2);border:1px solid var(–border2);border-radius:24px;padding:14px 56px 14px 20px;font-family:var(–font);font-size:14.5px;color:var(–text);outline:none;transition:border-color .14s;resize:none;max-height:160px;line-height:1.6;display:block;-webkit-appearance:none;}
+.uni-input{width:100%;background:var(–bg2);border:1px solid var(–border2);border-radius:24px;padding:14px 56px 14px 20px;font-family:var(–font);font-size:14.5px;color:var(–text);outline:none;transition:border-color .14s;resize:none;max-height:160px;line-height:1.6;display:block;-webkit-appearance:none;-webkit-text-fill-color:var(–text);-webkit-background-clip:padding-box;background-clip:padding-box;color-scheme:dark;}
 .uni-input:focus{border-color:#333;}
 .uni-input::placeholder{color:var(–text3);}
 .uni-send{position:absolute;right:10px;bottom:10px;width:38px;height:38px;border-radius:50%;background:var(–text);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:opacity .14s;flex-shrink:0;}

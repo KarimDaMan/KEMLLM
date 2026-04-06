@@ -52,6 +52,8 @@ function activateProfile(id) {
     ava.style.background = p.color;
     ava.textContent = p.name[0].toUpperCase();
   }
+  const avaName = document.getElementById('si-ava-name');
+  if (avaName) avaName.textContent = p.name;
   const umAva = document.getElementById('um-ava');
   if (umAva) {
     umAva.style.background = p.color;

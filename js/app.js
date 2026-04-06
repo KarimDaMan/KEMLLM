@@ -21,14 +21,27 @@ function saveCurrentChat() {
   renderHistory();
 }
 function renderHistory() {
-  const el = document.getElementById('hist-list');
-  if (!el) return;
   const list = loadHistory();
-  if (!list.length) {
-    el.innerHTML = '<div style="font-size:11px;color:var(--text3);text-align:center;padding:14px 8px;">No chats yet</div>';
-    return;
+  // Sidebar: top 15 inline
+  const sb = document.getElementById('sb-chats');
+  if (sb) {
+    if (!list.length) {
+      sb.innerHTML = '<div class="sb-empty">No chats yet</div>';
+    } else {
+      sb.innerHTML = list.slice(0, 15).map(c => `<div class="sb-chat${c.id === currentChatId ? ' active' : ''}" onclick="loadChat('${c.id}')"><div class="sb-chat-txt">${escapeHTML(c.title)}</div><button class="sb-chat-del" onclick="event.stopPropagation();deleteChat('${c.id}')">×</button></div>`).join('');
+    }
+    const viewall = document.getElementById('sb-viewall');
+    if (viewall) viewall.style.display = list.length > 15 ? 'block' : 'none';
   }
-  el.innerHTML = list.map(c => `<div class="hi${c.id === currentChatId ? ' active' : ''}" onclick="loadChat('${c.id}')"><div class="hi-txt">${escapeHTML(c.title)}</div><button class="hi-del" onclick="event.stopPropagation();deleteChat('${c.id}')">×</button></div>`).join('');
+  // Modal: full list
+  const el = document.getElementById('hist-list');
+  if (el) {
+    if (!list.length) {
+      el.innerHTML = '<div style="font-size:11px;color:var(--text3);text-align:center;padding:14px 8px;">No chats yet</div>';
+    } else {
+      el.innerHTML = list.map(c => `<div class="hi${c.id === currentChatId ? ' active' : ''}" onclick="loadChat('${c.id}')"><div class="hi-txt">${escapeHTML(c.title)}</div><button class="hi-del" onclick="event.stopPropagation();deleteChat('${c.id}')">×</button></div>`).join('');
+    }
+  }
 }
 function loadChat(id) {
   const list = loadHistory();
@@ -202,7 +215,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (p) siNav(p);
     });
   });
-  document.getElementById('si-logo')?.addEventListener('click', toggleDrawer);
+  document.getElementById('si-logo')?.addEventListener('click', () => siNav('chat'));
+  document.getElementById('sb-viewall')?.addEventListener('click', toggleDrawer);
+  document.getElementById('sb-new-chat')?.addEventListener('click', newChat);
   document.getElementById('dr-close')?.addEventListener('click', closeDrawer);
   document.getElementById('dr-new')?.addEventListener('click', newChat);
 
@@ -218,8 +233,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tab-chat')?.addEventListener('click', () => siNav('chat'));
   document.getElementById('tab-code')?.addEventListener('click', () => siNav('code'));
 
-  // Avatar
-  document.getElementById('si-ava')?.addEventListener('click', openUserModal);
+  // Avatar row
+  document.getElementById('si-ava-row')?.addEventListener('click', openUserModal);
 
   // User modal
   document.getElementById('um-switch')?.addEventListener('click', switchProfile);

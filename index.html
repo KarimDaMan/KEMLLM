@@ -1038,12 +1038,12 @@ async function repPoll(predId){
 
 // ── CHAT ──
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}
-function resizeTxt(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,140)+'px';document.getElementById('tok').textContent=Math.round(el.value.length/4).toLocaleString()+' / 200k';}
+function resizeTxt(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,140)+'px';}
 function chipSend(t){if(t.endsWith(' ')||t.endsWith('\n')){document.getElementById('hs-txt').value=t;document.getElementById('hs-txt').focus();return;}document.getElementById('hs-txt').value=t;hsSend();}
 
 async function send(){
   const inp=document.getElementById('txt');const text=inp.value.trim();if(!text)return;
-  inp.value='';inp.style.height='auto';document.getElementById('tok').textContent='0 / 200k';
+  inp.value='';inp.style.height='auto';
   isHome=false;showChatView();
   addMsgDOM('user',text,true);msgs.push({role:'user',content:text});
   const tid='t'+Date.now();

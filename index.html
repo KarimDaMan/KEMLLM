@@ -200,13 +200,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
 .media-wrap video{width:100%;display:block;}
 
 /* ── INPUT BAR (bottom, Grok-style) ── */
-#input-bar{padding:12px 20px 16px;flex-shrink:0;}
-.iw{max-width:760px;margin:0 auto;background:var(--bg2);border:1px solid var(--border2);border-radius:18px;transition:border-color .14s;}
-.iw:focus-within{border-color:#2a2a2a;}
-.ir{display:flex;align-items:flex-end;padding:10px 10px 10px;}
-#txt{flex:1;background:none;border:none;outline:none;color:var(--text);font-family:var(--font);font-size:13.5px;resize:none;max-height:140px;line-height:1.6;}
+#input-bar{padding:10px 20px 14px;flex-shrink:0;}
+.iw{max-width:760px;margin:0 auto;background:var(--bg2);border:1px solid var(--border2);border-radius:28px;transition:border-color .14s;}
+.iw:focus-within{border-color:#333;}
+.ir{display:flex;align-items:center;padding:8px 8px 8px 20px;}
+#txt{flex:1;background:none;border:none;outline:none;color:var(--text);font-family:var(--font);font-size:14px;resize:none;max-height:140px;line-height:1.6;}
 #txt::placeholder{color:var(--text3);}
-.send-btn{width:32px;height:32px;border-radius:50%;background:var(--text);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-left:8px;flex-shrink:0;transition:opacity .14s;}
+.send-btn{width:36px;height:36px;border-radius:50%;background:var(--text);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-left:8px;flex-shrink:0;transition:opacity .14s;}
 .send-btn:hover{opacity:.8;}
 .send-btn svg{color:#000;width:12px;height:12px;}
 
@@ -428,6 +428,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
         <div style="width:1px;height:20px;background:var(--border2);margin:0 2px;"></div>
         <button class="ib" id="ws-btn" onclick="this.classList.toggle('on');wsEnabled=!wsEnabled;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Search
+        </button>
+        <button class="ib" id="reason-btn" onclick="this.classList.toggle('on');reasonEnabled=!reasonEnabled;" title="Deep reasoning mode">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><circle cx="12" cy="12" r="10"/><line x1="12" y1="17" x2="12" y2="17"/></svg>Reason
         </button>
         <div style="width:1px;height:20px;background:var(--border2);margin:0 2px;"></div>
         <!-- Private badge like Grok -->
@@ -891,6 +894,7 @@ function saveProfiles(p){localStorage.setItem('llms_profiles',JSON.stringify(p))
 
 function renderProfileList(){
   const el=document.getElementById('profile-list');
+  if(!el)return;
   const profiles=getProfiles();
   el.innerHTML='';
   if(!profiles.length){el.innerHTML='<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px 0;">No profiles yet</div>';return;}
@@ -943,7 +947,11 @@ function activateProfile(id){
   _s('sp-name','textContent',name);
   _s('sp-sub','textContent',p.github?`GitHub: ${p.github}`:'Local · this device only');
   const k=profileGet('rep-key')||'';
-  if(k)document.getElementById('rep-key').value=k;
+  const repKeyEl=document.getElementById('rep-key');
+  if(k&&repKeyEl)repKeyEl.value=k;
+  const e2bKeyEl=document.getElementById('e2b-key');
+  const e2bKey=profileGet('e2b-key')||'';
+  if(e2bKey&&e2bKeyEl)e2bKeyEl.value=e2bKey;
   ['anthropic','openai','google','xai'].forEach(p=>{
     const v=profileGet('key-'+p)||'';
     const el=document.getElementById('key-'+p);
@@ -974,7 +982,7 @@ function githubLogin(){
 let curModel='Claude Sonnet 4.5',curModelId='anthropic/claude-4.5-sonnet',curProvider='Anthropic';
 let curImgModel='Nano Banana Pro',curImgModelId='google/nano-banana-pro';
 let curVidModel='Veo 3',curVidModelId='google/veo-3';
-let wsEnabled=false,msgs=[],isHome=true,sbCollapsed=false,curLang='python';
+let wsEnabled=false,reasonEnabled=false,msgs=[],isHome=true,sbCollapsed=false,curLang='python';
 let chatHistory=[];
 function getRepKey(){return profileGet('rep-key')||'';}
 
@@ -1161,7 +1169,7 @@ async function send(){
     addTyping(tid,'Generating video with '+curVidModel+'... (~2 min)');
     try{
       if(!getRepKey())throw new Error('NO_KEY');
-      const pred=await repCreate(curVidModelId,{prompt:text,duration:5,aspect_ratio:'16:9'});
+      const pred=await repCreate(curVidModelId,{prompt:text,duration:6,aspect_ratio:'16:9'});
       const result=await repPoll(pred.id);removeTyping(tid);
       const url=Array.isArray(result.output)?result.output[0]:result.output;
       if(url)addVidMsg(url,text,curVidModel);else addMsgDOM('ai','No video URL returned.',true);
@@ -1617,7 +1625,7 @@ async function agentToggleSandbox(){
     const r=await fetch('https://kemllmx.karimghannam2014.workers.dev/e2b/v1/sandboxes',{
       method:'POST',
       headers:{'Content-Type':'application/json','X-API-Key':key},
-      body:JSON.stringify({templateID:'base',timeout:300})
+      body:JSON.stringify({templateID:'base',timeoutMs:300000})
     });
     const data=await r.json();
     if(!data.sandboxID)throw new Error(data.message||JSON.stringify(data));
@@ -1638,18 +1646,27 @@ async function agentToggleSandbox(){
 async function e2bRun(code,lang='python'){
   if(!agentSandboxId)return{stdout:'',stderr:'No sandbox running'};
   const key=getE2BKey();
-  let cmd=code;
-  if(lang==='python')cmd=`python3 -c ${JSON.stringify(code)}`;
-  else if(lang==='javascript')cmd=`node -e ${JSON.stringify(code)}`;
-  else if(lang==='bash')cmd=code;
+  // Write code to a temp file and run it
+  let filename,runCmd;
+  if(lang==='python'){filename='_tmp.py';runCmd='python3 _tmp.py';}
+  else if(lang==='javascript'){filename='_tmp.js';runCmd='node _tmp.js';}
+  else{filename='_tmp.sh';runCmd='bash _tmp.sh';}
   try{
-    const r=await fetch(`https://kemllmx.karimghannam2014.workers.dev/e2b/v1/sandboxes/${agentSandboxId}/commands`,{
+    // Write file
+    const writeR=await fetch(`https://kemllmx.karimghannam2014.workers.dev/e2b/sandboxes/${agentSandboxId}/files?path=${encodeURIComponent('/home/user/'+filename)}`,{
+      method:'POST',
+      headers:{'X-API-Key':key,'Content-Type':'application/octet-stream'},
+      body:code
+    });
+    // Run command
+    const r=await fetch(`https://kemllmx.karimghannam2014.workers.dev/e2b/sandboxes/${agentSandboxId}/process`,{
       method:'POST',
       headers:{'Content-Type':'application/json','X-API-Key':key},
-      body:JSON.stringify({cmd,timeout:30})
+      body:JSON.stringify({cmd:runCmd,cwd:'/home/user',timeoutMs:30000})
     });
+    if(!r.ok){const t=await r.text();return{stdout:'',stderr:'API error '+r.status+': '+t};}
     const data=await r.json();
-    return{stdout:data.stdout||'',stderr:data.stderr||''};
+    return{stdout:data.stdout||data.output||'',stderr:data.stderr||''};
   }catch(e){
     return{stdout:'',stderr:e.message};
   }

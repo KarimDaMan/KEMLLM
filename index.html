@@ -1019,7 +1019,7 @@ function isVidReq(t){return /\b(generate|make|create|render|animate|produce)\b.{
 // ── REPLICATE ──
 async function repCreate(modelId,input){
   const key=getRepKey();if(!key)throw new Error('NO_KEY');
-  const r=await fetch(`https://kemllm-api.karimghannam2014.workers.dev/replicate/v1/models/${modelId}/predictions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Token '+key},body:JSON.stringify({input})});
+  const r=await fetch(`https://kemllmx.karimghannam2014.workers.dev/replicate/v1/models/${modelId}/predictions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Token '+key},body:JSON.stringify({input})});
   if(!r.ok){const txt=await r.text();if(r.status===401)throw new Error('AUTH');if(r.status===404)throw new Error('MODEL_NOT_FOUND:'+modelId);throw new Error(`HTTP ${r.status}: ${txt.slice(0,200)}`);}
   return r.json();
 }
@@ -1027,7 +1027,7 @@ async function repPoll(predId){
   const key=getRepKey();
   for(let i=0;i<90;i++){
     await new Promise(res=>setTimeout(res,i<10?1500:3000));
-    const r=await fetch(`https://kemllm-api.karimghannam2014.workers.dev/replicate/v1/predictions/${predId}`,{headers:{'Authorization':'Token '+key}});
+    const r=await fetch(`https://kemllmx.karimghannam2014.workers.dev/replicate/v1/predictions/${predId}`,{headers:{'Authorization':'Token '+key}});
     const d=await r.json();
     if(d.status==='succeeded')return d;
     if(d.status==='failed')throw new Error(d.error||'Prediction failed');

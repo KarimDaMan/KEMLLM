@@ -334,16 +334,12 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
     <div class="login-sub">Every model. One workspace.</div>
     <div class="login-profiles" id="profile-list"></div>
     <div class="login-or">or</div>
-    <div style="display:flex;gap:6px;margin-bottom:0;">
-      <input class="mi" id="gh-username" placeholder="GitHub username" style="flex:1;" onkeydown="if(event.key==='Enter')githubLogin()">
-      <button class="lbtn lbtn-gh" onclick="githubLogin()" style="width:auto;padding:0 14px;flex-shrink:0;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
-        Sign in
-      </button>
-    </div>
+    <button class="lbtn lbtn-gh" onclick="githubLogin()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
+      Sign in with GitHub
+    </button>
     <button class="lbtn lbtn-new" onclick="showNewProfile()">+ Create new profile</button>
-    <div style="font-size:10px;color:var(--text3);margin-top:14px;line-height:1.6;">Each profile is private to this device.<br>Add your Replicate key in Settings.
-<div style="font-size:10px;color:var(--text3);margin-top:6px;">GitHub login uses your username only — no password, no OAuth.</div></div>
+    <div style="font-size:10px;color:var(--text3);margin-top:14px;line-height:1.6;">Each profile is private to this device.<br>Add your Replicate key in Settings.</div>
   </div>
 </div>
 
@@ -891,18 +887,7 @@ function createProfile(){
 }
 function switchProfile(){closeUserModal();activeProfileId=null;renderProfileList();document.getElementById('login').style.display='flex';}
 function githubLogin(){
-  const username=(document.getElementById('gh-username')?.value||'').trim().replace(/^@/,'');
-  if(!username){showToast('Enter your GitHub username');return;}
-  // Create a profile using the GitHub username, fetch their avatar
-  const colors=['linear-gradient(135deg,#4a9eff,#a78bfa)','linear-gradient(135deg,#f472b6,#fb923c)','linear-gradient(135deg,#4ade80,#4a9eff)','linear-gradient(135deg,#a78bfa,#f472b6)'];
-  const profiles=getProfiles();
-  // Check if profile for this github user already exists
-  const existing=profiles.find(p=>p.github===username);
-  if(existing){activateProfile(existing.id);return;}
-  const id='prof_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
-  profiles.push({id,name:username,pin:'',color:colors[profiles.length%colors.length],github:username,avatar:'https://github.com/'+username+'.png?size=40'});
-  saveProfiles(profiles);
-  activateProfile(id);
+  window.location.href='https://github.com/login/oauth/authorize?client_id=Ov23li20jlCBobnJjusT&scope=user:email&state=kemllm';
 }
 
 // ── STATE ──
@@ -1035,7 +1020,7 @@ function isVidReq(t){return /\b(generate|make|create|render|animate|produce)\b.{
 // ── REPLICATE ──
 async function repCreate(modelId,input){
   const key=getRepKey();if(!key)throw new Error('NO_KEY');
-  const r=await fetch(`https://api.replicate.com/v1/models/${modelId}/predictions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Token '+key},body:JSON.stringify({input})});
+  const r=await fetch(`https://kemllm.karimghannam2014.workers.dev/replicate/v1/models/${modelId}/predictions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Token '+key},body:JSON.stringify({input})});
   if(!r.ok){const txt=await r.text();if(r.status===401)throw new Error('AUTH');if(r.status===404)throw new Error('MODEL_NOT_FOUND:'+modelId);throw new Error(`HTTP ${r.status}: ${txt.slice(0,200)}`);}
   return r.json();
 }
@@ -1043,7 +1028,7 @@ async function repPoll(predId){
   const key=getRepKey();
   for(let i=0;i<90;i++){
     await new Promise(res=>setTimeout(res,i<10?1500:3000));
-    const r=await fetch(`https://api.replicate.com/v1/predictions/${predId}`,{headers:{'Authorization':'Token '+key}});
+    const r=await fetch(`https://kemllm.karimghannam2014.workers.dev/replicate/v1/predictions/${predId}`,{headers:{'Authorization':'Token '+key}});
     const d=await r.json();
     if(d.status==='succeeded')return d;
     if(d.status==='failed')throw new Error(d.error||'Prediction failed');
@@ -1364,6 +1349,31 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
 
 // ── INIT ──
 renderProfileList();updLns();
+
+// ── Handle GitHub OAuth callback ──
+(function(){
+  const p=new URLSearchParams(window.location.search);
+  const ghUser=p.get('gh_user');
+  const ghName=p.get('gh_name');
+  const ghAvatar=p.get('gh_avatar');
+  const ghError=p.get('gh_error');
+  if(ghError){showToast('GitHub login failed — try again');history.replaceState({},'',window.location.pathname);return;}
+  if(ghUser){
+    // Clean URL
+    history.replaceState({},'',window.location.pathname);
+    // Check if profile already exists for this github user
+    const profiles=getProfiles();
+    const existing=profiles.find(x=>x.github===ghUser);
+    if(existing){activateProfile(existing.id);return;}
+    // Create new profile
+    const colors=['linear-gradient(135deg,#4a9eff,#a78bfa)','linear-gradient(135deg,#f472b6,#fb923c)','linear-gradient(135deg,#4ade80,#4a9eff)','linear-gradient(135deg,#a78bfa,#f472b6)'];
+    const id='prof_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+    profiles.push({id,name:ghName||ghUser,pin:'',color:colors[profiles.length%colors.length],github:ghUser,avatar:ghAvatar||''});
+    saveProfiles(profiles);
+    activateProfile(id);
+    showToast('Welcome, '+ghName+'!');
+  }
+})();
 </script>
 </body>
 </html>

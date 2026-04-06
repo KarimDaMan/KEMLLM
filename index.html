@@ -1793,6 +1793,21 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
 })();
 updLns();
 
+// ── DEV LOGIN SHORTCUT (Ctrl+Shift+~) ──
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&e.shiftKey&&e.key==='`'){
+    e.preventDefault();
+    const TEST_ID='dev_test_account';
+    const profiles=getProfiles();
+    if(!profiles.find(x=>x.id===TEST_ID)){
+      profiles.push({id:TEST_ID,name:'Test Account',pin:'',color:'linear-gradient(135deg,#f472b6,#4a9eff)',github:'test',avatar:''});
+      saveProfiles(profiles);
+    }
+    activateProfile(TEST_ID);
+    showToast('🔧 Dev login: Test Account');
+  }
+});
+
 // ── Handle GitHub OAuth callback ──
 (function(){
   const p=new URLSearchParams(window.location.search);

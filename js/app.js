@@ -59,25 +59,8 @@ function deleteChat(id) {
   renderHistory();
 }
 
-// ===== Stars =====
-function createStars() {
-  const bg = document.getElementById('stars-bg');
-  if (!bg) return;
-  if (profileGet('stars_off') === '1') { bg.innerHTML = ''; return; }
-  bg.innerHTML = '';
-  for (let i = 0; i < 120; i++) {
-    const s = document.createElement('div');
-    s.className = 'star';
-    const sz = Math.random() * 2 + 0.5;
-    s.style.width = sz + 'px';
-    s.style.height = sz + 'px';
-    s.style.left = Math.random() * 100 + '%';
-    s.style.top = Math.random() * 100 + '%';
-    s.style.setProperty('--d', (Math.random() * 4 + 2) + 's');
-    s.style.animationDelay = (Math.random() * 4) + 's';
-    bg.appendChild(s);
-  }
-}
+// ===== Stars (removed) =====
+function createStars() { /* stars disabled per spec */ }
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -105,17 +88,55 @@ function bootSchedule(fn, delay) {
 }
 
 const BOOT_LINES = [
-  { text: '/– initializing KEMLLM runtime...', cls: 'tb-blue' },
-  { text: '/– connecting to Replicate API...', cls: 'tb-blue', spin: true },
-  { text: '/– importing models', cls: 'tb-blue' },
-  { text: '   OpenAI/GPT-5.4', cls: 'tb-white', stagger: true },
-  { text: '   Google/Gemini-3.1-Pro', cls: 'tb-white', stagger: true },
+  { text: '/– booting KEMLLM runtime v1.0.0', cls: 'tb-blue' },
+  { text: '/– loading config from ~/.kemllm/config.toml', cls: 'tb-grey' },
+  { text: '/– connecting to Replicate API', cls: 'tb-blue', spin: true },
+  { text: '/– connecting to Piston sandbox', cls: 'tb-blue', spin: true },
+  { text: '/– negotiating WebSocket transport     [OK]', cls: 'tb-green' },
+  { text: '/– loading provider adapters', cls: 'tb-blue' },
+  { text: '   → anthropic      (auto)', cls: 'tb-white', stagger: true },
+  { text: '   → openai         (auto)', cls: 'tb-white', stagger: true },
+  { text: '   → google.ai      (auto)', cls: 'tb-white', stagger: true },
+  { text: '   → xai            (auto)', cls: 'tb-white', stagger: true },
+  { text: '   → replicate      (fallback)', cls: 'tb-white', stagger: true },
+  { text: '/– importing chat models', cls: 'tb-blue' },
   { text: '   Anthropic/Claude-Opus-4.6', cls: 'tb-white', stagger: true },
+  { text: '   Anthropic/Claude-Sonnet-4.6', cls: 'tb-white', stagger: true },
+  { text: '   Anthropic/Claude-Haiku-4.5', cls: 'tb-white', stagger: true },
+  { text: '   OpenAI/GPT-5.4', cls: 'tb-white', stagger: true },
+  { text: '   OpenAI/GPT-5.4-Mini', cls: 'tb-white', stagger: true },
+  { text: '   OpenAI/GPT-5.3-Codex', cls: 'tb-white', stagger: true },
+  { text: '   OpenAI/GPT-4o', cls: 'tb-white', stagger: true },
+  { text: '   Google/Gemini-3.1-Pro', cls: 'tb-white', stagger: true },
+  { text: '   Google/Gemini-3-Flash', cls: 'tb-white', stagger: true },
   { text: '   xAI/Grok-4.20', cls: 'tb-white', stagger: true },
-  { text: '   Black-Forest-Labs/FLUX-1.1-Pro-Ultra', cls: 'tb-white', stagger: true },
+  { text: '   xAI/Grok-4-Heavy', cls: 'tb-white', stagger: true },
+  { text: '   Meta/Llama-3.3-70B', cls: 'tb-white', stagger: true },
+  { text: '   DeepSeek/R1', cls: 'tb-white', stagger: true },
+  { text: '/– importing image models', cls: 'tb-blue' },
+  { text: '   BlackForestLabs/FLUX-1.1-Pro-Ultra', cls: 'tb-white', stagger: true },
+  { text: '   BlackForestLabs/FLUX-Schnell', cls: 'tb-white', stagger: true },
+  { text: '   Google/Imagen-4-Ultra', cls: 'tb-white', stagger: true },
+  { text: '   Google/NanoBanana-Pro', cls: 'tb-white', stagger: true },
+  { text: '   Stability/SD-3.5-Large', cls: 'tb-white', stagger: true },
+  { text: '   OpenAI/DALL-E-3', cls: 'tb-white', stagger: true },
+  { text: '   Ideogram/V3', cls: 'tb-white', stagger: true },
+  { text: '/– importing video models', cls: 'tb-blue' },
   { text: '   Google/Veo-3', cls: 'tb-white', stagger: true },
-  { text: '/– all models loaded ✓', cls: 'tb-green' },
-  { text: '/– type to chat', cls: 'tb-blue' }
+  { text: '   Runway/Gen-4-Turbo', cls: 'tb-white', stagger: true },
+  { text: '   Minimax/Video-01', cls: 'tb-white', stagger: true },
+  { text: '   Kling/1.6-Pro', cls: 'tb-white', stagger: true },
+  { text: '/– registering code runtimes', cls: 'tb-blue' },
+  { text: '   python 3.12 · node 18 · rust · go · c · c++ · java · bash · lua', cls: 'tb-grey', stagger: true },
+  { text: '/– mounting MCP connectors', cls: 'tb-blue' },
+  { text: '   github · gdrive · gmail · notion · slack · spotify', cls: 'tb-grey', stagger: true },
+  { text: '/– running self-checks', cls: 'tb-blue' },
+  { text: '   latency        12ms   [OK]', cls: 'tb-green', stagger: true },
+  { text: '   sandbox        ready  [OK]', cls: 'tb-green', stagger: true },
+  { text: '   streaming      ready  [OK]', cls: 'tb-green', stagger: true },
+  { text: '   context window 200k   [OK]', cls: 'tb-green', stagger: true },
+  { text: '/– all systems nominal ✓', cls: 'tb-green' },
+  { text: '/– type to chat _', cls: 'tb-blue' }
 ];
 
 function runBootCycle() {
@@ -129,16 +150,16 @@ function runBootCycle() {
       const div = document.createElement('div');
       div.className = 'tb-line ' + line.cls;
       term.appendChild(div);
-      typewriter(div, line.text, 28, line.spin);
+      typewriter(div, line.text, 14, line.spin);
     }, delay);
-    delay += line.stagger ? 180 : (line.text.length * 28 + 380);
+    delay += line.stagger ? 90 : (line.text.length * 14 + 160);
   });
   bootSchedule(() => {
     term.classList.add('fade');
     bootSchedule(() => {
       if (bootRunning) runBootCycle();
-    }, 1000);
-  }, delay + 1500);
+    }, 1200);
+  }, delay + 1800);
 }
 
 function typewriter(el, text, speed, withSpinner) {
@@ -155,10 +176,10 @@ function typewriter(el, text, speed, withSpinner) {
       if (withSpinner) {
         let count = 0;
         const spin = () => {
-          if (!bootRunning || count > 8) return;
+          if (!bootRunning || count > 5) return;
           el.textContent = text + ' ' + spinChars[spinIdx++ % 4];
           count++;
-          bootSchedule(spin, 110);
+          bootSchedule(spin, 80);
         };
         spin();
       }

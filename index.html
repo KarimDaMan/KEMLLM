@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;color-scheme:dark;}
+*{margin:0;padding:0;box-sizing:border-box;}
 :root{
   color-scheme:dark;
   --bg:#000;--bg2:#0d0d0d;--bg3:#161616;--bg4:#1e1e1e;
@@ -1954,18 +1954,15 @@ function showToast(msg){const t=document.getElementById(‘toast’);t.textConte
 
 // ── INIT ──
 (function(){
-// Wipe all non-GitHub profiles (migration)
 let profiles=getProfiles();
 const before=profiles.length;
 profiles=profiles.filter(p=>p.github&&p.github.trim()!==’’);
 if(profiles.length!==before)saveProfiles(profiles);
-// Auto-login: one profile no PIN
 if(profiles.length===1&&!profiles[0].pin){
 activateProfile(profiles[0].id);
 updLns();
 return;
 }
-// Show login screen
 document.getElementById(‘login’).style.display=‘flex’;
 renderProfileList();
 updLns();

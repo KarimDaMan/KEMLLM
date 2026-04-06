@@ -81,10 +81,41 @@ function demoLogin() {
   activateProfile(demo.id);
 }
 
+const GITHUB_CLIENT_ID = 'Iv1.a629723000b46bec';
+const GITHUB_REDIRECT = 'https://kemllmx.karimghannam2014.workers.dev/';
+
 function githubLogin() {
-  const url = 'https://github.com/login/oauth/authorize?client_id=Iv1.a629723000b46bec&scope=user:email&state=kemllm';
-  window.open(url, 'github_oauth', 'width=600,height=700');
-  showToast('GitHub auth opened — complete in the popup');
+  const state = 'kemllm_' + Math.random().toString(36).slice(2, 12);
+  localStorage.setItem('gh_oauth_state', state);
+  const url = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(GITHUB_REDIRECT)}&scope=read:user%20user:email&state=${state}`;
+  // Full-page redirect so GitHub's callback returns us here
+  window.location.href = url;
+}
+
+function handleGithubCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  const state = params.get('state');
+  if (!code) return false;
+  const savedState = localStorage.getItem('gh_oauth_state');
+  if (state && savedState && state !== savedState) {
+    showToast('OAuth state mismatch');
+    return false;
+  }
+  localStorage.removeItem('gh_oauth_state');
+  // Clean URL
+  window.history.replaceState({}, document.title, window.location.pathname);
+  // Create or reuse a GitHub-backed profile. We can't exchange the code
+  // client-side without the secret, so we use the code as a marker of
+  // successful auth and store it for any future worker-side exchange.
+  let ghProfile = getProfiles().find(p => p.github);
+  if (!ghProfile) {
+    ghProfile = createProfile('GitHub User', 'github');
+  }
+  localStorage.setItem('gh_oauth_code', code);
+  activateProfile(ghProfile.id);
+  showToast('Signed in with GitHub');
+  return true;
 }
 
 function switchProfile() {

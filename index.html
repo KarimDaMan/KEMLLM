@@ -177,7 +177,17 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
 .ai-txt ul,.ai-txt ol{padding-left:18px;margin:6px 0;}
 .ai-txt li{margin-bottom:3px;}
 .ai-txt h1,.ai-txt h2,.ai-txt h3{color:var(--text);font-weight:600;margin:10px 0 5px;}
-.ai-txt h1{font-size:16px;}.ai-txt h2{font-size:14px;}.ai-txt h3{font-size:13px;}
+.ai-txt h1{font-size:18px;font-weight:700;margin:14px 0 6px;color:var(--text);}
+.ai-txt h2{font-size:15px;font-weight:700;margin:12px 0 5px;color:var(--text);}
+.ai-txt h3{font-size:13.5px;font-weight:600;margin:10px 0 4px;color:var(--text);}
+.ai-txt h4{font-size:12.5px;font-weight:600;margin:8px 0 3px;color:var(--text2);}
+.ai-txt blockquote{border-left:3px solid var(--blue);padding:6px 12px;margin:8px 0;color:var(--text3);background:rgba(74,158,255,.04);border-radius:0 6px 6px 0;}
+.ai-txt del{color:var(--text3);text-decoration:line-through;}
+.ai-txt ol{padding-left:20px;margin:6px 0;list-style:decimal;}
+.ai-txt table{border-collapse:collapse;width:100%;margin:10px 0;font-size:12.5px;}
+.ai-txt th{background:var(--bg3);padding:7px 12px;text-align:left;border:1px solid var(--border2);font-weight:600;color:var(--text);}
+.ai-txt td{padding:6px 12px;border:1px solid var(--border2);color:var(--text2);}
+.ai-txt tr:nth-child(even) td{background:rgba(255,255,255,.02);}
 .ai-acts{display:flex;gap:4px;margin-top:7px;}
 .aa{background:none;border:none;color:var(--text3);cursor:pointer;font-size:10.5px;font-family:var(--font);display:flex;align-items:center;gap:3px;padding:3px 7px;border-radius:6px;transition:all .14s;text-decoration:none;}
 .aa:hover{color:var(--text2);background:var(--bg3);}
@@ -766,7 +776,7 @@ import sys; print(f"Python {sys.version.split()[0]}")</div>
       </div>
       <div class="ss">
         <h3>System Prompt</h3>
-        <textarea class="si2" rows="4" id="sys-prompt" style="resize:vertical;">You are KEMLLM, a powerful AI assistant. Be helpful and precise. Use markdown with code blocks.</textarea>
+        <textarea class="si2" rows="4" id="sys-prompt" style="resize:vertical;"></textarea>
       </div>
       <div class="ss">
         <h3>Custom Models</h3>
@@ -1162,7 +1172,7 @@ async function send(){
   addTyping(tid);
   try{
     let reply='';
-    const sys=document.getElementById('sys-prompt')?.value||'You are KEMLLM. Be helpful and precise. Use markdown with code blocks.';
+    const sys=document.getElementById('sys-prompt')?.value||'';
     const repKey=getRepKey();
     const anthropicKey=getExtKey('anthropic');
     const openaiKey=getExtKey('openai');
@@ -1287,7 +1297,7 @@ async function agentRun(btn){
   const tid='agent'+Date.now();
   addTyping(tid,'Analyzing output...');
   try{
-    const sys=document.getElementById('sys-prompt')?.value||'You are KEMLLM.';
+    const sys=document.getElementById('sys-prompt')?.value||'';
     const repKey=getRepKey();
     let reply='';
     if(repKey){
@@ -1303,14 +1313,38 @@ async function agentRun(btn){
   scrollBot();
 }
 function fmt(t){
-  t=t.replace(/```(\w*)\n?([\s\S]*?)```/g,(_,l,c)=>`<pre><code>${esc(c.trim())}</code></pre>`);
+  // code blocks first
+  t=t.replace(/```(\w*)\n?([\s\S]*?)```/g,(_,l,c)=>`<pre><code class="lang-${l||''}">${esc(c.trim())}</code></pre>`);
+  // inline code
   t=t.replace(/`([^`\n]+)`/g,'<code>$1</code>');
+  // headings
+  t=t.replace(/^#### (.+)$/gm,'<h4>$1</h4>');
+  t=t.replace(/^### (.+)$/gm,'<h3>$1</h3>');
+  t=t.replace(/^## (.+)$/gm,'<h2>$1</h2>');
+  t=t.replace(/^# (.+)$/gm,'<h1>$1</h1>');
+  // bold + italic
+  t=t.replace(/\*\*\*([^*]+)\*\*\*/g,'<strong><em>$1</em></strong>');
   t=t.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>');
   t=t.replace(/\*([^*\n]+)\*/g,'<em>$1</em>');
-  t=t.replace(/^### (.+)$/gm,'<h3>$1</h3>');t=t.replace(/^## (.+)$/gm,'<h2>$1</h2>');t=t.replace(/^# (.+)$/gm,'<h1>$1</h1>');
-  t=t.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" style="color:var(--blue);">$1</a>');
-  t=t.replace(/^[-*] (.+)$/gm,'<li>$1</li>');t=t.replace(/(<li>[\s\S]*?<\/li>)/g,'<ul>$1</ul>');
-  t=t.replace(/\n/g,'<br>');return t;
+  t=t.replace(/__([^_\n]+)__/g,'<strong>$1</strong>');
+  t=t.replace(/_([^_\n]+)_/g,'<em>$1</em>');
+  // strikethrough
+  t=t.replace(/~~([^~]+)~~/g,'<del>$1</del>');
+  // links
+  t=t.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" style="color:var(--blue);text-decoration:underline;text-decoration-style:dotted;">$1</a>');
+  // horizontal rule
+  t=t.replace(/^---+$/gm,'<hr style="border:none;border-top:1px solid var(--border2);margin:12px 0;">');
+  // blockquote
+  t=t.replace(/^> (.+)$/gm,'<blockquote>$1</blockquote>');
+  // numbered list
+  t=t.replace(/^\d+\. (.+)$/gm,'<li class="ol-item">$1</li>');
+  t=t.replace(/(<li class="ol-item">[\s\S]*?<\/li>)/g,(m)=>'<ol>'+m.replace(/ class="ol-item"/g,'')+'</ol>');
+  // unordered list
+  t=t.replace(/^[-*•] (.+)$/gm,'<li>$1</li>');
+  t=t.replace(/(<li>[\s\S]*?<\/li>(?!<\/ol>))/g,'<ul>$1</ul>');
+  // line breaks (but not after block elements)
+  t=t.replace(/\n(?!<\/?(h[1-4]|pre|ul|ol|li|blockquote|hr))/g,'<br>');
+  return t;
 }
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 

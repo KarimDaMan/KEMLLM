@@ -621,3 +621,11 @@ input,textarea{font-family:inherit;color:inherit;}
   .ag-input-row{padding:8px 12px;}
   #ag-cmd{font-size:14px;}
 }
+
+/* Agent line classes — chat-style */
+.ag-line.user{color:var(--text);font-weight:500;}
+.ag-line.user::before{content:'';}
+.ag-line.ai{color:#cbd5e1;padding-left:0;}
+.ag-line.agent-cmd{color:var(--purple);}
+.ag-line.cmd{color:var(--blue);}
+.ag-welcome .ag-line.sys{color:var(--text3);}

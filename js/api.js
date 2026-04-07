@@ -7,16 +7,19 @@ function getKey(provider) {
 function getRepKey() { return profileGet('rep-key') || ''; }
 
 // Replicate is proxied through the Cloudflare worker to avoid CORS issues.
-// The worker accepts the same paths under /replicate and forwards them.
+// The worker forwards any /replicate/* path to api.replicate.com/*
 const REPLICATE_BASE = 'https://kemllmx.karimghannam2014.workers.dev/replicate';
-// Direct fallback if the worker is unreachable
-const REPLICATE_DIRECT = 'https://api.replicate.com';
 async function replicateFetch(path, init) {
+  const url = REPLICATE_BASE + path;
   try {
-    const r = await fetch(REPLICATE_BASE + path, init);
-    if (r.ok || r.status < 500) return r;
-  } catch {}
-  return fetch(REPLICATE_DIRECT + path, init);
+    return await fetch(url, init);
+  } catch (e) {
+    throw new Error(
+      'Network error reaching Replicate proxy at ' + url +
+      '. Check your internet, disable any ad-blocker/VPN, and hard-refresh the page. Original: ' +
+      (e.message || e)
+    );
+  }
 }
 
 function loadAllSettings() {

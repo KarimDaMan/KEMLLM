@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=50">
+<link rel="stylesheet" href="css/style.css?v=51">
 <!-- KaTeX for math rendering (lazy-loaded by chat.js when first math is detected) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" media="print" onload="this.media='all'">
 </head>
@@ -335,19 +335,21 @@
           </div>
         </div>
 
-        <div class="sp-section">
-          <div class="sp-h">Model Defaults</div>
-          <div class="sp-grid2">
-            <div class="sp-row">
-              <label>Temperature</label>
-              <input id="sp-temp" class="sp-input font" type="number" step="0.1" min="0" max="2" value="0.7">
-            </div>
-            <div class="sp-row">
-              <label>Max tokens</label>
-              <input id="sp-max-tokens" class="sp-input font" type="number" min="1" max="32000" value="4096">
-            </div>
+        <details class="sp-section sp-advanced">
+          <summary class="sp-h" style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;">
+            <span style="display:inline-block;transition:transform .2s var(--ease-out);font-size:10px;">▶</span>
+            Advanced
+          </summary>
+          <div class="sp-row" style="margin-top:12px;">
+            <label>Temperature (0 = deterministic, 2 = very random)</label>
+            <input id="sp-temp" class="sp-input font" type="number" step="0.1" min="0" max="2" value="0.7">
           </div>
-        </div>
+          <div class="sp-row">
+            <label>Max tokens (leave blank = use model's native max)</label>
+            <input id="sp-max-tokens" class="sp-input font" type="number" min="1" max="200000" placeholder="auto">
+            <div class="sub">Defaults to whatever the API allows per model. Set a number here to manually cap response length (and cost per call).</div>
+          </div>
+        </details>
 
         <div class="sp-section">
           <div class="sp-h">Custom Models</div>
@@ -460,13 +462,13 @@
 
 <div id="toast"></div>
 
-<script src="js/state.js?v=50"></script>
-<script src="js/models.js?v=50"></script>
-<script src="js/api.js?v=50"></script>
-<script src="js/chat.js?v=50"></script>
-<script src="js/code.js?v=50"></script>
-<script src="js/agent.js?v=50"></script>
-<script src="js/ui.js?v=50"></script>
-<script src="js/app.js?v=50"></script>
+<script src="js/state.js?v=51"></script>
+<script src="js/models.js?v=51"></script>
+<script src="js/api.js?v=51"></script>
+<script src="js/chat.js?v=51"></script>
+<script src="js/code.js?v=51"></script>
+<script src="js/agent.js?v=51"></script>
+<script src="js/ui.js?v=51"></script>
+<script src="js/app.js?v=51"></script>
 </body>
 </html>

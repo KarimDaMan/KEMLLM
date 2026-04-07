@@ -38,7 +38,10 @@ function loadAllSettings() {
   const temp = profileGet('temp') || '0.7';
   const tempEl = document.getElementById('sp-temp');
   if (tempEl) tempEl.value = temp;
-  const mt = profileGet('max-tokens') || '4096';
+  // max-tokens defaults to EMPTY (= let the API decide the cap).
+  // Users can set a value via Settings → Advanced if they want to
+  // manually limit response length or reduce cost per call.
+  const mt = profileGet('max-tokens') || '';
   const mtEl = document.getElementById('sp-max-tokens');
   if (mtEl) mtEl.value = mt;
   const persona = profileGet('persona') || '';
@@ -137,50 +140,54 @@ async function callChat(model, messages, onChunk, overrideSystem) {
     return callReplicateChat(model, fullMsgs, rk, onChunk);
   };
 
-  // Vision route: prefer the direct provider API (Anthropic, OpenAI, Google,
-  // xAI) because they guarantee multimodal support. If the user has no
-  // direct key for the selected model's provider, fall back to Replicate —
-  // callReplicateChat now passes the first image through `image` /
-  // `image_input` / `input_image` fields, which many Replicate proxies
-  // accept.
-  if (hasVisionAttachments) {
-    try {
-      return await tryProvider();
-    } catch (provErr) {
-      if (provErr.message !== 'NO_PROVIDER_KEY') throw provErr;
-      // No direct key — try Replicate with image input
-      try {
-        return await tryReplicate();
-      } catch (repErr) {
-        const provName = { anthropic:'Anthropic', openai:'OpenAI', google:'Google AI', xai:'xAI' }[provider] || provider;
-        throw new Error(
-          'Vision chat failed on both paths. Replicate error: ' + (repErr.message || repErr) +
-          '. For guaranteed vision, add a direct ' + provName + ' key in Settings → API Keys.'
-        );
-      }
-    }
+  // ROUTING — direct provider API FIRST, Replicate only as a fallback.
+  //
+  // Rationale (from user): 'if the API key is there, use it; if there's
+  // no API key, use Replicate'. This:
+  //   - Ensures charges go to the direct provider when the user has
+  //     that relationship (cheaper per-token, no Replicate middleman markup).
+  //   - Avoids Replicate's weird version/schema issues for models that
+  //     Anthropic/OpenAI/Google/xAI host natively.
+  //   - Gives the user predictable billing — whichever key they pasted
+  //     is the one that gets charged.
+  //
+  // Flow:
+  //   1. Does the user have a direct provider key for this model's provider?
+  //      → YES: use the direct API. On any error, surface that error.
+  //      → NO:  try Replicate.
+  //   2. Replicate only runs if no direct key, or if direct not available
+  //      for this provider (e.g. meta/mistral/deepseek — no direct API).
+
+  const hasDirectKey =
+    (provider === 'anthropic' && !!getKey('anthropic')) ||
+    (provider === 'openai'    && !!getKey('openai'))    ||
+    (provider === 'google'    && !!getKey('google'))    ||
+    (provider === 'xai'       && !!getKey('xai'));
+
+  if (hasDirectKey && model.apiId) {
+    // Direct API has priority. If it fails, surface the REAL error.
+    return tryProvider();
   }
 
-  // PRIMARY: Replicate (text-only messages)
+  // No direct key (or no apiId for this model) → Replicate path.
+  if (!model.replicateId) {
+    const provName = { anthropic:'Anthropic', openai:'OpenAI', google:'Google AI', xai:'xAI' }[provider] || provider;
+    throw new Error(
+      model.name + ' has no Replicate path. Add a ' + provName + ' API key in Settings → API Keys, ' +
+      'or pick a different model that is on Replicate.'
+    );
+  }
+  if (!getRepKey()) {
+    throw new Error(
+      'Using ' + model.name + ' needs either a Replicate key OR a direct ' + provider + ' API key. ' +
+      'Add one in Settings → API Keys.'
+    );
+  }
   try {
     return await tryReplicate();
   } catch (repErr) {
-    // Fall back to direct provider key if configured
-    try {
-      return await tryProvider();
-    } catch (provErr) {
-      // Neither worked — give a clear message
-      const rk = getRepKey();
-      if (!rk && provErr.message === 'NO_PROVIDER_KEY') {
-        throw new Error('Add your Replicate key in Settings → API Keys to use ' + model.name + '. Get one at https://replicate.com/account/api-tokens');
-      }
-      if (repErr.message === 'NO_REPLICATE_ID' && provErr.message === 'NO_PROVIDER_KEY') {
-        const provName = { anthropic:'Anthropic', openai:'OpenAI', google:'Google AI', xai:'xAI' }[provider] || provider;
-        throw new Error(model.name + ' has no Replicate path. Add a ' + provName + ' API key in Settings.');
-      }
-      // Replicate was the primary attempt — surface its error
-      throw repErr;
-    }
+    // Replicate actually threw — the message is the real error, not a sentinel
+    throw repErr;
   }
 }
 
@@ -207,6 +214,21 @@ function parseDataUrl(dataUrl) {
   return { mediaType: m[1], base64: m[2] };
 }
 
+// Returns a parsed max_tokens value ONLY if the user has explicitly set
+// one via Settings → Advanced. Empty or non-positive means "use the
+// provider's default max" which is what most users want — each API
+// caps response length on its own. Returning null signals the caller
+// to omit the field from the request body entirely.
+function getUserMaxTokens() {
+  const raw = profileGet('max-tokens');
+  if (!raw) return null;
+  const n = parseInt(raw, 10);
+  if (!isFinite(n) || n <= 0) return null;
+  // Cap at 200k so the user can't accidentally send a quadrillion
+  // (which will always be rejected by the provider anyway).
+  return Math.min(n, 200000);
+}
+
 // ===== Anthropic =====
 async function callAnthropicDirect(model, messages, apiKey, onChunk) {
   const sys = messages.find(m => m.role === 'system')?.content || '';
@@ -227,6 +249,11 @@ async function callAnthropicDirect(model, messages, apiKey, onChunk) {
     }
     return { role, content: m.content };
   });
+  // Anthropic's API REQUIRES max_tokens — we must send something even
+  // if the user hasn't set one. Default to the model's reasonable cap
+  // when unset. For Opus/Sonnet that's 8192, which is the API default
+  // output limit anyway.
+  const anthropicMax = getUserMaxTokens() || 8192;
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -237,7 +264,7 @@ async function callAnthropicDirect(model, messages, apiKey, onChunk) {
     },
     body: JSON.stringify({
       model: model.apiId,
-      max_tokens: parseInt(profileGet('max-tokens') || '4096'),
+      max_tokens: anthropicMax,
       system: sys,
       messages: msgs
     })
@@ -270,18 +297,22 @@ async function callOpenAIStyle(url, modelId, messages, apiKey, onChunk) {
     }
     return { role: m.role, content: m.content };
   });
+  // Only include max_tokens if the user set one in Settings → Advanced.
+  // Otherwise let OpenAI/xAI pick the model's native cap.
+  const body = {
+    model: modelId,
+    messages: oaiMsgs,
+    temperature: parseFloat(profileGet('temp') || '0.7'),
+  };
+  const userMax = getUserMaxTokens();
+  if (userMax != null) body.max_tokens = userMax;
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer ' + apiKey
     },
-    body: JSON.stringify({
-      model: modelId,
-      messages: oaiMsgs,
-      temperature: parseFloat(profileGet('temp') || '0.7'),
-      max_tokens: parseInt(profileGet('max-tokens') || '4096')
-    })
+    body: JSON.stringify(body)
   });
   if (!res.ok) throw new Error('API error: ' + res.status + ' ' + (await res.text()).slice(0, 200));
   const data = await res.json();
@@ -313,16 +344,16 @@ async function callGoogleDirect(model, messages, apiKey, onChunk) {
     return { role: m.role === 'assistant' ? 'model' : 'user', parts };
   });
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.apiId}:generateContent?key=${apiKey}`;
+  const genCfg = { temperature: parseFloat(profileGet('temp') || '0.7') };
+  const gUserMax = getUserMaxTokens();
+  if (gUserMax != null) genCfg.maxOutputTokens = gUserMax;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents,
       systemInstruction: sys ? { parts: [{ text: sys }] } : undefined,
-      generationConfig: {
-        temperature: parseFloat(profileGet('temp') || '0.7'),
-        maxOutputTokens: parseInt(profileGet('max-tokens') || '4096')
-      }
+      generationConfig: genCfg,
     })
   });
   if (!res.ok) throw new Error('Google API error: ' + res.status + ' ' + (await res.text()).slice(0, 200));
@@ -439,10 +470,9 @@ async function callReplicateChat(model, messages, apiKey, onChunk) {
     .flatMap(m => m.attachments || [])
     .find(a => a && (a.isImage || (a.mime || '').startsWith('image/')));
 
-  const input = {
-    prompt,
-    max_tokens: parseInt(profileGet('max-tokens') || '4096'),
-  };
+  const input = { prompt };
+  const repUserMax = getUserMaxTokens();
+  if (repUserMax != null) input.max_tokens = repUserMax;
   if (firstImage && firstImage.dataUrl) {
     input.image = firstImage.dataUrl;
     input.image_input = firstImage.dataUrl;

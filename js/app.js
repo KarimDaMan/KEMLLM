@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v50 · protect API keys from sync wipes + KV heal on pull';
+const KEMLLM_BUILD = 'v51 · direct API first · auto max_tokens · Advanced tab';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

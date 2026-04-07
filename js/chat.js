@@ -59,12 +59,9 @@ function setChatMode(mode) {
   }
 }
 
-const IMG_REGEX = /\b(generate|make|create|draw|render|paint|show|produce)\b.{0,30}\b(image|picture|photo|illustration|art|artwork|wallpaper|logo|portrait|landscape|painting)\b/i;
-const VID_REGEX = /\b(generate|make|create|render|animate|produce)\b.{0,30}\b(video|animation|clip|footage|movie|film)\b/i;
-// Image editing intent — triggers when the user has an image attached AND
-// asks to modify it. Matches "edit this to …", "make this …", "change it to …",
-// "turn this into …", "remove the background", "add a …", etc.
-const EDIT_REGEX = /\b(edit|change|modify|turn|make|remove|add|replace|convert|transform|fix|improve|enhance|colou?r|recolou?r|restyle|restore|crop|upscale|deblur)\b/i;
+// NOTE: keyword-based IMG/VID/EDIT regex routing was REMOVED. Generation is
+// now AI-triggered via [GENERATE_IMAGE]/[GENERATE_VIDEO]/[EDIT_IMAGE] markers
+// only — see sendMessage() and processAIMarkers().
 
 function escapeHTML(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -479,14 +476,16 @@ function extractFirstRunnableBlock(md) {
   return null;
 }
 
+// Render a slim "code execution strip" directly after the AI message bubble.
+// It's collapsed by default — just a thin bar saying "▶ Ran python · 120ms".
+// Click opens a centered modal popup with the full output, the code itself,
+// and (if the code is HTML) a Preview button that renders it in an iframe.
 async function runAnalysisBlock(aiEl, block) {
-  const body = aiEl.querySelector('.ai-body');
-  if (!body) return null;
-  const det = document.createElement('details');
-  det.className = 'think-block';
-  det.open = true;
-  det.innerHTML = `<summary>▶ Running ${escapeHTML(block.lang)}…</summary><div class="think-inner">executing via Piston sandbox</div>`;
-  body.appendChild(det);
+  if (!aiEl || !aiEl.parentNode) return null;
+  const strip = document.createElement('div');
+  strip.className = 'code-strip running';
+  strip.innerHTML = `<button type="button" class="code-strip-bar"><span class="code-strip-dot"></span><span class="code-strip-label">Running ${escapeHTML(block.lang)}…</span></button>`;
+  aiEl.parentNode.insertBefore(strip, aiEl.nextSibling);
   scrollToBottom();
   try {
     const start = Date.now();
@@ -495,18 +494,86 @@ async function runAnalysisBlock(aiEl, block) {
     const stdout = out.run?.stdout || '';
     const stderr = out.run?.stderr || '';
     const exit = out.run?.code;
-    det.querySelector('summary').textContent = `▶ Ran ${block.lang} · ${ms}ms · exit ${exit}`;
-    det.querySelector('.think-inner').innerHTML =
-      (stdout ? `<div style="color:#cbd5e1;">${escapeHTML(stdout)}</div>` : '') +
-      (stderr ? `<div style="color:var(--red);margin-top:6px;">${escapeHTML(stderr)}</div>` : '') +
-      (!stdout && !stderr ? '<div style="color:var(--text3);">(no output)</div>' : '');
-    setTimeout(() => { det.open = false; }, 800);
+    const isHtml = block.lang === 'html' ||
+      /^\s*(?:<!doctype\s+html|<html|<body|<head)/i.test(block.code);
+    strip.classList.remove('running');
+    strip.classList.add(stderr ? 'err' : 'ok');
+    const label = `Ran ${block.lang} · ${ms}ms · exit ${exit}${isHtml ? ' · HTML' : ''}`;
+    strip.querySelector('.code-strip-label').textContent = label;
+    strip.querySelector('.code-strip-bar').addEventListener('click', () => {
+      openCodeRunModal({ lang: block.lang, code: block.code, stdout, stderr, exit, ms, isHtml });
+    });
     return { stdout, stderr, exit };
   } catch (e) {
-    det.querySelector('summary').textContent = '▶ Execution error';
-    det.querySelector('.think-inner').innerHTML = `<div style="color:var(--red);">${escapeHTML(e.message)}</div>`;
+    strip.classList.remove('running');
+    strip.classList.add('err');
+    strip.querySelector('.code-strip-label').textContent = 'Execution error · tap for details';
+    strip.querySelector('.code-strip-bar').addEventListener('click', () => {
+      openCodeRunModal({ lang: block.lang, code: block.code, stdout: '', stderr: e.message, exit: -1, ms: 0, isHtml: false });
+    });
     return { stdout: '', stderr: e.message, exit: -1 };
   }
+}
+
+// Opens a modal popup with the full code execution details. Works on mobile
+// and desktop. Includes a Preview button that spins up a sandboxed iframe
+// when the code was HTML.
+function openCodeRunModal(info) {
+  let modal = document.getElementById('code-run-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'code-run-modal';
+    modal.className = 'code-run-modal';
+    modal.innerHTML = `
+      <div class="code-run-backdrop"></div>
+      <div class="code-run-sheet">
+        <div class="code-run-head">
+          <div class="code-run-title"></div>
+          <button type="button" class="code-run-close" aria-label="Close">×</button>
+        </div>
+        <div class="code-run-body"></div>
+        <div class="code-run-foot">
+          <button type="button" class="code-run-preview" hidden>Preview</button>
+          <button type="button" class="code-run-copy">Copy output</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    const close = () => { modal.classList.remove('open'); document.body.style.overflow = ''; };
+    modal.querySelector('.code-run-close').addEventListener('click', close);
+    modal.querySelector('.code-run-backdrop').addEventListener('click', close);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  }
+  const title = modal.querySelector('.code-run-title');
+  const body = modal.querySelector('.code-run-body');
+  const previewBtn = modal.querySelector('.code-run-preview');
+  const copyBtn = modal.querySelector('.code-run-copy');
+  title.textContent = `${info.lang} · ${info.ms}ms · exit ${info.exit}`;
+  body.innerHTML = `
+    <div class="code-run-section">
+      <div class="code-run-section-h">Code</div>
+      <pre class="code-run-pre code-run-code">${escapeHTML(info.code)}</pre>
+    </div>
+    ${info.stdout ? `<div class="code-run-section"><div class="code-run-section-h">Stdout</div><pre class="code-run-pre code-run-out">${escapeHTML(info.stdout)}</pre></div>` : ''}
+    ${info.stderr ? `<div class="code-run-section"><div class="code-run-section-h">Stderr</div><pre class="code-run-pre code-run-err">${escapeHTML(info.stderr)}</pre></div>` : ''}
+    ${!info.stdout && !info.stderr ? `<div class="code-run-section" style="color:var(--text3);font-size:12px;">No output.</div>` : ''}
+  `;
+  previewBtn.hidden = !info.isHtml;
+  previewBtn.onclick = () => {
+    const section = document.createElement('div');
+    section.className = 'code-run-section';
+    section.innerHTML = `<div class="code-run-section-h">Preview</div><iframe class="code-run-iframe" sandbox="allow-scripts" srcdoc=""></iframe>`;
+    body.appendChild(section);
+    const iframe = section.querySelector('iframe');
+    iframe.srcdoc = info.code;
+    previewBtn.hidden = true;
+    iframe.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+  copyBtn.onclick = async () => {
+    const txt = (info.stdout || '') + (info.stderr ? '\n---\n' + info.stderr : '');
+    try { await navigator.clipboard.writeText(txt); showToast('Copied'); } catch {}
+  };
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
 
 // ===== Fullscreen image viewer =====

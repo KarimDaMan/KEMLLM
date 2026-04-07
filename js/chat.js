@@ -387,13 +387,16 @@ async function handleVideoRequest(prompt) {
 // Agent mode inline in chat — uses the agent backend/pyodide for command execution,
 // renders output as an inline analysis block, then continues the AI response.
 async function runAgentModeChat(userText) {
+  // Pre-set backend so the system prompt tells the AI the truth even
+  // before the sandbox finishes booting
+  if (profileGet('hf-backend-url')) agentBackend = 'hf';
   if (!agentReady) {
-    // Try to boot it (HF backend if configured, otherwise Pyodide)
+    showToast('Starting sandbox…');
     await agentStart();
     if (!agentReady) {
       const model = findModel(selectedChat, 'chat');
       renderAIMessage(model || { name: 'Agent', provider: 'custom' },
-        '<p style="color:var(--red)">Could not start agent sandbox.</p>');
+        '<p style="color:var(--red)">Could not start agent sandbox. Check Settings → Agent Backend URL and token.</p>');
       return;
     }
   }
@@ -415,13 +418,13 @@ async function runAgentModeChat(userText) {
       let combined = '';
       for (const b of blocks) {
         const r = await agentRun(b.content, true, true); // silent=true, we render inline
+        const stdout = r.stdout || '';
+        const stderr = r.stderr || '';
         const aiMsgEl = document.querySelector('#msgs .msg-a:last-child .ai-body');
         if (aiMsgEl) {
           const det = document.createElement('details');
           det.className = 'think-block';
           det.open = true;
-          const stdout = r.stdout || '';
-          const stderr = r.stderr || '';
           det.innerHTML = `<summary>▶ Ran ${escapeHTML(b.lang)} · exit ${r.exitCode}</summary><div class="think-inner">${stdout ? '<div>' + escapeHTML(stdout) + '</div>' : ''}${stderr ? '<div style="color:var(--red);margin-top:6px;">' + escapeHTML(stderr) + '</div>' : ''}${!stdout && !stderr ? '<div style="color:var(--text3);">(no output)</div>' : ''}</div>`;
           aiMsgEl.appendChild(det);
           setTimeout(() => { det.open = false; }, 1500);

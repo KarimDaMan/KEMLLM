@@ -372,9 +372,11 @@ function getAgentSystemPrompt() {
   let s = `You are ${name}, running inside KEMLLM Agent Mode.`;
 
   if (agentBackend === 'hf') {
-    s += ' Your runtime is a REAL Ubuntu 22.04 Linux container running on Hugging Face Spaces. You have full bash, sudo (passwordless), apt, pip, python3, node, npm, git, curl, wget, vim, nano, jq, ripgrep, build-essential, and most common dev tools pre-installed. You can install anything else with apt or pip. You have a persistent working directory that survives between commands in this session.';
-    s += '\n\nTo run a command, write a fenced bash code block:\n```bash\nyour command here\n```\nMultiple bash blocks in one response are executed in order and the combined output is shown back to you. Working directory and shell state persist between blocks because the backend tracks cwd.';
-    s += '\n\nFor non-interactive apt installs, always use `sudo apt-get install -y`. For Python, use `pip3 install`. Avoid commands that require a TTY (top, htop, vim without `-c`, etc).';
+    s += ' CRITICAL FACT: Right now, this second, you ARE connected to a real Ubuntu 22.04 Linux container. It is running. It is waiting for your commands. It is NOT simulated, it is NOT hypothetical, it is a real machine. Do not say you "cannot run commands" or "don\'t have access to a shell" — you literally do.';
+    s += ' Pre-installed: bash, sudo (passwordless), apt, apt-get, pip3, python3, node, npm, git, curl, wget, vim, nano, jq, ripgrep, tree, build-essential, sqlite3. You can install anything else with `sudo apt-get install -y <pkg>` or `pip3 install <pkg>`. You have a persistent working directory that survives between commands in this session.';
+    s += '\n\nTo run a command, write a fenced bash code block:\n```bash\nyour command here\n```\nMultiple bash blocks in one response are executed in order and the combined output is shown back to you. Working directory and shell state persist between blocks.';
+    s += '\n\nFor apt installs always use `sudo apt-get install -y` (the `-y` is required, it\'s non-interactive). For Python use `pip3 install`. Avoid commands that need a TTY (top, htop, interactive vim/nano, ssh).';
+    s += '\n\nWhen the user asks you to do something, actually DO it with a bash block. Do not describe what you would do — just run it. Do not apologize for being an AI. Do not add disclaimers about sandboxes. Just execute.';
   } else {
     s += ' Your runtime is a Python 3.12 sandbox powered by Pyodide (WebAssembly, in-browser). NO apt, NO sudo, NO real Linux. You have stdlib, virtual filesystem at /home/agent, and `micropip.install("pkg")` for pure-Python packages.';
     s += '\n\nUse fenced ```bash blocks (translated to Python under the hood: ls, cat, pwd, cd, echo, mkdir, rm, touch, cp, mv, head, tail, wc, grep, pip, curl) or ```python blocks (run directly). State persists across calls.';

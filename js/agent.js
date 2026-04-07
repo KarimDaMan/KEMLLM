@@ -106,12 +106,18 @@ async function _agentStartInner() {
       const hd = await health.json();
       agentLog('  ✓ backend up · ' + (hd.service || 'kemllm-agent') + (hd.auth_required ? ' · token ok' : ' · OPEN MODE (no token)'), 'sys');
       const r = await hfFetch('/sessions', { method: 'POST', body: '{}' });
+      const rawText = await r.text();
+      agentLog('  ← POST /sessions ' + r.status + ' body: ' + rawText.slice(0, 300), 'sys');
       if (!r.ok) {
-        const t = await r.text();
-        throw new Error('create session ' + r.status + ': ' + t.slice(0, 200));
+        throw new Error('create session ' + r.status + ': ' + rawText.slice(0, 200));
       }
-      const data = await r.json();
-      agentSessionId = data.session_id;
+      let data;
+      try { data = JSON.parse(rawText); }
+      catch (e) { throw new Error('create session: response is not JSON: ' + rawText.slice(0, 200)); }
+      agentSessionId = data.session_id || data.sandboxID || data.sandbox_id || data.id;
+      if (!agentSessionId) {
+        throw new Error('create session succeeded but response has no session_id field. Got keys: ' + Object.keys(data || {}).join(','));
+      }
       agentLog('✓ Ubuntu sandbox ready · session=' + agentSessionId, 'sys');
       agentLog('  shell=' + (data.shell || '/bin/bash') + ' · cwd=' + (data.cwd || '/home/agent') + ' · user=' + (data.user || 'agent'), 'sys');
       agentLog('  full bash · sudo · apt · pip · npm · git · curl · everything pre-installed', 'sys');

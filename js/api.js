@@ -44,12 +44,24 @@ function loadAllSettings() {
   const persona = profileGet('persona') || '';
   const pEl = document.getElementById('sp-persona');
   if (pEl) pEl.value = persona;
+  // Restore the user's previously-selected models so the topbar/dropdowns
+  // remember their pick across sessions and devices.
+  const savedChat = profileGet('selected_chat');
+  if (savedChat && typeof selectedChat !== 'undefined') selectedChat = savedChat;
+  const savedImage = profileGet('selected_image');
+  if (savedImage && typeof selectedImage !== 'undefined') selectedImage = savedImage;
+  const savedVideo = profileGet('selected_video');
+  if (savedVideo && typeof selectedVideo !== 'undefined') selectedVideo = savedVideo;
+  if (typeof renderModelDropdowns === 'function') renderModelDropdowns();
 }
 function saveKey(provider) {
   const el = document.getElementById('key-' + provider);
   if (el) {
     profileSet('key-' + provider, el.value.trim());
     showToast('Saved');
+    // Re-render dropdowns and models panel so newly-unlocked (or hidden) models update immediately
+    if (typeof renderModelDropdowns === 'function') renderModelDropdowns();
+    if (typeof renderModelsPanel === 'function') renderModelsPanel();
   }
 }
 function saveRepKey() {
@@ -57,6 +69,8 @@ function saveRepKey() {
   if (el) {
     profileSet('rep-key', el.value.trim());
     showToast('Saved');
+    if (typeof renderModelDropdowns === 'function') renderModelDropdowns();
+    if (typeof renderModelsPanel === 'function') renderModelsPanel();
   }
 }
 
@@ -161,6 +175,7 @@ function getSystemPrompt(model) {
   let s = `You are ${name}, accessed through KEMLLM — a universal AI workspace. When asked what model you are, honestly say "${name}".`;
   s += ' Be direct, precise, and genuinely helpful. Do not be overly enthusiastic, do not use filler like "Great question!" or "Certainly!", and never end responses with a bullet-point summary unless explicitly asked. Match the length of your answer to what the question actually needs — short for short, detailed for detailed.';
   s += ' You can execute code inside the browser. Python runs in a WebAssembly interpreter (Pyodide); JavaScript/TypeScript runs in a sandboxed iframe; other languages run in a remote sandbox. When code would help answer the question, write a fenced code block (```python, ```javascript, etc.) and it will be executed automatically and the output shown to you. Use this for math, algorithms, data processing, and anything that benefits from running real code. Do NOT speculate about unavailable libraries — just call the standard library.';
+  s += ' For mathematical expressions and equations, use LaTeX: $...$ for inline math (e.g. $x^2 + y^2 = r^2$) and $$...$$ for display math (e.g. $$\\int_0^\\infty e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}$$). The frontend renders these with KaTeX. Use proper LaTeX commands like \\frac, \\sqrt, \\sum, \\int, \\alpha, \\beta, etc. Never write equations as plain text or ASCII when LaTeX would look better.';
   if (window.webSearchOn) {
     s += ' The user has enabled web search context. Note your training cutoff if asked about recent events.';
   }
@@ -304,33 +319,74 @@ async function callGoogleDirect(model, messages, apiKey, onChunk) {
 
 // ===== Replicate (chat fallback + image/video) — goes through worker proxy =====
 
-// Universal Replicate prediction call with automatic fallback between the
-// two endpoint styles. Returns the parsed prediction (with `output`).
-//
-// Why two endpoints: Replicate has /v1/models/<owner>/<name>/predictions
-// for "official models" (curated stable list) and /v1/predictions for
-// everything including community models. Trying the official one first
-// is fastest; falling back to the universal one lets non-official models
-// also work.
-async function replicatePredict(modelId, input, apiKey) {
+// Cache: modelId → latest version SHA. Avoids re-fetching the version
+// list on every call to the same model.
+const _replicateVersionCache = {};
+
+// Three-tier fallback for Replicate's prediction API. In order:
+//   1. POST /v1/models/<owner>/<name>/predictions   (official models)
+//   2. POST /v1/predictions  { model, input }       (newer community models)
+//   3. GET  /v1/models/<owner>/<name>/versions      → grab latest version
+//      POST /v1/predictions  { version, input }    (legacy community models)
+// Almost every chat/image/video model on Replicate falls into one of
+// these three buckets. Eliminates the "correct slug but 422" failure
+// where the universal endpoint says "version is required, model not allowed".
+async function replicatePredict(modelId, input, apiKey, knownVersion) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + apiKey,
+    'Prefer': 'wait',
+  };
+
+  // 0. If caller provided a specific version SHA, use it directly via /v1/predictions
+  if (knownVersion) {
+    return replicateFetch('/v1/predictions', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ version: knownVersion, input }),
+    });
+  }
+
+  // 1. Official-models endpoint
   let res = await replicateFetch(`/v1/models/${modelId}/predictions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + apiKey,
-      'Prefer': 'wait',
-    },
+    headers,
     body: JSON.stringify({ input }),
   });
-  if (res.status === 404) {
+  if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 404 && res.status !== 422)) {
+    return res;
+  }
+
+  // 2. Universal /v1/predictions with `model` field
+  res = await replicateFetch('/v1/predictions', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ model: modelId, input }),
+  });
+  if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 404 && res.status !== 422)) {
+    return res;
+  }
+
+  // 3. Legacy version-pinned: fetch latest version SHA, then POST with `version`
+  let version = _replicateVersionCache[modelId];
+  if (!version) {
+    try {
+      const vRes = await replicateFetch(`/v1/models/${modelId}/versions`, {
+        method: 'GET',
+        headers: { 'Authorization': 'Bearer ' + apiKey },
+      });
+      if (vRes.ok) {
+        const vData = await vRes.json();
+        version = vData?.results?.[0]?.id;
+        if (version) _replicateVersionCache[modelId] = version;
+      }
+    } catch {}
+  }
+  if (version) {
     res = await replicateFetch('/v1/predictions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + apiKey,
-        'Prefer': 'wait',
-      },
-      body: JSON.stringify({ model: modelId, input }),
+      headers,
+      body: JSON.stringify({ version, input }),
     });
   }
   return res;
@@ -360,7 +416,7 @@ async function callReplicateChat(model, messages, apiKey, onChunk) {
     input.input_image = firstImage.dataUrl;
   }
 
-  const res = await replicatePredict(model.replicateId, input, apiKey);
+  const res = await replicatePredict(model.replicateId, input, apiKey, model.version);
   if (!res.ok) {
     const t = await res.text();
     if (res.status === 404) {

@@ -148,39 +148,74 @@ function closeAllDrops() {
   if (v) v.style.display = 'none';
 }
 
+// Decide whether a chat model is usable given the keys the user currently has.
+// A model is usable if EITHER:
+//   - it has a replicateId AND the user has a Replicate key, OR
+//   - it has an apiId AND the user has the matching provider key
+// requiresDirectKey: true forces the second condition (no Replicate fallback).
+function isChatModelUsable(m) {
+  const hasRep = !!profileGet('rep-key');
+  const hasProv = !!profileGet('key-' + m.provider);
+  if (m.requiresDirectKey) return hasProv;
+  if (m.replicateId && hasRep) return true;
+  if (m.apiId && hasProv) return true;
+  return false;
+}
+
+// The subtitle shown under each model name in the dropdown.
+// Prefers the actual Replicate slug; falls back to the apiId if no Replicate
+// path; shows '(needs <provider> key)' when the model is direct-API only.
+function modelSubtitle(m) {
+  if (m.requiresDirectKey) return `direct ${m.provider} api · needs key`;
+  if (m.replicateId) return m.replicateId;
+  if (m.apiId) return `${m.provider} · ${m.apiId}`;
+  return '';
+}
+
 function renderModelDropdowns() {
   // Chat dropdown
   const mdrop = document.getElementById('mdrop');
   if (mdrop) {
+    // Filter to only models the user can actually use right now
+    const usable = CHAT_MODELS.filter(isChatModelUsable);
     const groups = {};
-    CHAT_MODELS.forEach(m => {
+    usable.forEach(m => {
       groups[m.provider] = groups[m.provider] || [];
       groups[m.provider].push(m);
     });
     const customs = getCustomModels().filter(m => m.type === 'chat');
     let html = '';
+    if (!usable.length && !customs.length) {
+      html = `<div class="mds">NO MODELS AVAILABLE</div><div class="mdi"><div class="mdi-info"><div class="mdi-n">Add a key in Settings</div><div class="mdi-s">Replicate or any direct provider key unlocks models</div></div></div>`;
+    }
     for (const prov of ['anthropic', 'openai', 'google', 'xai', 'meta', 'mistral', 'deepseek']) {
       if (!groups[prov]) continue;
       html += `<div class="mds">${prov.toUpperCase()}</div>`;
       groups[prov].forEach(m => {
-        html += `<div class="mdi${m.id === selectedChat ? ' sel' : ''}" onclick="selectChatModel('${m.id}')"><span class="mdot" style="background:${PROVIDER_COLORS[m.provider]}"></span><div class="mdi-info"><div class="mdi-n">${escapeHTML(m.name)}</div><div class="mdi-s">${escapeHTML(m.apiId || m.replicateId || '')}</div></div></div>`;
+        html += `<div class="mdi${m.id === selectedChat ? ' sel' : ''}" onclick="selectChatModel('${m.id}')"><span class="mdot" style="background:${PROVIDER_COLORS[m.provider]}"></span><div class="mdi-info"><div class="mdi-n">${escapeHTML(m.name)}</div><div class="mdi-s">${escapeHTML(modelSubtitle(m))}</div></div></div>`;
       });
     }
     if (customs.length) {
       html += `<div class="mdsep"></div><div class="mds">CUSTOM</div>`;
       customs.forEach(m => {
-        html += `<div class="mdi${m.id === selectedChat ? ' sel' : ''}" onclick="selectChatModel('${m.id}')"><span class="mdot" style="background:${m.color || '#a78bfa'}"></span><div class="mdi-info"><div class="mdi-n">${escapeHTML(m.name)} <span class="mdi-tag">✦</span></div><div class="mdi-s">${escapeHTML(m.replicateId)}</div></div></div>`;
+        html += `<div class="mdi${m.id === selectedChat ? ' sel' : ''}" onclick="selectChatModel('${m.id}')"><span class="mdot" style="background:${m.color || '#a78bfa'}"></span><div class="mdi-info"><div class="mdi-n">${escapeHTML(m.name)} <span class="mdi-tag">✦</span></div><div class="mdi-s">${escapeHTML(m.replicateId || '')}</div></div></div>`;
       });
     }
     mdrop.innerHTML = html;
   }
-  // Image dropdown
+  // Image dropdown — all image models live on Replicate
   const imgDrop = document.getElementById('img-drop');
   if (imgDrop) {
-    let html = `<div class="mds">IMAGE MODELS</div>`;
-    IMAGE_MODELS.forEach(m => {
-      html += `<div class="mdi${m.id === selectedImage ? ' sel' : ''}" onclick="selectImgModel('${m.id}')"><span class="mdot" style="background:#f472b6"></span><div class="mdi-info"><div class="mdi-n">${escapeHTML(m.name)}</div><div class="mdi-s">${escapeHTML(m.replicateId)}</div></div></div>`;
-    });
+    const hasRep = !!profileGet('rep-key');
+    let html = '';
+    if (!hasRep) {
+      html = `<div class="mds">NO IMAGE MODELS</div><div class="mdi"><div class="mdi-info"><div class="mdi-n">Add your Replicate key</div><div class="mdi-s">Settings → Replicate</div></div></div>`;
+    } else {
+      html = `<div class="mds">IMAGE MODELS</div>`;
+      IMAGE_MODELS.forEach(m => {
+        html += `<div class="mdi${m.id === selectedImage ? ' sel' : ''}" onclick="selectImgModel('${m.id}')"><span class="mdot" style="background:#f472b6"></span><div class="mdi-info"><div class="mdi-n">${escapeHTML(m.name)}</div><div class="mdi-s">${escapeHTML(m.replicateId)}</div></div></div>`;
+      });
+    }
     const customs = getCustomModels().filter(m => m.type === 'image');
     if (customs.length) {
       html += `<div class="mdsep"></div><div class="mds">CUSTOM</div>`;
@@ -190,13 +225,19 @@ function renderModelDropdowns() {
     }
     imgDrop.innerHTML = html;
   }
-  // Video dropdown
+  // Video dropdown — all video models live on Replicate
   const vidDrop = document.getElementById('vid-drop');
   if (vidDrop) {
-    let html = `<div class="mds">VIDEO MODELS</div>`;
-    VIDEO_MODELS.forEach(m => {
-      html += `<div class="mdi${m.id === selectedVideo ? ' sel' : ''}" onclick="selectVidModel('${m.id}')"><span class="mdot" style="background:#4ade80"></span><div class="mdi-info"><div class="mdi-n">${escapeHTML(m.name)}</div><div class="mdi-s">${escapeHTML(m.replicateId)}</div></div></div>`;
-    });
+    const hasRep = !!profileGet('rep-key');
+    let html = '';
+    if (!hasRep) {
+      html = `<div class="mds">NO VIDEO MODELS</div><div class="mdi"><div class="mdi-info"><div class="mdi-n">Add your Replicate key</div><div class="mdi-s">Settings → Replicate</div></div></div>`;
+    } else {
+      html = `<div class="mds">VIDEO MODELS</div>`;
+      VIDEO_MODELS.forEach(m => {
+        html += `<div class="mdi${m.id === selectedVideo ? ' sel' : ''}" onclick="selectVidModel('${m.id}')"><span class="mdot" style="background:#4ade80"></span><div class="mdi-info"><div class="mdi-n">${escapeHTML(m.name)}</div><div class="mdi-s">${escapeHTML(m.replicateId)}</div></div></div>`;
+      });
+    }
     const customs = getCustomModels().filter(m => m.type === 'video');
     if (customs.length) {
       html += `<div class="mdsep"></div><div class="mds">CUSTOM</div>`;
@@ -349,14 +390,24 @@ function saveMaxTokens() {
 function addCustomModel() {
   const name = document.getElementById('cm-name').value.trim();
   const repId = document.getElementById('cm-id').value.trim();
+  const version = document.getElementById('cm-version')?.value.trim() || '';
   const type = document.getElementById('cm-type').value;
   const color = document.getElementById('cm-color').value;
   if (!name || !repId) { showToast('Name and Replicate ID required'); return; }
   const list = getCustomModels();
-  list.push({ id: 'custom_' + Date.now(), name, replicateId: repId, type, color, provider: 'custom' });
+  list.push({
+    id: 'custom_' + Date.now(),
+    name,
+    replicateId: repId,
+    version: version || undefined,
+    type,
+    color,
+    provider: 'custom',
+  });
   setCustomModels(list);
   document.getElementById('cm-name').value = '';
   document.getElementById('cm-id').value = '';
+  if (document.getElementById('cm-version')) document.getElementById('cm-version').value = '';
   renderCustomModels();
   injectCustomModels();
   showToast('Added');
@@ -380,5 +431,33 @@ function renderCustomModels() {
 function renderModelsPanel() {
   const grid = document.getElementById('mp-grid');
   if (!grid) return;
-  grid.innerHTML = CHAT_MODELS.map(m => `<div class="mp-card"><div class="mp-card-top"><span class="mdot" style="background:${PROVIDER_COLORS[m.provider]}"></span><div class="mp-card-n">${escapeHTML(m.name)}</div></div><div class="mp-card-s">${escapeHTML(m.apiId || m.replicateId || '')}</div><div class="mp-card-prov">${m.provider}</div></div>`).join('');
+  // Build a card for any model entry, showing the actual Replicate slug or
+  // direct-API id under the name. Cards for API-only models that can't be
+  // used yet are dimmed.
+  const card = (m, kind) => {
+    const usable = kind === 'chat'
+      ? isChatModelUsable(m)
+      : !!profileGet('rep-key'); // image/video → just need Replicate
+    const sub = m.replicateId || (m.apiId ? `${m.provider} · ${m.apiId}` : '');
+    const dimmed = usable ? '' : ' style="opacity:.4;"';
+    const dot = kind === 'chat' ? PROVIDER_COLORS[m.provider] : (kind === 'image' ? '#f472b6' : '#4ade80');
+    const tag = m.requiresDirectKey ? '<span class="mdi-tag" style="margin-left:4px;">api</span>' : '';
+    return `<div class="mp-card"${dimmed}>
+      <div class="mp-card-top">
+        <span class="mdot" style="background:${dot}"></span>
+        <div class="mp-card-n">${escapeHTML(m.name)}${tag}</div>
+      </div>
+      <div class="mp-card-s">${escapeHTML(sub)}</div>
+      <div class="mp-card-prov">${kind}${m.provider ? ' · ' + m.provider : ''}</div>
+    </div>`;
+  };
+  let html = '<div class="mp-section-h">CHAT</div><div class="mp-grid">';
+  html += CHAT_MODELS.map(m => card(m, 'chat')).join('');
+  html += '</div><div class="mp-section-h">IMAGE</div><div class="mp-grid">';
+  html += IMAGE_MODELS.map(m => card(m, 'image')).join('');
+  html += '</div><div class="mp-section-h">VIDEO</div><div class="mp-grid">';
+  html += VIDEO_MODELS.map(m => card(m, 'video')).join('');
+  html += '</div>';
+  grid.innerHTML = html;
+  return;
 }

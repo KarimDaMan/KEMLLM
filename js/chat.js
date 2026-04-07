@@ -40,10 +40,21 @@ function setChatMode(mode) {
   }
   chatMode = mode;
   document.querySelectorAll('.mode-btn').forEach(b => {
-    // The desktop button has no data-mode — skip the active toggle for it.
+    // The desktop button has no data-mode and is allowed to be active
+    // ALONGSIDE the agent button — handled separately below.
     if (b.id === 'chat-desktop-btn') return;
     b.classList.toggle('active', b.dataset.mode === mode);
   });
+  // Desktop button is a sub-button of Agent: only visible while in agent
+  // mode (and only if the /desktop probe has succeeded). It can be visually
+  // ACTIVE simultaneously with Agent — clicking it never deselects agent.
+  const dBtn = document.getElementById('chat-desktop-btn');
+  if (dBtn) {
+    const ready = dBtn.dataset.desktopReady === '1';
+    dBtn.classList.toggle('show', mode === 'agent' && ready);
+    // If we just left agent mode, drop the desktop active highlight too.
+    if (mode !== 'agent') dBtn.classList.remove('active');
+  }
   const lock = document.getElementById('mode-agent-lock');
   if (lock) lock.style.display = agentUnlocked ? 'none' : '';
   const input = document.getElementById('input-text');
@@ -1019,6 +1030,7 @@ async function probeDesktopSupport() {
   const hide = () => {
     btn.dataset.desktopReady = '0';
     btn.classList.remove('show');
+    btn.classList.remove('active');
   };
   if (!base) return hide();
   try {
@@ -1027,7 +1039,9 @@ async function probeDesktopSupport() {
     if (r.status === 200 || r.status === 502 || r.status === 401) {
       btn.dataset.desktopReady = '1';
       _desktopProbedOnce = true;
-      btn.classList.add('show');
+      // Only reveal it while the user is in Agent mode — Desktop is a
+      // sub-button of Agent.
+      if (chatMode === 'agent') btn.classList.add('show');
     } else {
       hide();
     }
@@ -1200,12 +1214,13 @@ ss -tlnp 2>/dev/null | grep -q 6080 && echo READY || echo NOT_LISTENING
     pn.done('noVNC listening on :6080', '✓');
   }
 
-  // Step 4: load the preview. Use vnc_lite.html (minimal UI, no side toolbar
-  // with the junk power buttons) and pass path=desktop/websockify so noVNC
-  // opens its WebSocket against the nginx-proxied path, not the root.
-  const url = `${base}/desktop/vnc_lite.html?path=desktop/websockify&autoconnect=1&resize=scale&token=${encodeURIComponent(tok)}`;
+  // Step 4: load the preview. vnc.html ships with every noVNC version
+  // (vnc_lite.html does not on older Ubuntu builds). path=desktop/websockify
+  // tells noVNC to open its WebSocket against the nginx-proxied path so it
+  // doesn't try to hit the root /websockify.
+  const url = `${base}/desktop/vnc.html?path=desktop/websockify&autoconnect=1&resize=scale&token=${encodeURIComponent(tok)}`;
   chatPreviewShow(url, 'AI Desktop');
-  renderSystemLine('🖥 desktop loaded — tap and drag in the preview to interact');
+  renderSystemLine('🖥 desktop loaded — tap and drag in the preview to interact. If it stays blank, open the URL in a new tab to debug: ' + url);
 }
 
 function renderSystemLine(text) {

@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v68 · kill fake MCP connectors, kill Switch Profile, skip desktop btn in generic mode-btn handler (was causing double-click); desktop button visible regardless of mode when probe succeeds';
+const KEMLLM_BUILD = 'v69 · desktop button is sub-button of agent (visible only in agent mode, can be active alongside agent); switch iframe to vnc.html; print debug url in chat';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -414,22 +414,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Floating Desktop button (only shows when the HF backend has the new Dockerfile)
+  // Desktop button — sub-button of Agent. Visible only in agent mode (the
+  // probe + setChatMode handle that). Clicking it does NOT switch modes;
+  // Agent stays selected. The desktop button itself just gets the active
+  // class while the preview pane is open.
   document.getElementById('chat-desktop-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('chat-desktop-btn');
-    btn?.classList.add('loading');
+    if (!btn) return;
+    btn.classList.add('loading');
+    btn.classList.add('active');
     try {
-      // If state is stuck (ready but wrong backend, or ready with no session),
-      // nuke it so agentStart starts fresh.
+      // If state is stuck (ready but wrong backend, or ready with no
+      // session), nuke it so agentStart starts fresh — but stay in agent
+      // mode the whole time.
       if (agentReady && (agentBackend !== 'hf' || !agentSessionId) && getHfBackendUrl()) {
         agentReset();
       }
-      if (chatMode !== 'agent') setChatMode('agent');
       await agentStart();
       await showAgentDesktop();
     } finally {
-      btn?.classList.remove('loading');
+      btn.classList.remove('loading');
     }
+  });
+  // When the preview pane is closed, drop the desktop active highlight.
+  document.getElementById('chat-preview-close')?.addEventListener('click', () => {
+    document.getElementById('chat-desktop-btn')?.classList.remove('active');
   });
 
   // Chat preview pane controls

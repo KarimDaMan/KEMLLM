@@ -87,10 +87,12 @@ function loadChat(id) {
   if (home) home.classList.add('hidden');
   if (window.termBootStop) window.termBootStop();
   messages.forEach(m => {
-    if (m.role === 'user') renderUserMessage(m.content);
-    else {
+    if (m.role === 'user') {
+      // Pass attachments (stripped payloads but metadata intact) so chips render
+      renderUserMessage(typeof m.content === 'string' ? m.content : '', m.attachments);
+    } else {
       const model = findModel(selectedChat, 'chat') || { name: 'AI', provider: 'custom' };
-      renderAIMessage(model, parseMarkdown(m.content));
+      renderAIMessage(model, parseMarkdown(typeof m.content === 'string' ? m.content : ''), m.content);
     }
   });
   renderHistory();
@@ -110,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v32 · strip attachments from localStorage + newChat cleanup';
+const KEMLLM_BUILD = 'v33 · chat reload renders attachments + robust content handling';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

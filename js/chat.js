@@ -165,13 +165,21 @@ function renderUserMessage(text, attachments) {
   const msgs = document.getElementById('msgs');
   const div = document.createElement('div');
   div.className = 'msg msg-u';
-  let imgHtml = '';
+  let attHtml = '';
   if (attachments && attachments.length) {
-    imgHtml = '<div style="display:flex;gap:6px;justify-content:flex-end;margin-bottom:6px;flex-wrap:wrap;">' +
-      attachments.map(a => `<img src="${a.dataUrl}" style="max-width:180px;max-height:180px;border-radius:10px;border:1px solid var(--border2);">`).join('') +
-      '</div>';
+    const items = attachments.map(a => {
+      const isImg = a.isImage || (a.mime || '').startsWith('image/');
+      if (isImg && a.dataUrl) {
+        return `<img src="${a.dataUrl}" style="max-width:180px;max-height:180px;border-radius:10px;border:1px solid var(--border2);">`;
+      }
+      // Non-image or dataUrl-stripped (post-reload) → file chip
+      const icon = typeof fileIcon === 'function' ? fileIcon(a.mime || '', a.name || '') : '📎';
+      const size = a.size ? ' · ' + (typeof formatBytes === 'function' ? formatBytes(a.size) : a.size + ' B') : '';
+      return `<div style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-size:11px;color:var(--text2);">${icon} ${escapeHTML(a.name || 'file')}${size}</div>`;
+    }).join('');
+    attHtml = '<div style="display:flex;gap:6px;justify-content:flex-end;margin-bottom:6px;flex-wrap:wrap;">' + items + '</div>';
   }
-  div.innerHTML = imgHtml + `<div class="bubble">${escapeHTML(text)}</div>`;
+  div.innerHTML = attHtml + `<div class="bubble">${escapeHTML(text)}</div>`;
   msgs.appendChild(div);
   scrollToBottom();
 }

@@ -544,8 +544,73 @@ input,textarea{font-family:inherit;color:inherit;}
 
 @media (max-width:820px){
   #sb-toggle{display:flex;}
-  #sb-icons{position:fixed;top:0;left:0;height:100vh;z-index:9990;transform:translateX(-110%);transition:transform .3s var(--ease-out);box-shadow:6px 0 40px rgba(0,0,0,.6);pointer-events:auto;}
-  #sb-icons.open{transform:translateX(0);}
+  /* MOBILE SIDEBAR — FULL-SCREEN OVERLAY.
+     The sidebar is the ENTIRE viewport when open. Nothing can be behind
+     or in front of it because nothing else occupies that space. No
+     transforms (Safari hit-test bug avoidance). No partial-width slide
+     (no chance of items rendered at unclickable positions). Just
+     display:none → display:flex with an opacity transition. */
+  #sb-icons{
+    display:none !important;
+    position:fixed;
+    top:0;
+    left:0;
+    right:0;
+    bottom:0;
+    width:100vw;
+    height:100vh;
+    height:100dvh;
+    z-index:2147483000;     /* near INT_MAX — guaranteed top */
+    background:var(--bg);
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    transform:none !important;
+    pointer-events:auto !important;
+    padding:0;
+    box-shadow:none;
+    flex-direction:column;
+    opacity:0;
+    transition:opacity .2s var(--ease-out);
+  }
+  #sb-icons.open{
+    display:flex !important;
+    opacity:1;
+  }
+  /* Big mobile sidebar header with explicit close button */
+  #sb-icons .si-logo{
+    padding:18px 20px;
+    font-size:20px;
+    font-weight:700;
+    margin-bottom:6px;
+    border-bottom:1px solid var(--border);
+    background:var(--bg2);
+    position:sticky;
+    top:0;
+    z-index:1;
+  }
+  #sb-icons .si-logo svg{width:28px;height:28px;}
+  #sb-icons .si-logo::after{
+    content:'✕';
+    margin-left:auto;
+    font-size:24px;
+    color:var(--text2);
+    line-height:1;
+    padding:4px 8px;
+  }
+  /* Bigger tap targets — minimum 56px tall, easy thumb reach */
+  #sb-icons .sb-nav{padding:8px 10px 4px;}
+  #sb-icons .si{padding:18px 20px;font-size:16px;min-height:56px;border-radius:12px;margin-bottom:2px;}
+  #sb-icons .si svg{width:22px;height:22px;}
+  #sb-icons .sb-section{padding:16px 20px 6px;font-size:11px;letter-spacing:1.2px;}
+  #sb-icons .sb-chats{padding:0 10px;}
+  #sb-icons .sb-chat{padding:16px 18px;font-size:15px;min-height:54px;border-radius:12px;margin-bottom:2px;border-bottom:none;}
+  #sb-icons .sb-viewall{margin:8px 12px 12px;padding:14px;font-size:13px;}
+  #sb-icons .sb-bottom{margin-top:auto;padding:14px 12px 28px;border-top:1px solid var(--border);background:var(--bg2);}
+  #sb-icons .si-ava-row{padding:14px 18px;min-height:56px;border-radius:12px;}
+  #sb-icons .si-ava{width:36px;height:36px;font-size:13px;}
+  #sb-icons .si-ava-name{font-size:14px;}
+  /* Backdrop is unnecessary on mobile since the sidebar IS the screen */
+  #sb-backdrop{display:none !important;}
   #main{width:100vw;}
   #topbar{padding:0 12px;gap:6px;height:56px;overflow-x:auto;scrollbar-width:none;}
   #topbar::-webkit-scrollbar{display:none;}

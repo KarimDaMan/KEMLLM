@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v38 · sidebar event delegation + nuclear pointer-events';
+const KEMLLM_BUILD = 'v39 · mobile sidebar = FULL-SCREEN overlay (no transforms)';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -291,8 +291,19 @@ document.addEventListener('DOMContentLoaded', () => {
   // We listen on the document so even if a parent has weird CSS, the click
   // event still bubbles up here.
   function handleSidebarNavClick(e) {
+    // Close the sidebar if tapping the logo header (which now has ✕ on mobile)
+    const logoEl = e.target.closest('#si-logo');
+    if (logoEl) {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[KEMLLM] sidebar logo tap → close');
+      if (typeof closeSidebar === 'function') closeSidebar();
+      siNav('chat');
+      return;
+    }
     const el = e.target.closest('.si');
     if (!el || !document.getElementById('sb-icons')?.contains(el)) return;
+    console.log('[KEMLLM] sidebar item tap →', el.dataset.action || el.dataset.panel);
     e.preventDefault();
     e.stopPropagation();
     const action = el.dataset.action;

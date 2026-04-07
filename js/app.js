@@ -77,7 +77,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v28 · bulletproof agent boot + CORS fix';
+const KEMLLM_BUILD = 'v29 · Replicate vision route + image pass-through';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

@@ -108,20 +108,27 @@ async function callChat(model, messages, onChunk, overrideSystem) {
     return callReplicateChat(model, fullMsgs, rk, onChunk);
   };
 
-  // Vision route: images need a direct multimodal provider API.
-  // Replicate's chat proxies flatten messages to text and drop images.
+  // Vision route: prefer the direct provider API (Anthropic, OpenAI, Google,
+  // xAI) because they guarantee multimodal support. If the user has no
+  // direct key for the selected model's provider, fall back to Replicate —
+  // callReplicateChat now passes the first image through `image` /
+  // `image_input` / `input_image` fields, which many Replicate proxies
+  // accept.
   if (hasVisionAttachments) {
     try {
       return await tryProvider();
     } catch (provErr) {
-      if (provErr.message === 'NO_PROVIDER_KEY') {
+      if (provErr.message !== 'NO_PROVIDER_KEY') throw provErr;
+      // No direct key — try Replicate with image input
+      try {
+        return await tryReplicate();
+      } catch (repErr) {
         const provName = { anthropic:'Anthropic', openai:'OpenAI', google:'Google AI', xai:'xAI' }[provider] || provider;
         throw new Error(
-          'Image attachments need a direct ' + provName + ' API key (Replicate\'s chat proxies drop images). ' +
-          'Add your ' + provName + ' key in Settings → API Keys, or remove the image and resend.'
+          'Vision chat failed on both paths. Replicate error: ' + (repErr.message || repErr) +
+          '. For guaranteed vision, add a direct ' + provName + ' key in Settings → API Keys.'
         );
       }
-      throw provErr;
     }
   }
 
@@ -284,7 +291,29 @@ async function callGoogleDirect(model, messages, apiKey, onChunk) {
 
 // ===== Replicate (chat fallback + image/video) — goes through worker proxy =====
 async function callReplicateChat(model, messages, apiKey, onChunk) {
-  const prompt = messages.map(m => `${m.role.toUpperCase()}: ${typeof m.content === 'string' ? m.content : ''}`).join('\n\n') + '\n\nASSISTANT:';
+  const prompt = messages.map(m => {
+    const content = typeof m.content === 'string' ? m.content : '';
+    return `${m.role.toUpperCase()}: ${content}`;
+  }).join('\n\n') + '\n\nASSISTANT:';
+
+  // Collect image attachments from any message — some Replicate chat
+  // model proxies accept an `image` or `image_input` field for vision.
+  // Send the first image under multiple likely keys so whichever schema
+  // the model uses, it picks it up.
+  const firstImage = messages
+    .flatMap(m => m.attachments || [])
+    .find(a => a && (a.isImage || (a.mime || '').startsWith('image/')));
+
+  const input = {
+    prompt,
+    max_tokens: parseInt(profileGet('max-tokens') || '4096'),
+  };
+  if (firstImage && firstImage.dataUrl) {
+    input.image = firstImage.dataUrl;
+    input.image_input = firstImage.dataUrl;
+    input.input_image = firstImage.dataUrl;
+  }
+
   const res = await replicateFetch(`/v1/models/${model.replicateId}/predictions`, {
     method: 'POST',
     headers: {
@@ -292,7 +321,7 @@ async function callReplicateChat(model, messages, apiKey, onChunk) {
       'Authorization': 'Bearer ' + apiKey,
       'Prefer': 'wait'
     },
-    body: JSON.stringify({ input: { prompt, max_tokens: parseInt(profileGet('max-tokens') || '4096') } })
+    body: JSON.stringify({ input })
   });
   if (!res.ok) {
     const t = await res.text();

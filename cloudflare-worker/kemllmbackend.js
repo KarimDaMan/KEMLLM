@@ -23,8 +23,11 @@ const TOKEN_TTL = 60 * 60 * 24 * 365; // 1 year
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization,Accept',
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+  // Replicate needs Prefer (for `wait` synchronous mode). Include a wide
+  // allowlist so browser preflights never fail on a stray header.
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,Accept,Prefer,X-Requested-With,Cache-Control',
+  'Access-Control-Expose-Headers': 'Content-Type,Content-Length,X-Replicate-*',
   'Access-Control-Max-Age': '86400',
 };
 

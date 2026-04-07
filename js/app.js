@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v63 · consolidate all worker traffic onto kemllmbackend; skip manual noVNC boot when /desktop is already live';
+const KEMLLM_BUILD = 'v64 · add Prefer to worker CORS allow-headers (Replicate needs it for wait mode); REDEPLOY worker';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

@@ -15,6 +15,7 @@ function siNav(panel) {
   const tabs = document.getElementById('tb-tabs');
   if (tabs) tabs.classList.toggle('hidden', !(panel === 'chat' || panel === 'code'));
   closeDrawer();
+  if (isMobile()) closeSidebar();
 }
 
 function toggleDrawer() {
@@ -24,6 +25,21 @@ function toggleDrawer() {
 function closeDrawer() {
   const d = document.getElementById('drawer');
   if (d) d.classList.remove('open');
+}
+
+function isMobile() { return window.matchMedia('(max-width:820px)').matches; }
+
+function toggleSidebar() {
+  const sb = document.getElementById('sb-icons');
+  const bd = document.getElementById('sb-backdrop');
+  if (!sb) return;
+  const open = !sb.classList.contains('open');
+  sb.classList.toggle('open', open);
+  bd?.classList.toggle('show', open);
+}
+function closeSidebar() {
+  document.getElementById('sb-icons')?.classList.remove('open');
+  document.getElementById('sb-backdrop')?.classList.remove('show');
 }
 
 // ===== Dropdowns =====

@@ -27,20 +27,41 @@ const FILE_EXT = {
   rust: 'rs', go: 'go', java: 'java', csharp: 'cs', bash: 'sh', lua: 'lua'
 };
 
+// Public Piston instances — emkc.org is the main one but occasionally
+// returns 401 due to Cloudflare anti-bot. Try each in order.
+const PISTON_ENDPOINTS = [
+  'https://emkc.org/api/v2/piston/execute',
+  'https://piston.kouko.moe/api/v2/execute',
+  'https://piston-api.onrender.com/api/v2/execute'
+];
+
 async function runViaPiston(lang, code) {
   const cfg = PISTON_LANGS[(lang || '').toLowerCase()] || PISTON_LANGS.python;
   const ext = FILE_EXT[cfg.language] || 'txt';
-  const res = await fetch('https://emkc.org/api/v2/piston/execute', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      language: cfg.language,
-      version: cfg.version,
-      files: [{ name: 'main.' + ext, content: code }]
-    })
+  const body = JSON.stringify({
+    language: cfg.language,
+    version: cfg.version,
+    files: [{ name: 'main.' + ext, content: code }]
   });
-  if (!res.ok) throw new Error('Piston error: ' + res.status);
-  return res.json();
+  let lastErr = null;
+  for (const url of PISTON_ENDPOINTS) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body
+      });
+      if (res.ok) return res.json();
+      lastErr = new Error('Piston ' + res.status + ' at ' + url);
+      // Retry next endpoint on 401/403/429/5xx
+      if (![401, 403, 429, 500, 502, 503, 504].includes(res.status)) {
+        throw lastErr;
+      }
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('All Piston endpoints failed');
 }
 
 // ===== Code Panel =====

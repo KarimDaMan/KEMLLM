@@ -257,8 +257,38 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('si-logo')?.addEventListener('click', () => siNav('chat'));
   document.getElementById('sb-viewall')?.addEventListener('click', toggleDrawer);
   document.getElementById('sb-new-chat')?.addEventListener('click', newChat);
+  document.getElementById('tb-new-chat')?.addEventListener('click', newChat);
   document.getElementById('dr-close')?.addEventListener('click', closeDrawer);
   document.getElementById('dr-new')?.addEventListener('click', newChat);
+
+  // Mobile sidebar toggle
+  document.getElementById('sb-toggle')?.addEventListener('click', toggleSidebar);
+  document.getElementById('sb-backdrop')?.addEventListener('click', closeSidebar);
+
+  // Attach button
+  document.getElementById('attach-btn')?.addEventListener('click', () => {
+    document.getElementById('attach-input').click();
+  });
+  document.getElementById('attach-input')?.addEventListener('change', (e) => {
+    Array.from(e.target.files || []).forEach(addAttachment);
+    e.target.value = '';
+  });
+  // Paste image support
+  document.getElementById('input-text')?.addEventListener('paste', (e) => {
+    const items = e.clipboardData?.items || [];
+    for (const it of items) {
+      if (it.type.startsWith('image/')) {
+        const f = it.getAsFile();
+        if (f) addAttachment(f);
+      }
+    }
+  });
+  // Persona save
+  document.getElementById('save-persona')?.addEventListener('click', () => {
+    const val = document.getElementById('sp-persona').value;
+    profileSet('persona', val);
+    showToast('Persona saved');
+  });
 
   // Topbar
   document.getElementById('tb-chat-model')?.addEventListener('click', toggleChatDrop);
@@ -337,12 +367,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('cm-add')?.addEventListener('click', addCustomModel);
   document.querySelectorAll('.sp-swatch').forEach(s => {
     s.addEventListener('click', () => setAccent(s.dataset.color));
-  });
-  document.getElementById('sp-stars')?.addEventListener('click', () => {
-    const off = profileGet('stars_off') === '1';
-    profileSet('stars_off', off ? '0' : '1');
-    document.getElementById('sp-stars').classList.toggle('on', off);
-    createStars();
   });
 
   // Render initial state

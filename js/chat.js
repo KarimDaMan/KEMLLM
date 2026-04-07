@@ -3,6 +3,8 @@
 
 let messages = [];
 let currentChatId = null;
+let pendingAttachments = []; // {dataUrl, name}
+let abortCtrl = null;
 window.webSearchOn = false;
 
 const IMG_REGEX = /\b(generate|make|create|draw|render|paint|show|produce)\b.{0,30}\b(image|picture|photo|illustration|art|artwork|wallpaper|logo|portrait|landscape|painting)\b/i;
@@ -99,24 +101,67 @@ async function runCodeBlock(id, lang) {
   }
 }
 
-function renderUserMessage(text) {
+function renderUserMessage(text, attachments) {
   const msgs = document.getElementById('msgs');
   const div = document.createElement('div');
   div.className = 'msg msg-u';
-  div.innerHTML = `<div class="bubble">${escapeHTML(text)}</div>`;
+  let imgHtml = '';
+  if (attachments && attachments.length) {
+    imgHtml = '<div style="display:flex;gap:6px;justify-content:flex-end;margin-bottom:6px;flex-wrap:wrap;">' +
+      attachments.map(a => `<img src="${a.dataUrl}" style="max-width:180px;max-height:180px;border-radius:10px;border:1px solid var(--border2);">`).join('') +
+      '</div>';
+  }
+  div.innerHTML = imgHtml + `<div class="bubble">${escapeHTML(text)}</div>`;
   msgs.appendChild(div);
   scrollToBottom();
 }
 
-function renderAIMessage(model, contentHTML) {
+function renderAIMessage(model, contentHTML, rawText) {
   const msgs = document.getElementById('msgs');
   const div = document.createElement('div');
   div.className = 'msg msg-a';
   const color = PROVIDER_COLORS[model.provider] || PROVIDER_COLORS.custom;
-  div.innerHTML = `<div class="ai-dot" style="background:${color}"></div><div class="ai-body"><div class="ai-tag">${escapeHTML(model.name)}</div><div class="ai-txt">${contentHTML}</div></div>`;
+  const raw = rawText || '';
+  div.dataset.raw = raw;
+  div.innerHTML = `
+    <div class="ai-dot" style="background:${color}"></div>
+    <div class="ai-body">
+      <div class="ai-tag">${escapeHTML(model.name)}</div>
+      <div class="ai-txt">${contentHTML}</div>
+      <div class="msg-actions">
+        <button class="msg-act" onclick="copyAIMessage(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button>
+        <button class="msg-act" onclick="regenerateMessage()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Regenerate</button>
+      </div>
+    </div>`;
   msgs.appendChild(div);
   scrollToBottom();
   return div;
+}
+
+function copyAIMessage(btn) {
+  const msgEl = btn.closest('.msg-a');
+  const text = msgEl?.dataset.raw || msgEl?.querySelector('.ai-txt')?.innerText || '';
+  navigator.clipboard.writeText(text);
+  showToast('Copied');
+}
+
+function regenerateMessage() {
+  // Pop last assistant message, re-send
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'assistant') { messages.splice(i, 1); break; }
+  }
+  const lastAI = document.querySelector('#msgs .msg-a:last-child');
+  if (lastAI) lastAI.remove();
+  const last = messages[messages.length - 1];
+  if (last?.role === 'user') {
+    messages.pop();
+    document.querySelectorAll('#msgs .msg-u').forEach((el, i, arr) => {
+      if (i === arr.length - 1) el.remove();
+    });
+    const input = document.getElementById('input-text');
+    input.value = typeof last.content === 'string' ? last.content : '';
+    sendMessage();
+  }
 }
 
 function renderTyping(model) {
@@ -139,7 +184,7 @@ function scrollToBottom() {
 async function sendMessage() {
   const input = document.getElementById('input-text');
   const text = input.value.trim();
-  if (!text) return;
+  if (!text && !pendingAttachments.length) return;
   input.value = '';
   input.style.height = 'auto';
 
@@ -148,8 +193,16 @@ async function sendMessage() {
   if (home) home.classList.add('hidden');
   if (window.termBootStop) window.termBootStop();
 
-  messages.push({ role: 'user', content: text });
-  renderUserMessage(text);
+  const atts = pendingAttachments.slice();
+  pendingAttachments = [];
+  renderAttachPreview();
+
+  // Store as multimodal content if images attached
+  const userMsg = atts.length
+    ? { role: 'user', content: text, attachments: atts }
+    : { role: 'user', content: text };
+  messages.push(userMsg);
+  renderUserMessage(text, atts);
 
   // Check image/video routing
   if (IMG_REGEX.test(text)) {
@@ -280,9 +333,33 @@ async function handleVideoRequest(prompt) {
 function newChat() {
   messages = [];
   currentChatId = null;
+  pendingAttachments = [];
+  renderAttachPreview();
   document.getElementById('msgs').innerHTML = '';
   const home = document.getElementById('home-screen');
   if (home) home.classList.remove('hidden');
   if (window.termBootStart) window.termBootStart();
   closeDrawer();
+}
+
+// ===== Attachments =====
+function addAttachment(file) {
+  if (!file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    pendingAttachments.push({ dataUrl: e.target.result, name: file.name });
+    renderAttachPreview();
+  };
+  reader.readAsDataURL(file);
+}
+function removeAttachment(idx) {
+  pendingAttachments.splice(idx, 1);
+  renderAttachPreview();
+}
+function renderAttachPreview() {
+  const el = document.getElementById('attach-preview');
+  if (!el) return;
+  el.innerHTML = pendingAttachments.map((a, i) =>
+    `<div class="attach-wrap"><img class="attach-thumb" src="${a.dataUrl}"><button class="attach-x" onclick="removeAttachment(${i})">×</button></div>`
+  ).join('');
 }

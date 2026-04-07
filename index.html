@@ -99,6 +99,7 @@
 
     <!-- TOPBAR -->
     <div id="topbar">
+      <button id="sb-toggle" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
       <button id="tb-chat-model" class="tb-model">
         <span id="tb-chat-model-label"><span class="mdot" style="background:#d97757"></span>Claude Sonnet 4.6</span>
         <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
@@ -121,6 +122,7 @@
 
       <div class="tb-divider"></div>
 
+      <button id="tb-new-chat" class="ib-icon" title="New chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
       <button id="tb-web" class="ib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Web</button>
       <button id="tb-conn" class="ib-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>
       <button id="tb-settings" class="ib-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -139,9 +141,13 @@
         <div id="msgs"></div>
       </div>
       <div id="input-wrap">
+        <div id="attach-preview" class="attach-preview"></div>
         <div id="input-box">
+          <button id="attach-btn" class="attach-btn" title="Attach image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+          <input id="attach-input" type="file" accept="image/*" multiple style="display:none">
           <textarea id="input-text" rows="1" placeholder="Ask anything, generate images, run code..."></textarea>
           <button id="send-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+          <button id="stop-btn" title="Stop"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></button>
         </div>
       </div>
     </div>
@@ -204,42 +210,47 @@
           <div class="sp-h">API Keys</div>
 
           <div class="sp-row">
-            <label>Replicate API Key (runs everything as fallback + all image/video)</label>
+            <label>Replicate — runs every chat, image and video model</label>
             <div style="display:flex;gap:8px;">
               <input id="rep-key" class="sp-input" type="password" placeholder="r8_...">
               <button id="save-rep-key" class="sp-btn">Save</button>
             </div>
+            <div class="sub">This is the only key you need. Everything works with just this.</div>
+          </div>
+
+          <div class="sp-row" style="margin-top:22px;">
+            <label style="color:var(--text3);">Optional direct-provider overrides (faster, cheaper than Replicate for some models)</label>
           </div>
 
           <div class="sp-row">
-            <label>Anthropic API Key (optional, overrides built-in Claude)</label>
-            <div style="display:flex;gap:8px;">
-              <input id="key-anthropic" class="sp-input" type="password" placeholder="sk-ant-...">
-              <button id="save-key-anthropic" class="sp-btn">Save</button>
-            </div>
-          </div>
-
-          <div class="sp-row">
-            <label>OpenAI API Key (optional, direct GPT)</label>
+            <label>OpenAI — direct GPT access</label>
             <div style="display:flex;gap:8px;">
               <input id="key-openai" class="sp-input" type="password" placeholder="sk-...">
-              <button id="save-key-openai" class="sp-btn">Save</button>
+              <button id="save-key-openai" class="sp-btn sec">Save</button>
             </div>
           </div>
 
           <div class="sp-row">
-            <label>Google AI API Key (optional, direct Gemini)</label>
+            <label>Anthropic — direct Claude access</label>
+            <div style="display:flex;gap:8px;">
+              <input id="key-anthropic" class="sp-input" type="password" placeholder="sk-ant-...">
+              <button id="save-key-anthropic" class="sp-btn sec">Save</button>
+            </div>
+          </div>
+
+          <div class="sp-row">
+            <label>Google AI — direct Gemini access</label>
             <div style="display:flex;gap:8px;">
               <input id="key-google" class="sp-input" type="password" placeholder="AIza...">
-              <button id="save-key-google" class="sp-btn">Save</button>
+              <button id="save-key-google" class="sp-btn sec">Save</button>
             </div>
           </div>
 
           <div class="sp-row">
-            <label>xAI API Key (optional, direct Grok)</label>
+            <label>xAI — direct Grok access</label>
             <div style="display:flex;gap:8px;">
               <input id="key-xai" class="sp-input" type="password" placeholder="xai-...">
-              <button id="save-key-xai" class="sp-btn">Save</button>
+              <button id="save-key-xai" class="sp-btn sec">Save</button>
             </div>
           </div>
         </div>
@@ -257,11 +268,14 @@
               <div class="sp-swatch" data-color="#f87171" style="background:#f87171"></div>
             </div>
           </div>
+        </div>
+
+        <div class="sp-section">
+          <div class="sp-h">Persona</div>
           <div class="sp-row">
-            <div class="sp-toggle">
-              <div id="sp-stars" class="sp-tg on"></div>
-              <span style="font-size:12.5px;color:var(--text2);">Starry background</span>
-            </div>
+            <label>Custom instructions (how the AI should behave, who you are, preferences…)</label>
+            <textarea id="sp-persona" class="sp-input font" rows="5" placeholder="Example: I'm a software engineer. Be terse, skip pleasantries, use code examples when relevant, never end with a bulleted summary."></textarea>
+            <button id="save-persona" class="sp-btn" style="margin-top:8px;">Save persona</button>
           </div>
         </div>
 
@@ -355,6 +369,7 @@
   </div>
 </div>
 
+<div id="sb-backdrop"></div>
 <div id="toast"></div>
 
 <script src="js/state.js"></script>

@@ -82,6 +82,8 @@ function activateProfile(id) {
   // Pull synced data from the cloud (chats/settings/custom models from
   // any other device the user has signed in on with the same GitHub account)
   if (typeof pullSync === 'function') pullSync();
+  // Start periodic auto-pull so changes from other devices show up within ~30s
+  if (typeof startSyncPolling === 'function') startSyncPolling();
 }
 
 function demoLogin() {
@@ -131,21 +133,37 @@ function handleGithubCallback() {
 
 // ===== Cloud sync via kemllmbackend Cloudflare worker =====
 const SYNC_BASE = 'https://kemllmbackend.karimghannam2014.workers.dev/sync';
-// Keys we DO sync (chat history, settings, custom models, persona, picks).
-// API keys are NOT synced — they stay device-local for security.
+// Everything per-profile syncs across devices when signed in with GitHub.
+// API keys included by user request — they live in the same KV blob, only
+// readable with the user's per-account sync token (which never leaves the
+// browser except as an Authorization-style URL param to our worker).
 const SYNC_KEYS = [
+  // Chat data
   'history',
+  // User customization
   'persona',
   'custom_models',
   'mcp_connected',
   'theme',
   'accent',
+  // Model defaults
   'temp',
   'max-tokens',
   'selected_chat',
   'selected_image',
   'selected_video',
+  // API keys (sync enabled per user request)
+  'rep-key',
+  'key-anthropic',
+  'key-openai',
+  'key-google',
+  'key-xai',
+  // Agent backend
+  'hf-backend-url',
+  'hf-backend-token',
 ];
+const SYNC_POLL_INTERVAL_MS = 30 * 1000; // re-pull every 30s while open
+let _syncPollTimer = null;
 
 function getSyncProfile() {
   const p = getProfiles().find(x => x.id === activeProfileId);
@@ -153,24 +171,38 @@ function getSyncProfile() {
   return p;
 }
 
-async function pullSync() {
+// Track what we last pulled so we can detect actual changes and only re-render
+// the UI when something is different (avoids re-rendering every 30s).
+let _lastPulledHash = null;
+function _hashSyncData(data) {
+  try { return JSON.stringify(data); } catch { return ''; }
+}
+
+async function pullSync(opts) {
+  const silent = opts && opts.silent;
   const p = getSyncProfile();
   if (!p) return;
   try {
     const r = await fetch(`${SYNC_BASE}?user=${encodeURIComponent(p.github)}&token=${encodeURIComponent(p.sync_token)}`);
     if (!r.ok) {
-      console.warn('[KEMLLM] sync pull failed:', r.status);
+      if (!silent) console.warn('[KEMLLM] sync pull failed:', r.status);
       return;
     }
     const body = await r.json();
     if (!body.ok || !body.data) return;
-    // Merge each key into local profile storage
+    const newHash = _hashSyncData(body.data);
+    if (newHash === _lastPulledHash) return; // nothing changed
+    _lastPulledHash = newHash;
+    // Merge each key into local profile storage WITHOUT re-triggering pushSync
     Object.keys(body.data).forEach(k => {
       if (SYNC_KEYS.includes(k) && body.data[k] != null) {
-        profileSet(k, body.data[k]);
+        // Use raw localStorage write to avoid the pushSync recursion in profileSet
+        if (activeProfileId) {
+          localStorage.setItem(`p_${activeProfileId}_${k}`, body.data[k]);
+        }
       }
     });
-    showToast('Synced from cloud');
+    if (!silent) showToast('Synced from cloud');
     // Re-render UI elements that read from these keys
     if (typeof loadHistory === 'function') loadHistory();
     if (typeof renderHistory === 'function') renderHistory();
@@ -180,8 +212,19 @@ async function pullSync() {
     const accent = profileGet('accent');
     if (accent && typeof applyAccent === 'function') applyAccent(accent);
   } catch (e) {
-    console.warn('[KEMLLM] sync pull error:', e);
+    if (!silent) console.warn('[KEMLLM] sync pull error:', e);
   }
+}
+
+function startSyncPolling() {
+  stopSyncPolling();
+  _syncPollTimer = setInterval(() => {
+    if (document.hidden) return; // skip when tab not focused
+    pullSync({ silent: true });
+  }, SYNC_POLL_INTERVAL_MS);
+}
+function stopSyncPolling() {
+  if (_syncPollTimer) { clearInterval(_syncPollTimer); _syncPollTimer = null; }
 }
 
 let _pushTimer = null;
@@ -212,6 +255,7 @@ function pushSync() {
 
 function switchProfile() {
   closeUserModal();
+  if (typeof stopSyncPolling === 'function') stopSyncPolling();
   activeProfileId = null;
   localStorage.removeItem('kemllm_active');
   document.getElementById('app').classList.remove('show');

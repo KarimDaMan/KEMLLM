@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v41 · cloud sync via Cloudflare KV (chats/settings cross-device)';
+const KEMLLM_BUILD = 'v42 · sync API keys + 30s auto-pull + visibility refresh';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -524,6 +524,13 @@ document.addEventListener('DOMContentLoaded', () => {
   termBootStart();
   // Wire hash router so URLs update on nav and deep-links work
   if (typeof initRouter === 'function') initRouter();
+  // Refresh sync from cloud when the tab becomes visible (e.g. after
+  // switching back from another app or another device)
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && typeof pullSync === 'function') {
+      pullSync({ silent: true });
+    }
+  });
 
   // Handle GitHub OAuth callback if present
   if (!handleGithubCallback() && !checkExistingProfile()) {

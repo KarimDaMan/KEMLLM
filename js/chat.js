@@ -170,13 +170,79 @@ async function sendMessage() {
       full += chunk;
     });
     typingEl.remove();
-    const html = parseMarkdown(full);
-    renderAIMessage(model, html);
     messages.push({ role: 'assistant', content: full });
+
+    // Claude.ai-style autonomous code execution: if the AI wrote a runnable
+    // code block, auto-run it, show the analysis, then let the AI respond
+    // once with the result in mind.
+    const runnable = extractFirstRunnableBlock(full);
+    if (runnable) {
+      const aiEl = renderAIMessage(model, parseMarkdown(full));
+      const analysisEl = await runAnalysisBlock(aiEl, runnable);
+      if (analysisEl) {
+        const typing2 = renderTyping(model);
+        try {
+          const followup = [...messages, {
+            role: 'user',
+            content: `[code execution result]\n\nStdout:\n${analysisEl.stdout || '(empty)'}${analysisEl.stderr ? `\n\nStderr:\n${analysisEl.stderr}` : ''}\n\nPlease use this result in your explanation. Do not rewrite the same code unless there was an error.`
+          }];
+          let more = '';
+          await callChat(model, followup, (chunk) => { more += chunk; });
+          typing2.remove();
+          renderAIMessage(model, parseMarkdown(more));
+          messages.push({ role: 'assistant', content: more });
+        } catch (e) {
+          typing2.remove();
+        }
+      }
+    } else {
+      renderAIMessage(model, parseMarkdown(full));
+    }
+
     saveCurrentChat();
   } catch (e) {
     typingEl.remove();
     renderAIMessage(model, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+  }
+}
+
+function extractFirstRunnableBlock(md) {
+  const re = /```(\w+)\n([\s\S]*?)```/g;
+  let m;
+  while ((m = re.exec(md)) !== null) {
+    const lang = (m[1] || '').toLowerCase();
+    if (isRunnable(lang)) return { lang, code: m[2] };
+  }
+  return null;
+}
+
+async function runAnalysisBlock(aiEl, block) {
+  const body = aiEl.querySelector('.ai-body');
+  if (!body) return null;
+  const det = document.createElement('details');
+  det.className = 'think-block';
+  det.open = true;
+  det.innerHTML = `<summary>▶ Running ${escapeHTML(block.lang)}…</summary><div class="think-inner">executing via Piston sandbox</div>`;
+  body.appendChild(det);
+  scrollToBottom();
+  try {
+    const start = Date.now();
+    const out = await runViaPiston(block.lang, block.code);
+    const ms = Date.now() - start;
+    const stdout = out.run?.stdout || '';
+    const stderr = out.run?.stderr || '';
+    const exit = out.run?.code;
+    det.querySelector('summary').textContent = `▶ Ran ${block.lang} · ${ms}ms · exit ${exit}`;
+    det.querySelector('.think-inner').innerHTML =
+      (stdout ? `<div style="color:#cbd5e1;">${escapeHTML(stdout)}</div>` : '') +
+      (stderr ? `<div style="color:var(--red);margin-top:6px;">${escapeHTML(stderr)}</div>` : '') +
+      (!stdout && !stderr ? '<div style="color:var(--text3);">(no output)</div>' : '');
+    setTimeout(() => { det.open = false; }, 800);
+    return { stdout, stderr, exit };
+  } catch (e) {
+    det.querySelector('summary').textContent = '▶ Execution error';
+    det.querySelector('.think-inner').innerHTML = `<div style="color:var(--red);">${escapeHTML(e.message)}</div>`;
+    return { stdout: '', stderr: e.message, exit: -1 };
   }
 }
 

@@ -161,6 +161,11 @@ const SYNC_KEYS = [
   // Agent backend
   'hf-backend-url',
   'hf-backend-token',
+  // Memory (user-editable) and AI-written memory
+  'memories',
+  'ai-memory',
+  // Sandbox toggle
+  'sandbox-web',
 ];
 const SYNC_POLL_INTERVAL_MS = 30 * 1000; // re-pull every 30s while open
 let _syncPollTimer = null;
@@ -243,6 +248,8 @@ async function pullSync(opts) {
     if (typeof renderCustomModels === 'function') renderCustomModels();
     if (typeof injectCustomModels === 'function') injectCustomModels();
     if (typeof loadAllSettings === 'function') loadAllSettings();
+    if (typeof renderMemories === 'function') renderMemories();
+    if (typeof renderAIMemory === 'function') renderAIMemory();
     const accent = profileGet('accent');
     if (accent && typeof applyAccent === 'function') applyAccent(accent);
   } catch (e) {

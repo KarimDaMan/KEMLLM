@@ -689,3 +689,8 @@ input,textarea{font-family:inherit;color:inherit;}
 .chat-desktop-btn svg{width:13px;height:13px;}
 .chat-desktop-btn.loading{pointer-events:none;opacity:.6;}
 .chat-desktop-btn .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);animation:agPulse 2s ease-in-out infinite;}
+
+@keyframes spinBounce{
+  0%{transform:rotate(0deg);}
+  100%{transform:rotate(360deg);}
+}

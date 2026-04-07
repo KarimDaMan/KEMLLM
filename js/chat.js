@@ -591,11 +591,37 @@ async function probeDesktopSupport() {
 }
 
 // Start or restart a noVNC desktop inside the sandbox and show it in the preview
-async function waitForHFReady(base, tok, maxSeconds) {
+// Live progress line that updates in-place instead of adding new lines
+function renderProgressLine(initialText) {
+  const msgs = document.getElementById('msgs');
+  if (!msgs) return { update: () => {}, done: () => {} };
+  const div = document.createElement('div');
+  div.className = 'msg';
+  div.style.cssText = 'font-size:12px;color:var(--text2);font-family:var(--mono);padding:6px 24px;max-width:780px;margin:0 auto;display:flex;align-items:center;gap:8px;';
+  div.innerHTML = `<span class="progress-spinner" style="width:12px;height:12px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spinBounce 0.8s linear infinite;"></span><span class="progress-text">${escapeHTML(initialText)}</span>`;
+  msgs.appendChild(div);
+  scrollToBottom();
+  return {
+    update: (text) => {
+      const t = div.querySelector('.progress-text');
+      if (t) t.textContent = text;
+      scrollToBottom();
+    },
+    done: (text, emoji) => {
+      div.innerHTML = `<span>${emoji || '✓'}</span><span>${escapeHTML(text)}</span>`;
+    },
+    fail: (text) => {
+      div.innerHTML = `<span style="color:var(--red);">✗</span><span style="color:var(--red);">${escapeHTML(text)}</span>`;
+    }
+  };
+}
+
+async function waitForHFReady(base, tok, maxSeconds, progress) {
   maxSeconds = maxSeconds || 90;
   const start = Date.now();
-  renderSystemLine('⏳ waking HF Space (first boot after sleep can take ~60s)');
   while ((Date.now() - start) / 1000 < maxSeconds) {
+    const elapsed = Math.round((Date.now() - start) / 1000);
+    if (progress) progress.update(`waking HF Space… ${elapsed}s`);
     try {
       const r = await fetch(base + '/', { method: 'GET' });
       if (r.ok) {
@@ -603,54 +629,102 @@ async function waitForHFReady(base, tok, maxSeconds) {
         if (d && d.ok) return true;
       }
     } catch {}
-    await new Promise(res => setTimeout(res, 3000));
+    await new Promise(res => setTimeout(res, 2000));
   }
   return false;
 }
 
 async function showAgentDesktop() {
-  if (!agentSessionId || agentBackend !== 'hf') {
-    showToast('Desktop needs the HF Agent Backend running');
+  if (agentBackend !== 'hf') {
+    showToast('Desktop needs the HF Agent Backend');
     return;
   }
-  showToast('Starting desktop…');
-  // If the Space is asleep, poll until it wakes — iframe would otherwise
-  // show HF's "Preparing Space" screen until the user manually reloads.
   const base = getHfBackendUrl();
   const tok = getHfBackendToken();
-  await waitForHFReady(base, tok, 90);
-  // Runs Xvfb + fluxbox + x11vnc + websockify if they're installed.
-  // The Dockerfile below adds them. Desktop is served on port 6080.
-  const bootCmd = `
-set -e
-command -v Xvfb || { echo "desktop stack not installed — please update agent-backend and redeploy"; exit 1; }
-pgrep Xvfb >/dev/null || (Xvfb :0 -screen 0 1280x720x24 &) 2>/dev/null
-sleep 1
-pgrep fluxbox >/dev/null || (DISPLAY=:0 fluxbox &) 2>/dev/null
-sleep 1
-pgrep x11vnc >/dev/null || (x11vnc -display :0 -forever -nopw -shared -rfbport 5900 &) 2>/dev/null
-sleep 1
-pgrep websockify >/dev/null || (websockify --web=/usr/share/novnc 6080 localhost:5900 &) 2>/dev/null
-sleep 1
-echo ready
-`;
-  await agentRun(bootCmd, true, true);
-  // HF Spaces only exposes port 7860 externally, so the sandbox's port 6080
-  // isn't directly reachable. The backend needs a /desktop passthrough, or
-  // the Space has to be configured to expose 6080. For now, hit a helper
-  // endpoint if present, else show an instruction.
-  const base = getHfBackendUrl();
-  const tok = getHfBackendToken();
-  const url = `${base}/desktop?token=${encodeURIComponent(tok)}`;
-  // Probe
+  if (!base) { showToast('Set the HF backend URL in Settings first'); return; }
+
+  // Step 1: make sure the Space is awake. Quick check first — if it responds
+  // in under 2s we skip the polling loop entirely.
+  const p = renderProgressLine('checking HF Space…');
+  let ready = false;
   try {
-    const r = await fetch(url, { method: 'HEAD' });
-    if (r.ok || r.status === 405) {
-      chatPreviewShow(url, 'AI Desktop');
+    const quick = await Promise.race([
+      fetch(base + '/').then(r => r.ok),
+      new Promise(res => setTimeout(() => res(false), 2500)),
+    ]);
+    ready = quick === true;
+  } catch { ready = false; }
+  if (!ready) {
+    ready = await waitForHFReady(base, tok, 90, p);
+    if (!ready) {
+      p.fail('HF Space did not come online after 90s. Check the Logs tab on your Space — it may still be rebuilding or the build may have failed.');
       return;
     }
-  } catch {}
-  renderSystemLine('⚠ desktop stack not exposed — redeploy the backend with the new Dockerfile (agent-backend/Dockerfile) that includes Xvfb + noVNC + a /desktop proxy.');
+  }
+  p.done('HF Space is up', '✓');
+
+  // Step 2: make sure we have an agent session for running commands
+  if (!agentSessionId) {
+    const ps = renderProgressLine('creating sandbox session…');
+    await agentStart();
+    if (!agentSessionId) { ps.fail('could not create session'); return; }
+    ps.done('sandbox session ready', '✓');
+  }
+
+  // Step 3: verify the /desktop endpoint exists (i.e. the new app.py is deployed)
+  const pc = renderProgressLine('checking /desktop endpoint…');
+  try {
+    const r = await fetch(base + '/desktop?token=' + encodeURIComponent(tok));
+    if (r.status === 404) {
+      pc.fail('Your HF Space has the OLD app.py. Update app.py in the Space Files tab, commit, wait for rebuild, retry.');
+      return;
+    }
+    if (r.status === 500) {
+      const txt = await r.text();
+      if (txt.includes('requests')) {
+        pc.fail('Your HF Space has the OLD Dockerfile (missing python-requests). Update the Dockerfile, commit, wait ~7 min for rebuild, retry.');
+        return;
+      }
+      pc.fail('Backend error: ' + txt.slice(0, 180));
+      return;
+    }
+    pc.done('/desktop endpoint present', '✓');
+  } catch (e) {
+    pc.fail('Cannot reach /desktop: ' + e.message);
+    return;
+  }
+
+  // Step 4: start the noVNC stack inside the sandbox
+  const pn = renderProgressLine('starting Xvfb + fluxbox + x11vnc + noVNC…');
+  const bootCmd = `set -e
+command -v Xvfb >/dev/null || { echo MISSING_XVFB; exit 1; }
+command -v websockify >/dev/null || { echo MISSING_WEBSOCKIFY; exit 1; }
+pgrep -f "Xvfb :0" >/dev/null || (nohup Xvfb :0 -screen 0 1280x720x24 >/tmp/xvfb.log 2>&1 &)
+sleep 1
+pgrep -f fluxbox >/dev/null || (DISPLAY=:0 nohup fluxbox >/tmp/fluxbox.log 2>&1 &)
+sleep 1
+pgrep -f x11vnc >/dev/null || (nohup x11vnc -display :0 -forever -nopw -shared -rfbport 5900 -quiet >/tmp/x11vnc.log 2>&1 &)
+sleep 1
+pgrep -f websockify >/dev/null || (nohup websockify --web=/usr/share/novnc 6080 localhost:5900 >/tmp/websockify.log 2>&1 &)
+sleep 2
+ss -tlnp 2>/dev/null | grep -q 6080 && echo READY || echo NOT_LISTENING
+`;
+  const r = await agentRun(bootCmd, true, true);
+  const output = (r.stdout || '') + (r.stderr || '');
+  if (output.includes('MISSING_XVFB') || output.includes('MISSING_WEBSOCKIFY')) {
+    pn.fail('Desktop tools not installed — your HF Space has the OLD Dockerfile. Update and rebuild.');
+    return;
+  }
+  if (!output.includes('READY')) {
+    pn.fail('noVNC did not start listening on port 6080. Output: ' + output.slice(0, 180));
+    return;
+  }
+  pn.done('noVNC listening on :6080', '✓');
+
+  // Step 5: load the preview
+  const url = `${base}/desktop?token=${encodeURIComponent(tok)}`;
+  chatPreviewShow(url, 'AI Desktop');
+  renderSystemLine('🖥 desktop loaded — tap and drag in the preview to interact');
 }
 
 function renderSystemLine(text) {

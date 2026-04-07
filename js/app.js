@@ -358,11 +358,30 @@ document.addEventListener('DOMContentLoaded', () => {
   setupCodeEditor();
   setupAgentPanel();
 
-  // e2b key save
-  document.getElementById('save-key-e2b')?.addEventListener('click', () => {
-    const v = document.getElementById('key-e2b').value.trim();
-    profileSet('key-e2b', v);
-    showToast('e2b key saved');
+  // Agent backend (HF Space)
+  document.getElementById('save-hf-url')?.addEventListener('click', () => {
+    const v = document.getElementById('hf-backend-url').value.trim().replace(/\/$/, '');
+    profileSet('hf-backend-url', v);
+    showToast('Backend URL saved');
+  });
+  document.getElementById('save-hf-token')?.addEventListener('click', () => {
+    const v = document.getElementById('hf-backend-token').value.trim();
+    profileSet('hf-backend-token', v);
+    showToast('Backend token saved');
+  });
+  document.getElementById('test-hf-url')?.addEventListener('click', async () => {
+    const url = document.getElementById('hf-backend-url').value.trim().replace(/\/$/, '');
+    const tok = document.getElementById('hf-backend-token').value.trim();
+    if (!url) { showToast('Enter a URL first'); return; }
+    showToast('Testing backend…');
+    try {
+      const r = await fetch(url + '/', { headers: tok ? { 'Authorization': 'Bearer ' + tok } : {} });
+      if (!r.ok) { showToast('✗ ' + r.status); return; }
+      const d = await r.json();
+      showToast(d.ok ? '✓ backend up · auth=' + (d.auth_required ? 'on' : 'off') : '✗ unknown response');
+    } catch (e) {
+      showToast('✗ ' + (e.message || 'failed'));
+    }
   });
   // Replicate key test
   document.getElementById('test-rep-key')?.addEventListener('click', async () => {

@@ -1,20 +1,21 @@
 // ========== KEMLLM Agent Mode ==========
-// Backend: Pyodide (Python 3.12 in WebAssembly, runs in browser).
-// This gives a real persistent Python environment with a virtual filesystem.
-// Shell-like commands (ls, cat, pwd, echo, cd, mkdir, rm, touch, cp, mv,
-// whoami, uname, pip install, curl) are translated to Python equivalents.
-// Any other input is executed as Python in the persistent REPL.
+// Two backends, in priority order:
+//   1. HF Spaces backend (real Ubuntu container, full bash + apt + sudo)
+//      → user deploys agent-backend/ to a HF Space, pastes URL+token in Settings
+//   2. Pyodide fallback (Python 3.12 in WebAssembly, in-browser)
+//      → no setup, but limited to Python + emulated shell commands
 //
-// e2b was abandoned: their REST API has no command execution endpoint;
-// all commands go through gRPC-web streaming to envd which is not
-// callable from plain browser fetch().
+// e2b was tried and abandoned: their REST API has no command execution
+// endpoint; commands go through gRPC-web streaming to envd which a plain
+// browser fetch() cannot call.
 'use strict';
 
 let agentPyodide = null;
 let agentReady = false;
 let agentBusy = false;
 let agentMessages = [];
-let agentTemplate = 'python-pyodide';
+let agentBackend = 'pyodide'; // 'hf' or 'pyodide'
+let agentSessionId = null;    // for HF backend
 
 function agentLog(text, cls) {
   const term = document.getElementById('ag-term');
@@ -62,41 +63,92 @@ function agentSetStatus(state) {
   }
 }
 
-// ===== Pyodide boot =====
+// ===== HF backend helpers =====
+function getHfBackendUrl() { return (profileGet('hf-backend-url') || '').trim().replace(/\/$/, ''); }
+function getHfBackendToken() { return (profileGet('hf-backend-token') || '').trim(); }
+
+async function hfFetch(path, init) {
+  init = init || {};
+  init.headers = init.headers || {};
+  init.headers['Content-Type'] = 'application/json';
+  const tok = getHfBackendToken();
+  if (tok) init.headers['Authorization'] = 'Bearer ' + tok;
+  const url = getHfBackendUrl() + path;
+  return fetch(url, init);
+}
+
+// ===== Boot =====
 async function agentStart() {
   if (agentBusy) return;
   agentBusy = true;
+
+  const hfUrl = getHfBackendUrl();
+  if (hfUrl) {
+    // Real Linux backend
+    agentBackend = 'hf';
+    agentLog('› connecting to ' + hfUrl, 'sys');
+    try {
+      // Wake the Space if asleep
+      const health = await hfFetch('/', { method: 'GET' });
+      if (!health.ok) throw new Error('backend health check ' + health.status);
+      const hd = await health.json();
+      agentLog('  ✓ backend up · ' + (hd.service || 'kemllm-agent') + (hd.auth_required ? ' · token ok' : ' · OPEN MODE (no token)'), 'sys');
+      const r = await hfFetch('/sessions', { method: 'POST', body: '{}' });
+      if (!r.ok) {
+        const t = await r.text();
+        throw new Error('create session ' + r.status + ': ' + t.slice(0, 200));
+      }
+      const data = await r.json();
+      agentSessionId = data.session_id;
+      agentLog('✓ Ubuntu sandbox ready · session=' + agentSessionId, 'sys');
+      agentLog('  shell=' + (data.shell || '/bin/bash') + ' · cwd=' + (data.cwd || '/home/agent') + ' · user=' + (data.user || 'agent'), 'sys');
+      agentLog('  full bash · sudo · apt · pip · npm · git · curl · everything pre-installed', 'sys');
+      agentLog('', 'sys');
+      agentReady = true;
+      agentSetStatus('running');
+    } catch (e) {
+      agentLog('✗ HF backend failed: ' + (e.message || e), 'err');
+      agentLog('  falling back to Pyodide…', 'sys');
+      await pyodideStart();
+    } finally {
+      agentBusy = false;
+    }
+    return;
+  }
+  // Pyodide fallback
+  await pyodideStart();
+  agentBusy = false;
+}
+
+async function pyodideStart() {
+  agentBackend = 'pyodide';
   agentLog('› booting Python 3.12 sandbox (Pyodide WebAssembly)…', 'sys');
+  agentLog('  (no HF backend configured — see Settings to enable real Linux)', 'sys');
   try {
     agentPyodide = await getPyodide();
-    // Pre-import common stdlib so the AI has them ready
     agentPyodide.runPython(`
 import os, sys, json, io, shutil, pathlib, subprocess, datetime, math, random, re, urllib.request
 _cwd = '/home/agent'
 os.makedirs(_cwd, exist_ok=True)
 os.chdir(_cwd)
 `);
-    // Load micropip for package installs
     await agentPyodide.loadPackage(['micropip']);
-    agentLog('✓ sandbox ready', 'sys');
-    agentLog('  Python 3.12 · persistent filesystem at /home/agent · micropip available', 'sys');
-    agentLog('  shell-like: ls, cat, pwd, cd, echo, mkdir, rm, touch, cp, mv, whoami, uname, pip', 'sys');
-    agentLog('  python: write any Python code directly, state persists', 'sys');
+    agentLog('✓ Python sandbox ready', 'sys');
     agentLog('', 'sys');
     agentReady = true;
     agentSetStatus('running');
   } catch (e) {
     agentLog('✗ failed: ' + (e.message || e), 'err');
     agentSetStatus('error');
-  } finally {
-    agentBusy = false;
   }
 }
 
-function agentStop() {
-  // Pyodide can't actually be "stopped" without reloading the page, but we
-  // wipe the persistent state by running clear() and reset the flag.
-  if (agentPyodide) {
+async function agentStop() {
+  if (agentBackend === 'hf' && agentSessionId) {
+    try { await hfFetch('/sessions/' + agentSessionId, { method: 'DELETE' }); } catch {}
+    agentSessionId = null;
+    agentLog('› session destroyed', 'sys');
+  } else if (agentPyodide) {
     try {
       agentPyodide.runPython(`
 for _k in list(globals().keys()):
@@ -110,9 +162,9 @@ try:
 except Exception: pass
 `);
     } catch {}
+    agentLog('› sandbox state cleared', 'sys');
   }
   agentReady = false;
-  agentLog('› sandbox state cleared', 'sys');
   agentSetStatus('offline');
 }
 
@@ -122,11 +174,10 @@ function agentClear() {
   agentMessages = [];
 }
 
-// ===== Shell-command emulator =====
-// Returns {stdout, stderr, exitCode, runtime:'pyodide-shell'}
+// ===== Run a command on whichever backend is active =====
 async function agentRun(rawCmd, fromAgent, silent) {
   if (!rawCmd) return { stdout: '', stderr: '', exitCode: 0 };
-  if (!agentReady || !agentPyodide) {
+  if (!agentReady) {
     if (!silent) agentLog('✗ sandbox not started — press Start', 'err');
     return { stdout: '', stderr: 'sandbox offline', exitCode: -1 };
   }
@@ -134,19 +185,48 @@ async function agentRun(rawCmd, fromAgent, silent) {
     const prefix = fromAgent ? '[agent]$ ' : '$ ';
     agentLog(prefix + rawCmd, fromAgent ? 'agent-cmd' : 'cmd');
   }
-  // Redirect stdout/stderr
+
+  if (agentBackend === 'hf') {
+    try {
+      const r = await hfFetch('/sessions/' + agentSessionId + '/exec', {
+        method: 'POST',
+        body: JSON.stringify({ command: rawCmd })
+      });
+      if (!r.ok) {
+        const t = await r.text();
+        throw new Error('backend ' + r.status + ': ' + t.slice(0, 200));
+      }
+      const data = await r.json();
+      const stdout = data.stdout || '';
+      const stderr = data.stderr || '';
+      const exitCode = data.exit_code || 0;
+      if (!silent) {
+        if (stdout) stdout.trimEnd().split('\n').forEach(l => agentLog(l, 'out'));
+        if (stderr) stderr.trimEnd().split('\n').forEach(l => agentLog(l, 'err'));
+        if (exitCode !== 0) agentLog('exit ' + exitCode, 'sys');
+      }
+      return { stdout, stderr, exitCode };
+    } catch (e) {
+      if (!silent) agentLog('✗ ' + e.message, 'err');
+      return { stdout: '', stderr: e.message, exitCode: -1 };
+    }
+  }
+
+  // Pyodide path
+  if (!agentPyodide) {
+    if (!silent) agentLog('✗ pyodide not loaded', 'err');
+    return { stdout: '', stderr: 'no runtime', exitCode: -1 };
+  }
   let stdout = '', stderr = '';
   agentPyodide.setStdout({ batched: (s) => { stdout += s + '\n'; } });
   agentPyodide.setStderr({ batched: (s) => { stderr += s + '\n'; } });
   let exitCode = 0;
   try {
-    const py = buildPythonFor(rawCmd);
-    await agentPyodide.runPythonAsync(py);
+    await agentPyodide.runPythonAsync(buildPythonFor(rawCmd));
   } catch (e) {
     stderr += (e.message || String(e)) + '\n';
     exitCode = 1;
   }
-  // Restore default (no-op) stdout
   agentPyodide.setStdout({ batched: () => {} });
   agentPyodide.setStderr({ batched: () => {} });
   if (!silent) {
@@ -290,12 +370,20 @@ function getAgentSystemPrompt() {
   const persona = (profileGet('persona') || '').trim();
   const name = model?.name || 'the KEMLLM Agent';
   let s = `You are ${name}, running inside KEMLLM Agent Mode.`;
-  s += ' IMPORTANT: Your runtime is a Python 3.12 sandbox powered by Pyodide (WebAssembly, running in the user\'s browser). You have a PERSISTENT Python environment with a real virtual filesystem at /home/agent, full stdlib (os, pathlib, json, shutil, urllib, datetime, math, re, etc.), and you can install pure-Python packages via `micropip.install("pkg")`.';
-  s += '\n\nThis is NOT a full Linux VM. You do NOT have apt/sudo/systemctl, you CANNOT run binaries, you CANNOT install Linux Mint or any OS. Stop suggesting them. You CAN run arbitrary Python code and shell-like commands that emulate ls, cat, pwd, cd, echo, mkdir, rm, touch, cp, mv, head, tail, wc, grep, curl (via pyodide.http.pyfetch), pip, python, uname, date, env.';
-  s += '\n\nTo run a command, write a fenced bash code block with your command OR a python code block with Python code:\n```bash\nls /home/agent\n```\n```python\nimport json\nprint(json.dumps({"hello": "world"}))\n```\nBash blocks are translated to Python under the hood. Python blocks run directly. State (variables, files) persists between calls.';
-  s += '\n\nYou share this sandbox with the user. The user can also type commands at the > prompt.';
-  s += '\n\nStyle: Terse. Terminal. No bullet-point summaries. No "Sure!", "Certainly!", "Great question!". Short direct sentences. If the task is impossible in this sandbox, say so in one line and suggest what IS possible instead.';
-  s += ' Do NOT pretend to run commands. Either actually run them via a bash/python block, or say you cannot.';
+
+  if (agentBackend === 'hf') {
+    s += ' Your runtime is a REAL Ubuntu 22.04 Linux container running on Hugging Face Spaces. You have full bash, sudo (passwordless), apt, pip, python3, node, npm, git, curl, wget, vim, nano, jq, ripgrep, build-essential, and most common dev tools pre-installed. You can install anything else with apt or pip. You have a persistent working directory that survives between commands in this session.';
+    s += '\n\nTo run a command, write a fenced bash code block:\n```bash\nyour command here\n```\nMultiple bash blocks in one response are executed in order and the combined output is shown back to you. Working directory and shell state persist between blocks because the backend tracks cwd.';
+    s += '\n\nFor non-interactive apt installs, always use `sudo apt-get install -y`. For Python, use `pip3 install`. Avoid commands that require a TTY (top, htop, vim without `-c`, etc).';
+  } else {
+    s += ' Your runtime is a Python 3.12 sandbox powered by Pyodide (WebAssembly, in-browser). NO apt, NO sudo, NO real Linux. You have stdlib, virtual filesystem at /home/agent, and `micropip.install("pkg")` for pure-Python packages.';
+    s += '\n\nUse fenced ```bash blocks (translated to Python under the hood: ls, cat, pwd, cd, echo, mkdir, rm, touch, cp, mv, head, tail, wc, grep, pip, curl) or ```python blocks (run directly). State persists across calls.';
+    s += '\n\nIf the user asks for something requiring a real Linux box (apt install, system packages, browsers), tell them in ONE LINE to enable the real backend in Settings → Agent Backend.';
+  }
+
+  s += '\n\nYou share this sandbox with the user. The user can also type commands directly at the > prompt.';
+  s += '\n\nStyle: Terse. Terminal. No bullet-point summaries. No filler like "Sure!", "Certainly!", "Great question!". Short direct sentences. If a task is impossible, say so in one line.';
+  s += ' Do NOT pretend to run commands. Either actually run them via a code block, or say you cannot.';
   if (persona) s += '\n\nUser persona: ' + persona;
   return s;
 }

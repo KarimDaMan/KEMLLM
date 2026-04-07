@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=10">
+<link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body>
 
@@ -288,12 +288,21 @@
           </div>
 
           <div class="sp-row">
-            <label>e2b — Linux sandbox for Agent Mode</label>
+            <label>Agent Backend URL — real Ubuntu sandbox (optional, for Agent Mode)</label>
             <div style="display:flex;gap:8px;">
-              <input id="key-e2b" class="sp-input" type="password" placeholder="e2b_...">
-              <button id="save-key-e2b" class="sp-btn">Save</button>
+              <input id="hf-backend-url" class="sp-input" type="text" placeholder="https://yourname-kemllm-agent.hf.space">
+              <button id="save-hf-url" class="sp-btn">Save</button>
+              <button id="test-hf-url" class="sp-btn sec">Test</button>
             </div>
-            <div class="sub">Sign up free at e2b.dev/dashboard. Gives the AI (and you) a real Linux VM with shell access.</div>
+            <div class="sub">Deploy your own Ubuntu sandbox in 5 minutes — see <a href="https://github.com/karimdaman/kemllm/blob/main/agent-backend/SETUP.md" target="_blank" style="color:var(--accent);">agent-backend/SETUP.md</a>. Without this, Agent Mode falls back to in-browser Pyodide (Python only).</div>
+          </div>
+
+          <div class="sp-row">
+            <label>Agent Backend Token</label>
+            <div style="display:flex;gap:8px;">
+              <input id="hf-backend-token" class="sp-input" type="password" placeholder="the AGENT_TOKEN you set on your Space">
+              <button id="save-hf-token" class="sp-btn">Save</button>
+            </div>
           </div>
 
           <div class="sp-row" style="margin-top:22px;">
@@ -450,13 +459,13 @@
 <div id="sb-backdrop"></div>
 <div id="toast"></div>
 
-<script src="js/state.js?v=10"></script>
-<script src="js/models.js?v=10"></script>
-<script src="js/api.js?v=10"></script>
-<script src="js/chat.js?v=10"></script>
-<script src="js/code.js?v=10"></script>
-<script src="js/agent.js?v=10"></script>
-<script src="js/ui.js?v=10"></script>
-<script src="js/app.js?v=10"></script>
+<script src="js/state.js?v=11"></script>
+<script src="js/models.js?v=11"></script>
+<script src="js/api.js?v=11"></script>
+<script src="js/chat.js?v=11"></script>
+<script src="js/code.js?v=11"></script>
+<script src="js/agent.js?v=11"></script>
+<script src="js/ui.js?v=11"></script>
+<script src="js/app.js?v=11"></script>
 </body>
 </html>

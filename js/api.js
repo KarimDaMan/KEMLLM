@@ -23,11 +23,16 @@ async function replicateFetch(path, init) {
 }
 
 function loadAllSettings() {
-  ['anthropic', 'openai', 'google', 'xai', 'e2b'].forEach(p => {
+  ['anthropic', 'openai', 'google', 'xai'].forEach(p => {
     const v = profileGet('key-' + p) || '';
     const el = document.getElementById('key-' + p);
     if (el) el.value = v;
   });
+  // Agent backend
+  const hfu = document.getElementById('hf-backend-url');
+  if (hfu) hfu.value = profileGet('hf-backend-url') || '';
+  const hft = document.getElementById('hf-backend-token');
+  if (hft) hft.value = profileGet('hf-backend-token') || '';
   const rk = document.getElementById('rep-key');
   if (rk) rk.value = getRepKey();
   const temp = profileGet('temp') || '0.7';

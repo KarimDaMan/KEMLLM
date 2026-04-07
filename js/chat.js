@@ -1112,51 +1112,58 @@ async function showAgentDesktop() {
   }
   p.done('HF Space is up', '✓');
 
-  // Step 2: make sure we have an agent session for running commands.
-  // agentStart is now concurrent-safe and returns the same promise for
-  // every caller, so awaiting it here works even if setChatMode already
-  // kicked one off fire-and-forget.
-  if (!agentSessionId) {
-    const ps = renderProgressLine('creating sandbox session…');
-    try {
-      await agentStart();
-    } catch (e) {
-      ps.fail('agentStart threw: ' + (e.message || e));
-      return;
-    }
-    if (!agentSessionId) {
-      ps.fail('agentStart finished but no session_id. Backend may be in a weird state or agentBackend fell back to pyodide. Current: ' + agentBackend);
-      return;
-    }
-    ps.done('sandbox session ready', '✓');
-  }
-
-  // Step 3: verify the /desktop endpoint exists (i.e. the new app.py is deployed)
+  // Step 2: hit /desktop directly. With the new Dockerfile.desktop the
+  // noVNC stack is auto-started at container boot, so this should return
+  // the noVNC HTML straight away — no session or agentRun needed.
   const pc = renderProgressLine('checking /desktop endpoint…');
+  let needsManualBoot = false;
   try {
     const r = await fetch(base + '/desktop?token=' + encodeURIComponent(tok));
     if (r.status === 404) {
-      pc.fail('Your HF Space has the OLD app.py. Update app.py in the Space Files tab, commit, wait for rebuild, retry.');
+      pc.fail('Your HF Space has the OLD app.py. Upload the current app.py to the Space, commit, wait for rebuild.');
       return;
     }
-    if (r.status === 500) {
-      const txt = await r.text();
+    if (r.status === 401) {
+      pc.fail('/desktop returned 401 — the token in Settings does not match AGENT_TOKEN on the Space.');
+      return;
+    }
+    if (r.status === 502) {
+      // Old slim Dockerfile, or desktop variant that didn't auto-start.
+      // Fall through to the manual-boot path.
+      needsManualBoot = true;
+      pc.done('/desktop endpoint present (noVNC not up yet)', '⋯');
+    } else if (r.ok) {
+      pc.done('/desktop endpoint present', '✓');
+    } else {
+      const txt = await r.text().catch(() => '');
       if (txt.includes('requests')) {
-        pc.fail('Your HF Space has the OLD Dockerfile (missing python-requests). Update the Dockerfile, commit, wait ~7 min for rebuild, retry.');
+        pc.fail('Your HF Space has the OLD Dockerfile (missing python-requests). Update the Dockerfile, commit, wait for rebuild.');
         return;
       }
-      pc.fail('Backend error: ' + txt.slice(0, 180));
+      pc.fail('/desktop returned ' + r.status + ': ' + txt.slice(0, 180));
       return;
     }
-    pc.done('/desktop endpoint present', '✓');
   } catch (e) {
     pc.fail('Cannot reach /desktop: ' + e.message);
     return;
   }
 
-  // Step 4: start the noVNC stack inside the sandbox
-  const pn = renderProgressLine('starting Xvfb + fluxbox + x11vnc + noVNC…');
-  const bootCmd = `set -e
+  // Step 3 (only if noVNC isn't already running): create a session and
+  // spawn Xvfb/fluxbox/x11vnc/websockify via agentRun. This is the legacy
+  // path for the slim Dockerfile — the new Dockerfile.desktop skips it.
+  if (needsManualBoot) {
+    if (!agentSessionId) {
+      const ps = renderProgressLine('creating sandbox session…');
+      try { await agentStart(); }
+      catch (e) { ps.fail('agentStart threw: ' + (e.message || e)); return; }
+      if (!agentSessionId) {
+        ps.fail('agentStart finished but no session_id. agentBackend=' + agentBackend);
+        return;
+      }
+      ps.done('sandbox session ready', '✓');
+    }
+    const pn = renderProgressLine('starting Xvfb + fluxbox + x11vnc + noVNC…');
+    const bootCmd = `set -e
 command -v Xvfb >/dev/null || { echo MISSING_XVFB; exit 1; }
 command -v websockify >/dev/null || { echo MISSING_WEBSOCKIFY; exit 1; }
 pgrep -f "Xvfb :0" >/dev/null || (nohup Xvfb :0 -screen 0 1280x720x24 >/tmp/xvfb.log 2>&1 &)
@@ -1169,19 +1176,31 @@ pgrep -f websockify >/dev/null || (nohup websockify --web=/usr/share/novnc 6080 
 sleep 2
 ss -tlnp 2>/dev/null | grep -q 6080 && echo READY || echo NOT_LISTENING
 `;
-  const r = await agentRun(bootCmd, true, true);
-  const output = (r.stdout || '') + (r.stderr || '');
-  if (output.includes('MISSING_XVFB') || output.includes('MISSING_WEBSOCKIFY')) {
-    pn.fail('Desktop tools not installed — your HF Space has the OLD Dockerfile. Update and rebuild.');
-    return;
+    let rr;
+    try {
+      rr = await agentRun(bootCmd, true, true);
+    } catch (e) {
+      // Most likely agentSessionId went stale (container restarted). Retry once
+      // with a fresh session before giving up.
+      agentSessionId = '';
+      try { await agentStart(); }
+      catch (e2) { pn.fail('session refresh failed: ' + (e2.message || e2)); return; }
+      try { rr = await agentRun(bootCmd, true, true); }
+      catch (e3) { pn.fail('agentRun failed even after session refresh: ' + (e3.message || e3)); return; }
+    }
+    const output = (rr.stdout || '') + (rr.stderr || '');
+    if (output.includes('MISSING_XVFB') || output.includes('MISSING_WEBSOCKIFY')) {
+      pn.fail('Desktop tools not installed — your Space is running the SLIM Dockerfile. Upload Dockerfile.desktop (renamed to Dockerfile) and rebuild.');
+      return;
+    }
+    if (!output.includes('READY')) {
+      pn.fail('noVNC did not start listening on port 6080. Output: ' + output.slice(0, 180));
+      return;
+    }
+    pn.done('noVNC listening on :6080', '✓');
   }
-  if (!output.includes('READY')) {
-    pn.fail('noVNC did not start listening on port 6080. Output: ' + output.slice(0, 180));
-    return;
-  }
-  pn.done('noVNC listening on :6080', '✓');
 
-  // Step 5: load the preview
+  // Step 4: load the preview
   const url = `${base}/desktop?token=${encodeURIComponent(tok)}`;
   chatPreviewShow(url, 'AI Desktop');
   renderSystemLine('🖥 desktop loaded — tap and drag in the preview to interact');

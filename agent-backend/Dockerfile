@@ -1,11 +1,12 @@
-# KEMLLM Agent Backend — Ubuntu sandbox for Hugging Face Spaces
+# KEMLLM Agent Backend — Ubuntu sandbox with optional desktop
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
+ENV DISPLAY=:0
 
-# Pre-install commonly used dev tools so the AI doesn't have to apt-install
-# everything at runtime
+# Core dev tools + desktop stack (Xvfb, fluxbox window manager, x11vnc,
+# websockify/noVNC for browser-based access, chromium for web browsing)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv \
     curl wget git vim nano \
@@ -16,10 +17,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo unzip zip tar xz-utils \
     nodejs npm \
     sqlite3 \
+    xvfb fluxbox x11vnc websockify novnc \
+    xterm scrot imagemagick xdotool \
+    chromium-browser \
+    fonts-dejavu fonts-liberation \
  && rm -rf /var/lib/apt/lists/*
 
+# Symlink novnc's vnc.html → index.html so /vnc works at root
+RUN ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html || true
+
 # Python deps for the Flask service
-RUN pip3 install --no-cache-dir flask flask-cors gunicorn
+RUN pip3 install --no-cache-dir flask flask-cors gunicorn requests
 
 # Create the agent user with passwordless sudo so the AI can install things
 RUN useradd -m -s /bin/bash agent \
@@ -29,7 +37,7 @@ RUN useradd -m -s /bin/bash agent \
 # Application
 WORKDIR /app
 COPY app.py /app/app.py
-RUN chown -R agent:agent /app
+RUN chown -R agent:agent /app /home/agent
 
 USER agent
 WORKDIR /home/agent

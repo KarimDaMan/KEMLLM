@@ -28,7 +28,8 @@ import secrets
 import time
 import threading
 import signal
-from flask import Flask, request, jsonify
+import mimetypes
+from flask import Flask, request, jsonify, send_file, Response, abort
 from flask_cors import CORS
 
 AGENT_TOKEN = os.environ.get("AGENT_TOKEN", "").strip()
@@ -203,6 +204,72 @@ def read_file(sid):
         return jsonify({"error": "not found"}), 404
     with open(full) as f:
         return jsonify({"content": f.read(), "path": full})
+
+
+@app.route("/desktop", methods=["GET", "HEAD", "OPTIONS"])
+@app.route("/desktop/<path:rest>", methods=["GET", "HEAD", "OPTIONS"])
+def desktop_proxy(rest=""):
+    """Reverse-proxy the sandbox's noVNC web UI (running on localhost:6080)
+    through HF Spaces' single exposed port 7860 so the browser iframe can
+    reach it. The AI is expected to have already started Xvfb + fluxbox +
+    x11vnc + websockify inside the container via a bash command.
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    if AGENT_TOKEN:
+        tok = request.args.get("token", "")
+        if tok != AGENT_TOKEN:
+            return jsonify({"error": "invalid token"}), 401
+    try:
+        import requests as _rq
+    except ImportError:
+        return jsonify({"error": "requests library missing — update agent-backend Dockerfile"}), 500
+    target = "http://127.0.0.1:6080/" + (rest or "vnc_lite.html")
+    # Pass through query string (minus our auth token)
+    qs = {k: v for k, v in request.args.items() if k != "token"}
+    try:
+        r = _rq.get(target, params=qs, timeout=10, stream=True)
+    except Exception as e:
+        return jsonify({"error": "noVNC not running inside sandbox. Ask the AI to run: `Xvfb :0 -screen 0 1280x720x24 & fluxbox & x11vnc -display :0 -forever -nopw -shared -rfbport 5900 & websockify 6080 localhost:5900 &`. Detail: " + str(e)}), 502
+    # Rewrite any absolute URLs in the HTML to stay under /desktop
+    ct = r.headers.get("Content-Type", "application/octet-stream")
+    body = r.content
+    resp = Response(body, status=r.status_code, mimetype=ct)
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
+
+
+@app.route("/sessions/<sid>/files/<path:filepath>", methods=["GET", "OPTIONS"])
+def serve_file(sid, filepath):
+    """Serve a file from the session directory so iframes can load it.
+    Because iframes can't attach Authorization headers, auth here is via
+    ?token=... query param (plus the session id is a random secret too).
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    if AGENT_TOKEN:
+        tok = request.args.get("token", "")
+        if tok != AGENT_TOKEN:
+            return jsonify({"error": "invalid token"}), 401
+    with SESSIONS_LOCK:
+        s = SESSIONS.get(sid)
+    if not s:
+        return jsonify({"error": "session not found"}), 404
+    full = filepath
+    if not full.startswith("/"):
+        full = os.path.join(s["cwd"], full)
+    full = os.path.normpath(full)
+    # Safety: only allow files inside the agent home
+    if not full.startswith("/home/agent/"):
+        return jsonify({"error": "path outside session"}), 403
+    if not os.path.isfile(full):
+        return jsonify({"error": "not a file"}), 404
+    mime, _ = mimetypes.guess_type(full)
+    with open(full, "rb") as f:
+        data = f.read()
+    resp = Response(data, mimetype=mime or "application/octet-stream")
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
 
 
 @app.route("/sessions/<sid>", methods=["DELETE", "OPTIONS"])

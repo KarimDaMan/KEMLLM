@@ -333,6 +333,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('send-btn')?.addEventListener('click', sendMessage);
   document.getElementById('stop-btn')?.addEventListener('click', stopAgentLoop);
 
+  // Chat preview pane controls
+  document.getElementById('chat-preview-close')?.addEventListener('click', chatPreviewClose);
+  document.getElementById('chat-preview-reload')?.addEventListener('click', chatPreviewReload);
+  document.getElementById('chat-preview-fs')?.addEventListener('click', chatPreviewFullscreen);
+
   // Click outside to close dropdowns
   document.addEventListener('click', (e) => {
     if (e.target.closest('.tb-model') || e.target.closest('.drop')) return;

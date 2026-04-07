@@ -451,6 +451,7 @@ async function runAgentModeChat(userText) {
       typingEl.remove();
       renderAIMessage(model, parseMarkdown(full), full);
       messages.push({ role: 'assistant', content: full });
+      processAIMarkers(full);
 
       if (agentLoopAbort) { renderSystemLine('⏹ stopped by user'); break; }
 
@@ -502,6 +503,100 @@ function stopAgentLoop() {
   if (!agentLoopRunning) return;
   agentLoopAbort = true;
   showToast('Stopping agent…');
+}
+
+// ===== Chat preview pane =====
+function chatPreviewShow(url, title) {
+  const pane = document.getElementById('chat-preview');
+  const frame = document.getElementById('chat-preview-frame');
+  const titleEl = document.getElementById('chat-preview-title');
+  if (!pane || !frame) return;
+  if (title && titleEl) titleEl.textContent = title;
+  frame.src = url;
+  pane.classList.add('show');
+}
+function chatPreviewClose() {
+  const pane = document.getElementById('chat-preview');
+  const frame = document.getElementById('chat-preview-frame');
+  if (pane) { pane.classList.remove('show'); pane.classList.remove('fullscreen'); }
+  if (frame) frame.src = 'about:blank';
+}
+function chatPreviewReload() {
+  const frame = document.getElementById('chat-preview-frame');
+  if (frame && frame.src && frame.src !== 'about:blank') frame.src = frame.src;
+}
+function chatPreviewFullscreen() {
+  const pane = document.getElementById('chat-preview');
+  if (pane) pane.classList.toggle('fullscreen');
+}
+
+// Parse [SHOW_PREVIEW ...] and [SHOW_DESKTOP] markers from AI responses
+function processAIMarkers(text) {
+  // [SHOW_PREVIEW path=foo.html title="My page"]
+  // [SHOW_PREVIEW url=https://... ]
+  const previewRe = /\[SHOW_PREVIEW\s+([^\]]+)\]/i;
+  const m = text.match(previewRe);
+  if (m) {
+    const args = m[1];
+    const pathMatch = args.match(/path=(\S+)/i);
+    const urlMatch = args.match(/url=(\S+)/i);
+    const titleMatch = args.match(/title="([^"]+)"/i) || args.match(/title=(\S+)/i);
+    const title = titleMatch ? titleMatch[1] : 'Preview';
+    if (urlMatch) {
+      chatPreviewShow(urlMatch[1], title);
+    } else if (pathMatch && agentSessionId) {
+      const base = getHfBackendUrl();
+      const tok = getHfBackendToken();
+      const path = pathMatch[1].replace(/^\/?/, '');
+      const url = `${base}/sessions/${agentSessionId}/files/${encodeURI(path)}?token=${encodeURIComponent(tok)}`;
+      chatPreviewShow(url, title);
+    }
+  }
+  // [SHOW_DESKTOP] → start and show the noVNC desktop
+  if (/\[SHOW_DESKTOP\]/i.test(text)) {
+    showAgentDesktop();
+  }
+}
+
+// Start or restart a noVNC desktop inside the sandbox and show it in the preview
+async function showAgentDesktop() {
+  if (!agentSessionId || agentBackend !== 'hf') {
+    showToast('Desktop needs the HF Agent Backend running');
+    return;
+  }
+  showToast('Starting desktop…');
+  // Runs Xvfb + fluxbox + x11vnc + websockify if they're installed.
+  // The Dockerfile below adds them. Desktop is served on port 6080.
+  const bootCmd = `
+set -e
+command -v Xvfb || { echo "desktop stack not installed — please update agent-backend and redeploy"; exit 1; }
+pgrep Xvfb >/dev/null || (Xvfb :0 -screen 0 1280x720x24 &) 2>/dev/null
+sleep 1
+pgrep fluxbox >/dev/null || (DISPLAY=:0 fluxbox &) 2>/dev/null
+sleep 1
+pgrep x11vnc >/dev/null || (x11vnc -display :0 -forever -nopw -shared -rfbport 5900 &) 2>/dev/null
+sleep 1
+pgrep websockify >/dev/null || (websockify --web=/usr/share/novnc 6080 localhost:5900 &) 2>/dev/null
+sleep 1
+echo ready
+`;
+  await agentRun(bootCmd, true, true);
+  // HF Spaces only exposes port 7860 externally, so the sandbox's port 6080
+  // isn't directly reachable. The backend needs a /desktop passthrough, or
+  // the Space has to be configured to expose 6080. For now, hit a helper
+  // endpoint if present, else show an instruction.
+  const base = getHfBackendUrl();
+  const tok = getHfBackendToken();
+  const url = `${base}/desktop?token=${encodeURIComponent(tok)}`;
+  // Probe
+  try {
+    const r = await fetch(url, { method: 'HEAD' });
+    if (r.ok || r.status === 405) {
+      chatPreviewShow(url, 'AI Desktop');
+      return;
+    }
+  } catch {}
+  renderSystemLine('⚠ desktop stack not exposed — redeploy the backend with the new Dockerfile (agent-backend/Dockerfile) that includes Xvfb + noVNC + a /desktop proxy.');
 }
 
 function renderSystemLine(text) {

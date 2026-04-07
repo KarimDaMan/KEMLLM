@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=18">
+<link rel="stylesheet" href="css/style.css?v=19">
 </head>
 <body>
 
@@ -130,6 +130,18 @@
 
     <!-- CHAT PANEL -->
     <div id="chat-panel" class="panel active">
+      <!-- Collapsible preview overlay — AI can open this to show files / HTML / images -->
+      <div id="chat-preview" class="chat-preview">
+        <div class="chat-preview-head">
+          <span id="chat-preview-title">Preview</span>
+          <div style="display:flex;gap:6px;">
+            <button id="chat-preview-reload" class="code-btn" style="padding:4px 10px;font-size:11px;">↻</button>
+            <button id="chat-preview-fs" class="code-btn" style="padding:4px 10px;font-size:11px;" title="Fullscreen">⛶</button>
+            <button id="chat-preview-close" class="code-btn" style="padding:4px 10px;font-size:11px;" title="Close">✕</button>
+          </div>
+        </div>
+        <iframe id="chat-preview-frame" class="chat-preview-frame" sandbox="allow-scripts allow-forms allow-popups" src="about:blank"></iframe>
+      </div>
       <div id="chat-area">
         <div id="term-boot"></div>
         <div id="home-screen">
@@ -406,13 +418,13 @@
 <div id="sb-backdrop"></div>
 <div id="toast"></div>
 
-<script src="js/state.js?v=18"></script>
-<script src="js/models.js?v=18"></script>
-<script src="js/api.js?v=18"></script>
-<script src="js/chat.js?v=18"></script>
-<script src="js/code.js?v=18"></script>
-<script src="js/agent.js?v=18"></script>
-<script src="js/ui.js?v=18"></script>
-<script src="js/app.js?v=18"></script>
+<script src="js/state.js?v=19"></script>
+<script src="js/models.js?v=19"></script>
+<script src="js/api.js?v=19"></script>
+<script src="js/chat.js?v=19"></script>
+<script src="js/code.js?v=19"></script>
+<script src="js/agent.js?v=19"></script>
+<script src="js/ui.js?v=19"></script>
+<script src="js/app.js?v=19"></script>
 </body>
 </html>

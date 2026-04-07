@@ -241,6 +241,7 @@ function getSystemPrompt(model) {
   lines.push('- VIDEO GENERATION. Emit `[GENERATE_VIDEO prompt="..."]`.');
   lines.push('- IMAGE EDITING. Emit `[EDIT_IMAGE prompt="..."]` to re-edit the most recent image in the conversation.');
   lines.push('- MATH. Use LaTeX inside `$...$` for inline and `$$...$$` for display. Rendered with KaTeX.');
+  lines.push('- PERSISTENT MEMORY. When the user tells you something important about themselves (name, preferences, projects, skills, goals, context) that would be useful in future conversations, emit `[REMEMBER fact="short declarative sentence"]`. One marker per fact. Only remember durable facts, not transient ones. The user cannot see this marker in your reply (it is stripped).');
 
   // Sandbox web access — a real constraint the AI needs to know about.
   if (profileGet('sandbox-web') !== '1') {
@@ -257,13 +258,24 @@ function getSystemPrompt(model) {
     lines.push(persona);
   }
 
-  // Persistent memories.
+  // Persistent memories — user-added in Settings → Memory.
   try {
     const mems = JSON.parse(profileGet('memories') || '[]');
     if (Array.isArray(mems) && mems.length) {
       lines.push('');
-      lines.push('Remembered facts:');
+      lines.push('Remembered facts (set by the user):');
       mems.forEach((m) => { lines.push('- ' + m); });
+    }
+  } catch {}
+
+  // AI-written memory — things the AI itself chose to remember via
+  // [REMEMBER fact="..."] markers. User can view but not edit these.
+  try {
+    const aiMems = JSON.parse(profileGet('ai-memory') || '[]');
+    if (Array.isArray(aiMems) && aiMems.length) {
+      lines.push('');
+      lines.push('What you know about the user (from past conversations):');
+      aiMems.forEach((m) => { lines.push('- ' + m); });
     }
   } catch {}
 

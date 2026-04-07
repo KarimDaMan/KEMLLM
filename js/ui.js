@@ -466,6 +466,48 @@ function deleteMemory(i) {
   setMemories(mems);
 }
 
+// ===== AI-written memory (read-only for the user) =====
+// The AI emits [REMEMBER fact="..."] markers during conversation. Those
+// facts are appended here and injected into every future system prompt.
+// The user can VIEW this list but not edit individual entries — only the
+// AI can add to it. A "Reset" button clears the whole list as an escape
+// hatch in case the AI has learned something wrong.
+function getAIMemory() {
+  try { return JSON.parse(profileGet('ai-memory') || '[]'); } catch { return []; }
+}
+function setAIMemory(mems) {
+  // Cap to last 50 entries so the system prompt doesn't explode.
+  if (mems.length > 50) mems = mems.slice(mems.length - 50);
+  profileSet('ai-memory', JSON.stringify(mems));
+  renderAIMemory();
+}
+function appendAIMemory(fact) {
+  fact = String(fact || '').trim();
+  if (!fact) return;
+  const mems = getAIMemory();
+  // Avoid exact duplicates.
+  if (mems.includes(fact)) return;
+  mems.push(fact);
+  setAIMemory(mems);
+}
+function renderAIMemory() {
+  const list = document.getElementById('sp-aimem-list');
+  if (!list) return;
+  const mems = getAIMemory();
+  if (!mems.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:4px 0;">Nothing yet. As you chat, the AI will remember facts about you here.</div>';
+    return;
+  }
+  list.innerHTML = mems.map((m) =>
+    `<div class="sp-mem sp-mem-ai"><div class="sp-mem-text">${escapeHTML(m)}</div></div>`
+  ).join('');
+}
+function resetAIMemory() {
+  if (!confirm('Clear everything the AI has remembered about you? This cannot be undone.')) return;
+  setAIMemory([]);
+  showToast('AI memory cleared');
+}
+
 // ===== Debug log render =====
 function renderDebugLog() {
   const el = document.getElementById('sp-debug-log');
@@ -494,6 +536,7 @@ function exportAllChats() {
     chats: (typeof loadHistory === 'function' ? loadHistory() : []),
     persona: profileGet('persona') || '',
     memories: getMemories(),
+    ai_memory: getAIMemory(),
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);

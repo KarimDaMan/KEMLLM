@@ -927,6 +927,8 @@ input,textarea{font-family:inherit;color:inherit;}
 .sp-mem-text{flex:1;min-width:0;font-size:12.5px;line-height:1.5;color:var(--text);word-break:break-word;}
 .sp-mem-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;line-height:1;padding:0 6px;flex-shrink:0;border-radius:5px;-webkit-tap-highlight-color:transparent;}
 .sp-mem-del:hover,.sp-mem-del:active{background:rgba(248,113,113,.15);color:var(--red);}
+.sp-mem-ai{border-left:2px solid #4a9eff;background:rgba(74,158,255,.04);}
+.sp-mem-ai .sp-mem-text{color:var(--text2);}
 
 /* Sandbox toggle + generic checkbox row */
 .sp-toggle{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text);}

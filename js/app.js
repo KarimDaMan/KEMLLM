@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v58 · rewrite system prompt as terse tool manifest (no personality boilerplate)';
+const KEMLLM_BUILD = 'v59 · AI-written memory: [REMEMBER fact="..."] marker, read-only Settings view, reset button';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -451,6 +451,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') { e.preventDefault(); addMemoryFromInput(); }
   });
 
+  // AI-written memory (read-only view + reset button)
+  document.getElementById('sp-aimem-reset')?.addEventListener('click', resetAIMemory);
+
   // Sandbox web access toggle
   const sandboxWebEl = document.getElementById('sp-sandbox-web');
   if (sandboxWebEl) {
@@ -469,6 +472,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (panel && panel.classList.contains('active') && typeof renderDebugLog === 'function') {
       renderDebugLog();
       if (typeof renderMemories === 'function') renderMemories();
+      if (typeof renderAIMemory === 'function') renderAIMemory();
     }
   });
   const settingsPanel = document.getElementById('settings-panel');

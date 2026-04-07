@@ -462,6 +462,7 @@ function stripAIMarkers(text) {
     .replace(/\[GENERATE_IMAGE\s+prompt=(?:"[^"]+"|'[^']+'|[^\]]+)\]/gi, '')
     .replace(/\[GENERATE_VIDEO\s+prompt=(?:"[^"]+"|'[^']+'|[^\]]+)\]/gi, '')
     .replace(/\[EDIT_IMAGE\s+prompt=(?:"[^"]+"|'[^']+'|[^\]]+)\]/gi, '')
+    .replace(/\[REMEMBER\s+fact=(?:"[^"]+"|'[^']+'|[^\]]+)\]/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -989,6 +990,17 @@ function processAIMarkers(text) {
     }
     if (prompt && lastImg) {
       handleEditImageRequest(prompt, { url: lastImg, isImage: true });
+    }
+  }
+  // [REMEMBER fact="..."] — AI writes to its own persistent memory about
+  // the user. User can VIEW this in Settings → AI Memory but cannot edit
+  // individual entries. Multiple markers per response are allowed.
+  const rememberRe = /\[REMEMBER\s+fact=(?:"([^"]+)"|'([^']+)'|([^\]]+))\]/gi;
+  let rm;
+  while ((rm = rememberRe.exec(text)) !== null) {
+    const fact = (rm[1] || rm[2] || rm[3] || '').trim();
+    if (fact && typeof appendAIMemory === 'function') {
+      appendAIMemory(fact);
     }
   }
 }

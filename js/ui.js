@@ -290,57 +290,12 @@ function toggleWebSearch() {
 }
 
 // ===== MCP Connectors =====
-const MCP_SERVICES = [
-  { id: 'replicate', name: 'Replicate', desc: 'AI models · api.replicate.com', icon: 'R', url: null, always: true, mcp: 'https://mcp.replicate.com/sse' },
-  { id: 'e2b', name: 'e2b Sandbox', desc: 'Linux VM for Agent Mode · e2b.dev', icon: '⬢', url: 'https://e2b.dev/dashboard', always: false },
-  { id: 'github', name: 'GitHub', desc: 'Repos and gists', icon: 'G', url: 'https://github.com/settings/applications/new' },
-  { id: 'gdrive', name: 'Google Drive', desc: 'File access', icon: 'D', url: 'https://accounts.google.com/o/oauth2/auth?scope=https://www.googleapis.com/auth/drive.readonly' },
-  { id: 'gmail', name: 'Gmail', desc: 'Email access', icon: 'M', url: 'https://accounts.google.com/o/oauth2/auth?scope=https://www.googleapis.com/auth/gmail.readonly' },
-  { id: 'gcal', name: 'Google Calendar', desc: 'Events', icon: 'C', url: 'https://accounts.google.com/o/oauth2/auth?scope=https://www.googleapis.com/auth/calendar' },
-  { id: 'notion', name: 'Notion', desc: 'Pages and DBs', icon: 'N', url: 'https://api.notion.com/v1/oauth/authorize?client_id=kemllm&response_type=code' },
-  { id: 'slack', name: 'Slack', desc: 'Messages', icon: 'S', url: 'https://slack.com/oauth/v2/authorize?scope=channels:read,chat:write' },
-  { id: 'spotify', name: 'Spotify', desc: 'Playback', icon: 'S', url: 'https://accounts.spotify.com/authorize?scope=user-read-playback-state,user-modify-playback-state' },
-  { id: 'perplexity', name: 'Perplexity', desc: 'Search', icon: 'P', url: 'https://www.perplexity.ai/settings/api' }
-];
-function openMCP() {
-  document.getElementById('mcp-modal').classList.add('open');
-  renderMCP();
-}
-function closeMCP() { document.getElementById('mcp-modal').classList.remove('open'); }
-
-function getMCPState() { return profileGetJSON('mcp_connected', { replicate: true, piston: true }); }
-function setMCPConnected(id, val) {
-  const s = getMCPState();
-  s[id] = val;
-  profileSetJSON('mcp_connected', s);
-  updateMCPBadge();
-}
-function loadMCPState() { updateMCPBadge(); }
-function updateMCPBadge() {
-  const s = getMCPState();
-  const count = Object.values(s).filter(Boolean).length;
-  const badge = document.getElementById('si-conn-badge');
-  if (badge) badge.textContent = count;
-}
-function renderMCP() {
-  const list = document.getElementById('mcp-list');
-  if (!list) return;
-  const state = getMCPState();
-  list.innerHTML = MCP_SERVICES.map(s => {
-    const connected = s.always || state[s.id];
-    return `<div class="mcp-item"><div class="mcp-icon">${s.icon}</div><div class="mcp-info"><div class="mcp-name">${escapeHTML(s.name)}</div><div class="mcp-desc">${escapeHTML(s.desc)}</div></div><button class="mcp-btn${connected ? ' connected' : ''}" onclick="connectMCP('${s.id}')">${s.always ? 'Active' : connected ? 'Connected' : 'Connect'}</button></div>`;
-  }).join('');
-}
-function connectMCP(id) {
-  const svc = MCP_SERVICES.find(s => s.id === id);
-  if (!svc || svc.always) return;
-  if (svc.url) {
-    window.open(svc.url, 'mcp_' + id, 'width=700,height=800');
-  }
-  setMCPConnected(id, true);
-  renderMCP();
-  showToast('Connecting to ' + svc.name);
-}
+// REMOVED. The old "Connectors" modal was placebo — it just opened an OAuth
+// popup and marked the service as "connected" without actually doing any
+// token exchange or MCP handshake. Anything that calls loadMCPState /
+// updateMCPBadge keeps working as a no-op so there are no ReferenceErrors.
+function loadMCPState() {}
+function updateMCPBadge() {}
 
 // ===== User modal =====
 function openUserModal() { document.getElementById('user-modal').classList.add('open'); }

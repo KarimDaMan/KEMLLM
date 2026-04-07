@@ -44,13 +44,6 @@ function setChatMode(mode) {
     if (b.id === 'chat-desktop-btn') return;
     b.classList.toggle('active', b.dataset.mode === mode);
   });
-  // Desktop button only visible while in Agent mode AND when the /desktop
-  // probe has succeeded (probeDesktopSupport sets data-desktop-ready=1).
-  const dBtn = document.getElementById('chat-desktop-btn');
-  if (dBtn) {
-    const ready = dBtn.dataset.desktopReady === '1';
-    dBtn.classList.toggle('show', mode === 'agent' && ready);
-  }
   const lock = document.getElementById('mode-agent-lock');
   if (lock) lock.style.display = agentUnlocked ? 'none' : '';
   const input = document.getElementById('input-text');
@@ -1034,8 +1027,7 @@ async function probeDesktopSupport() {
     if (r.status === 200 || r.status === 502 || r.status === 401) {
       btn.dataset.desktopReady = '1';
       _desktopProbedOnce = true;
-      // Only actually reveal it if the user is currently in Agent mode.
-      if (chatMode === 'agent') btn.classList.add('show');
+      btn.classList.add('show');
     } else {
       hide();
     }
@@ -1258,6 +1250,8 @@ function newChat() {
   closeDrawer();
   // Close any open preview pane from a previous chat
   if (typeof chatPreviewClose === 'function') chatPreviewClose();
+  // Clear any stuck highlight on the old chat in the sidebar / history list
+  if (typeof renderHistory === 'function') renderHistory();
 }
 
 // ===== Attachments =====

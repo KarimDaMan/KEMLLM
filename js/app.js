@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v67 · Dockerfile.desktop now uses nginx front door to proxy noVNC WebSocket; load vnc_lite.html with path=desktop/websockify';
+const KEMLLM_BUILD = 'v68 · kill fake MCP connectors, kill Switch Profile, skip desktop btn in generic mode-btn handler (was causing double-click); desktop button visible regardless of mode when probe succeeds';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -218,7 +218,6 @@ const BOOT_LINES = [
   { text: '   Lightricks/LTX-Video', cls: 'tb-white', stagger: true },
   { text: '/– registering code runtimes', cls: 'tb-blue' },
   { text: '   python 3.12 · node 18 · typescript · c · c++ · rust · go · java · c# · bash · lua', cls: 'tb-grey', stagger: true },
-  { text: '/– mounting MCP connectors', cls: 'tb-blue' },
   { text: '   github · gdrive · gmail · gcal · notion · slack · spotify · perplexity', cls: 'tb-grey', stagger: true },
   { text: '/– running self-checks', cls: 'tb-blue' },
   { text: '   latency        12ms    [OK]', cls: 'tb-green', stagger: true },
@@ -313,7 +312,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const p = el.dataset.panel;
-    if (p === 'connectors') { openMCP(); return; }
     if (p) siNav(p);
   }
   document.addEventListener('click', handleSidebarNavClick, true);
@@ -368,7 +366,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tb-img-model')?.addEventListener('click', toggleImgDrop);
   document.getElementById('tb-vid-model')?.addEventListener('click', toggleVidDrop);
   document.getElementById('tb-web')?.addEventListener('click', toggleWebSearch);
-  document.getElementById('tb-conn')?.addEventListener('click', openMCP);
   document.getElementById('tb-settings')?.addEventListener('click', () => siNav('settings'));
 
   // Topbar tabs
@@ -387,7 +384,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('um-models')?.addEventListener('click', () => { closeUserModal(); siNav('models'); });
 
   // MCP modal close
-  document.getElementById('mcp-close')?.addEventListener('click', closeMCP);
 
   // Input
   const input = document.getElementById('input-text');
@@ -524,8 +520,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   setupCodeEditor();
 
-  // Mode pills under chat input
+  // Mode pills under chat input. The Desktop button has its own handler
+  // and no data-mode attribute — skip it here so we don't clobber state
+  // with setChatMode(undefined).
   document.querySelectorAll('.mode-btn').forEach(b => {
+    if (!b.dataset.mode) return;
     b.addEventListener('click', () => setChatMode(b.dataset.mode));
   });
 

@@ -176,17 +176,19 @@ function renderUserMessage(text, attachments) {
   div.className = 'msg msg-u';
   let attHtml = '';
   if (attachments && attachments.length) {
+    // Small uniform 72×72 squares, ABOVE the text bubble, right-aligned
     const items = attachments.map(a => {
       const isImg = a.isImage || (a.mime || '').startsWith('image/');
-      if (isImg && a.dataUrl) {
-        return `<img src="${a.dataUrl}" style="max-width:180px;max-height:180px;border-radius:10px;border:1px solid var(--border2);">`;
+      const src = a.dataUrl || a.url;
+      if (isImg && src) {
+        const safeUrl = String(src).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+        return `<div class="msg-att msg-att-img"><img src="${safeUrl}" onclick="openImageViewer('${safeUrl}')"></div>`;
       }
-      // Non-image or dataUrl-stripped (post-reload) → file chip
       const icon = typeof fileIcon === 'function' ? fileIcon(a.mime || '', a.name || '') : '📎';
-      const size = a.size ? ' · ' + (typeof formatBytes === 'function' ? formatBytes(a.size) : a.size + ' B') : '';
-      return `<div style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-size:11px;color:var(--text2);">${icon} ${escapeHTML(a.name || 'file')}${size}</div>`;
+      const name = escapeHTML((a.name || 'file').slice(0, 20));
+      return `<div class="msg-att msg-att-file" title="${escapeHTML(a.name || 'file')}"><span class="msg-att-icon">${icon}</span><span class="msg-att-name">${name}</span></div>`;
     }).join('');
-    attHtml = '<div style="display:flex;gap:6px;justify-content:flex-end;margin-bottom:6px;flex-wrap:wrap;">' + items + '</div>';
+    attHtml = `<div class="msg-att-row">${items}</div>`;
   }
   div.innerHTML = attHtml + `<div class="bubble">${escapeHTML(text)}</div>`;
   msgs.appendChild(div);

@@ -854,3 +854,29 @@ input,textarea{font-family:inherit;color:inherit;}
   #img-viewer-input{font-size:16px;padding:12px 16px;}
   .img-viewer-send{width:40px;height:40px;}
 }
+
+/* ========== ATTACHMENTS — small uniform squares ==========
+   Both the pre-send attachment preview (above the input) and the
+   attachments shown inside sent user messages use the same 72x72
+   square chip style. Images show as tiny thumbnails; files show as
+   icon + truncated name on a grey background. */
+.msg-att-row{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px;}
+.msg-att{width:72px;height:72px;border-radius:10px;border:1px solid var(--border2);background:var(--bg2);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.msg-att-img img{width:100%;height:100%;object-fit:cover;cursor:pointer;display:block;}
+.msg-att-file{flex-direction:column;gap:4px;padding:6px;}
+.msg-att-icon{font-size:22px;line-height:1;}
+.msg-att-name{font-size:9px;color:var(--text3);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60px;}
+
+/* Pre-send attach preview (above the input) — reuse the same small square look */
+#attach-preview{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-start;padding:0 4px 8px;max-width:720px;margin:0 auto;}
+#attach-preview:empty{display:none;}
+.attach-wrap{position:relative;width:72px;height:72px;border-radius:10px;border:1px solid var(--border2);background:var(--bg2);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.attach-thumb{width:100%;height:100%;object-fit:cover;display:block;}
+.attach-wrap.attach-file{flex-direction:column;gap:4px;padding:6px;}
+.attach-wrap .attach-file-inner{display:flex;flex-direction:column;align-items:center;gap:3px;width:100%;}
+.attach-wrap .attach-icon{font-size:22px;line-height:1;}
+.attach-wrap .attach-meta{min-width:0;text-align:center;}
+.attach-wrap .attach-name{font-size:9px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60px;}
+.attach-wrap .attach-size{display:none;}
+.attach-x{position:absolute;top:-4px;right:-4px;width:18px;height:18px;border-radius:50%;background:var(--bg);color:var(--text);border:1px solid var(--border2);cursor:pointer;font-size:11px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;z-index:2;-webkit-tap-highlight-color:transparent;}
+.attach-x:hover,.attach-x:active{background:var(--red);color:#fff;border-color:var(--red);}

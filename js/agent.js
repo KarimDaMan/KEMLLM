@@ -93,6 +93,7 @@ function agentStart() {
 }
 async function _agentStartInner() {
   agentBusy = true;
+  agentLog('› agent.js build: ' + (typeof KEMLLM_BUILD !== 'undefined' ? KEMLLM_BUILD : 'unknown'), 'sys');
 
   const hfUrl = getHfBackendUrl();
   if (hfUrl) {

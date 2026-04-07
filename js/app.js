@@ -75,6 +75,10 @@ function deleteChat(id) {
 // ===== Stars (removed) =====
 function createStars() { /* stars disabled per spec */ }
 
+// Build version — bumped on every commit. Shown in console + toast on load
+// so you can tell at a glance whether you're on the latest JS.
+const KEMLLM_BUILD = 'v26 · image-edit + cache-bust';
+
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
 let bootTimeouts = [];
@@ -242,6 +246,7 @@ function typewriter(el, text, speed, withSpinner) {
 
 // ===== Init =====
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('%cKEMLLM ' + KEMLLM_BUILD, 'background:#f87171;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
   // Login screen handlers
   document.getElementById('btn-github')?.addEventListener('click', githubLogin);
   document.getElementById('btn-demo')?.addEventListener('click', demoLogin);

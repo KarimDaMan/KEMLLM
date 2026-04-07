@@ -316,6 +316,66 @@ const IMAGE_FALLBACK_IDS = [
   'ideogram-ai/ideogram-v3-turbo',
 ];
 
+// Image-editing (img2img) models on Replicate — used when the user attaches
+// an image and asks to modify/edit/change it. Tried in order.
+const IMAGE_EDIT_IDS = [
+  'black-forest-labs/flux-kontext-pro',  // purpose-built for instruction-based edits
+  'black-forest-labs/flux-kontext-dev',
+  'google/nano-banana',                  // Gemini image edit
+  'black-forest-labs/flux-dev',          // generic img2img fallback
+];
+
+async function editImage(prompt, imageDataUrl) {
+  const apiKey = getRepKey();
+  if (!apiKey) throw new Error('Add your Replicate key in Settings to edit images');
+  if (!imageDataUrl) throw new Error('No input image');
+  let lastErr = null;
+  for (const id of IMAGE_EDIT_IDS) {
+    try {
+      // Different models use different input keys; flux-kontext uses `input_image`,
+      // most img2img models use `image`. Send both so whichever is accepted wins.
+      const input = {
+        prompt,
+        input_image: imageDataUrl,
+        image: imageDataUrl,
+      };
+      const res = await replicateFetch(`/v1/models/${id}/predictions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + apiKey,
+          'Prefer': 'wait'
+        },
+        body: JSON.stringify({ input })
+      });
+      if (res.status === 404) {
+        lastErr = new Error('Model "' + id + '" not found');
+        continue;
+      }
+      if (!res.ok) {
+        const t = await res.text();
+        lastErr = new Error('Edit ' + res.status + ': ' + t.slice(0, 200));
+        // 422 usually means wrong input schema — try next model
+        if (res.status === 422) continue;
+        throw lastErr;
+      }
+      const data = await res.json();
+      let out = data.output;
+      if (Array.isArray(out)) out = out[0];
+      if (!out) {
+        lastErr = new Error('Model "' + id + '" returned no output');
+        continue;
+      }
+      if (typeof showToast === 'function') showToast('Edited with ' + id);
+      return out;
+    } catch (e) {
+      lastErr = e;
+      if (!String(e.message).match(/not found|422/)) throw e;
+    }
+  }
+  throw lastErr || new Error('All image-edit models failed');
+}
+
 async function generateImage(prompt) {
   const apiKey = getRepKey();
   if (!apiKey) throw new Error('Add your Replicate key in Settings to generate images');

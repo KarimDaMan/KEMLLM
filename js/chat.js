@@ -48,6 +48,10 @@ function setChatMode(mode) {
 
 const IMG_REGEX = /\b(generate|make|create|draw|render|paint|show|produce)\b.{0,30}\b(image|picture|photo|illustration|art|artwork|wallpaper|logo|portrait|landscape|painting)\b/i;
 const VID_REGEX = /\b(generate|make|create|render|animate|produce)\b.{0,30}\b(video|animation|clip|footage|movie|film)\b/i;
+// Image editing intent — triggers when the user has an image attached AND
+// asks to modify it. Matches "edit this to …", "make this …", "change it to …",
+// "turn this into …", "remove the background", "add a …", etc.
+const EDIT_REGEX = /\b(edit|change|modify|turn|make|remove|add|replace|convert|transform|fix|improve|enhance|colou?r|recolou?r|restyle|restore|crop|upscale|deblur)\b/i;
 
 function escapeHTML(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -274,8 +278,13 @@ async function sendMessage() {
   messages.push(userMsg);
   renderUserMessage(text, atts);
 
-  // Image/video routing ONLY when no attachments. If the user attached
-  // an image, they want vision (chat with image context), not generation.
+  // With attachments: if the user wants to EDIT the image, route to img2img.
+  // Otherwise attachments mean "vision chat with this file as context".
+  const hasImageAttachment = atts.some(a => a.isImage || (a.mime || '').startsWith('image/'));
+  if (hasImageAttachment && EDIT_REGEX.test(text)) {
+    return handleEditImageRequest(text, atts.find(a => a.isImage || (a.mime || '').startsWith('image/')));
+  }
+  // Without attachments: regex-detect generation requests
   if (!atts.length) {
     if (IMG_REGEX.test(text)) {
       return handleImageRequest(text);
@@ -387,6 +396,23 @@ async function handleImageRequest(prompt) {
     renderAIMessage(fakeModel, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
   }
 }
+async function handleEditImageRequest(prompt, imageAttachment) {
+  const fakeModel = { name: 'Image Edit (FLUX Kontext)', provider: 'google' };
+  const typingEl = renderTyping(fakeModel);
+  try {
+    const url = await editImage(prompt, imageAttachment.dataUrl);
+    typingEl.remove();
+    renderAIMessage(fakeModel,
+      `<p>Edited with FLUX Kontext:</p><img src="${escapeHTML(url)}" alt="edited">`,
+      prompt);
+    messages.push({ role: 'assistant', content: `[edited image: ${url}]` });
+    saveCurrentChat();
+  } catch (e) {
+    typingEl.remove();
+    renderAIMessage(fakeModel, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+  }
+}
+
 async function handleVideoRequest(prompt) {
   const m = findModel(selectedVideo, 'video');
   const fakeModel = { name: m?.name || 'Video', provider: 'google' };

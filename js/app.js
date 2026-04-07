@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v52 · memory · ocr · export · debug panel · ai-triggered image gen · wait for response';
+const KEMLLM_BUILD = 'v53 · user message attachments stack above bubble, right-aligned';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

@@ -6,6 +6,42 @@ function getKey(provider) {
 }
 function getRepKey() { return profileGet('rep-key') || ''; }
 
+// Ring buffer of recent outgoing API requests for Settings → Debug.
+// Not persisted — in-memory only, lost on reload.
+const DEBUG_LOG = [];
+const DEBUG_LOG_MAX = 50;
+function logDebugRequest(entry) {
+  DEBUG_LOG.unshift(entry);
+  if (DEBUG_LOG.length > DEBUG_LOG_MAX) DEBUG_LOG.length = DEBUG_LOG_MAX;
+  // Re-render the debug panel if it's currently open
+  if (typeof renderDebugLog === 'function') renderDebugLog();
+}
+// Monkey-patch window.fetch to capture every request made by the page.
+// Stores: ts, method, host+path, status, ms, ok.
+(function installFetchLogger() {
+  if (typeof window === 'undefined' || window.__kemllm_fetch_patched) return;
+  window.__kemllm_fetch_patched = true;
+  const origFetch = window.fetch.bind(window);
+  window.fetch = async function(input, init) {
+    const method = (init && init.method) || (typeof input !== 'string' && input.method) || 'GET';
+    const url = typeof input === 'string' ? input : input.url;
+    const t0 = Date.now();
+    try {
+      const res = await origFetch(input, init);
+      logDebugRequest({
+        ts: t0, method, url, status: res.status, ms: Date.now() - t0, ok: res.ok,
+      });
+      return res;
+    } catch (e) {
+      logDebugRequest({
+        ts: t0, method, url, status: 0, ms: Date.now() - t0, ok: false,
+        error: String(e && e.message || e),
+      });
+      throw e;
+    }
+  };
+})();
+
 // Replicate is proxied through the Cloudflare worker to avoid CORS issues.
 // The worker forwards any /replicate/* path to api.replicate.com/*
 const REPLICATE_BASE = 'https://kemllmx.karimghannam2014.workers.dev/replicate';
@@ -198,11 +234,25 @@ function getSystemPrompt(model) {
   s += ' Be direct, precise, and genuinely helpful. Do not be overly enthusiastic, do not use filler like "Great question!" or "Certainly!", and never end responses with a bullet-point summary unless explicitly asked. Match the length of your answer to what the question actually needs — short for short, detailed for detailed.';
   s += ' You can execute code inside the browser. Python runs in a WebAssembly interpreter (Pyodide); JavaScript/TypeScript runs in a sandboxed iframe; other languages run in a remote sandbox. When code would help answer the question, write a fenced code block (```python, ```javascript, etc.) and it will be executed automatically and the output shown to you. Use this for math, algorithms, data processing, and anything that benefits from running real code. Do NOT speculate about unavailable libraries — just call the standard library.';
   s += ' For mathematical expressions and equations, use LaTeX: $...$ for inline math (e.g. $x^2 + y^2 = r^2$) and $$...$$ for display math (e.g. $$\\int_0^\\infty e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}$$). The frontend renders these with KaTeX. Use proper LaTeX commands like \\frac, \\sqrt, \\sum, \\int, \\alpha, \\beta, etc. Never write equations as plain text or ASCII when LaTeX would look better.';
+  s += '\n\nIMAGE / VIDEO GENERATION — when the user asks you to create, draw, render, or generate an image, emit the marker:\n  [GENERATE_IMAGE prompt="detailed visual description"]\nWrite a rich, descriptive prompt (composition, lighting, style, colors). The frontend will send that prompt to the currently-selected image model and display the result inline. Same pattern for video: [GENERATE_VIDEO prompt="..."]. To re-edit the most recent image with a new instruction, emit [EDIT_IMAGE prompt="make the house white"]. You can place these markers ANYWHERE in your response — put them on their own line when possible. Do NOT describe the image in words and then refuse to make it — just emit the marker. Do NOT show a placeholder URL. The user does not need to switch modes — the marker triggers generation automatically.';
   if (window.webSearchOn) {
     s += ' The user has enabled web search context. Note your training cutoff if asked about recent events.';
   }
   if (persona) {
     s += '\n\nUser-defined persona/instructions:\n' + persona;
+  }
+  // Persistent memories the user has explicitly added in Settings → Memory.
+  try {
+    const mems = JSON.parse(profileGet('memories') || '[]');
+    if (Array.isArray(mems) && mems.length) {
+      s += '\n\nPersistent memory (facts the user has told you to remember across all conversations):\n';
+      mems.forEach((m, i) => { s += `${i + 1}. ${m}\n`; });
+    }
+  } catch {}
+  // Sandbox web access policy — the AI should know whether it's allowed
+  // to hit the network when running code.
+  if (profileGet('sandbox-web') !== '1') {
+    s += '\n\nSandbox network policy: web access is DISABLED. Do not attempt to fetch URLs, make HTTP requests, or use any tool that requires internet. If the task truly needs the web, tell the user they need to enable "Allow web access in code execution" in Settings → Sandbox.';
   }
   return s;
 }

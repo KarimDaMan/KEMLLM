@@ -886,3 +886,25 @@ input,textarea{font-family:inherit;color:inherit;}
 .sp-advanced summary::-webkit-details-marker{display:none;}
 .sp-advanced[open] summary > span:first-child{transform:rotate(90deg);}
 .sp-advanced .sp-row{padding-left:0;}
+
+/* ========== Memory list (Settings) ========== */
+.sp-mem{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border2);border-radius:9px;margin-bottom:6px;}
+.sp-mem-text{flex:1;min-width:0;font-size:12.5px;line-height:1.5;color:var(--text);word-break:break-word;}
+.sp-mem-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;line-height:1;padding:0 6px;flex-shrink:0;border-radius:5px;-webkit-tap-highlight-color:transparent;}
+.sp-mem-del:hover,.sp-mem-del:active{background:rgba(248,113,113,.15);color:var(--red);}
+
+/* Sandbox toggle + generic checkbox row */
+.sp-toggle{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text);}
+.sp-toggle input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent);cursor:pointer;}
+
+/* Debug log panel */
+.sp-debug-log{max-height:300px;overflow-y:auto;background:#050505;border:1px solid var(--border2);border-radius:9px;padding:8px;font-family:var(--mono);font-size:10.5px;line-height:1.45;}
+.dbg-row{display:flex;gap:8px;padding:3px 6px;border-radius:4px;align-items:center;white-space:nowrap;}
+.dbg-row:hover{background:rgba(255,255,255,.04);}
+.dbg-ts{color:var(--text3);flex-shrink:0;width:62px;}
+.dbg-method{color:var(--blue);flex-shrink:0;width:44px;font-weight:600;}
+.dbg-status{flex-shrink:0;width:36px;font-weight:600;text-align:center;}
+.dbg-status.dbg-ok{color:var(--green);}
+.dbg-status.dbg-err{color:var(--red);}
+.dbg-ms{color:var(--text3);flex-shrink:0;width:50px;text-align:right;}
+.dbg-url{color:var(--text2);overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;}

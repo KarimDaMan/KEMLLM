@@ -8,6 +8,19 @@ let abortCtrl = null;
 window.webSearchOn = false;
 let chatMode = 'chat'; // 'chat' | 'code' | 'agent'
 let agentUnlocked = false;
+// Blocks the send button while an AI response is in progress — user must
+// wait (or press stop) before sending the next message. Matches ChatGPT's
+// interaction model.
+let chatBusy = false;
+function setChatBusy(busy) {
+  chatBusy = busy;
+  const sendBtn = document.getElementById('send-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  const input = document.getElementById('input-text');
+  if (sendBtn) sendBtn.classList.toggle('hide', busy);
+  if (stopBtn) stopBtn.classList.toggle('show', busy);
+  if (input) input.disabled = false; // still allow typing ahead
+}
 
 // Agent loop state — lets the AI keep running autonomously until the task
 // is done, while the user can inject additional instructions mid-loop.
@@ -328,6 +341,14 @@ async function sendMessage() {
   const input = document.getElementById('input-text');
   const text = input.value.trim();
   if (!text && !pendingAttachments.length) return;
+  // Block a new send while the current response is still streaming in.
+  // User must wait (or press the stop button) before sending the next
+  // message — same pattern as ChatGPT. Agent-loop mode has its own
+  // injection queue so we let those pass through.
+  if (chatBusy && chatMode !== 'agent') {
+    showToast('Wait for the current response to finish');
+    return;
+  }
   input.value = '';
   input.style.height = 'auto';
 
@@ -387,6 +408,7 @@ async function sendMessage() {
   if (!model) { showToast('No model selected'); return; }
 
   const typingEl = renderTyping(model);
+  setChatBusy(true);
 
   try {
     let full = '';
@@ -427,6 +449,8 @@ async function sendMessage() {
   } catch (e) {
     typingEl.remove();
     renderAIMessage(model, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+  } finally {
+    setChatBusy(false);
   }
 }
 
@@ -535,6 +559,50 @@ function useViewerImageInChat() {
   if (!_imgViewerUrl) return;
   reuseImageAsAttachment(_imgViewerUrl);
   closeImageViewer();
+}
+
+// OCR via the currently-selected vision-capable chat model. Sends the
+// viewer's image to the model with an "extract all text" prompt and
+// displays the result inside the viewer overlay.
+async function ocrFromImageViewer() {
+  if (!_imgViewerUrl) return;
+  const model = findModel(selectedChat, 'chat');
+  if (!model) { showToast('No chat model selected'); return; }
+  showToast('Extracting text…');
+  try {
+    // Fetch the image → data URL so we can pass it as an attachment.
+    const res = await fetch(_imgViewerUrl);
+    const blob = await res.blob();
+    const dataUrl = await new Promise((resolve) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.readAsDataURL(blob);
+    });
+    const attachment = {
+      dataUrl,
+      name: 'ocr-target.png',
+      size: blob.size,
+      mime: blob.type || 'image/png',
+      isImage: true,
+    };
+    const msgs = [{
+      role: 'user',
+      content: 'Extract ALL visible text from this image. Return only the text, preserving line breaks and structure. If there is no text, say "[no text found]".',
+      attachments: [attachment],
+    }];
+    let full = '';
+    await callChat(model, msgs, (chunk) => { full += chunk; });
+    // Render the extracted text into the chat timeline as a proper
+    // AI message so it's part of history and copyable.
+    const out = (full || '').trim() || '[no text found]';
+    const md = `Text extracted from image:\n\n\`\`\`\n${out}\n\`\`\``;
+    renderAIMessage(model, parseMarkdown(md), md);
+    messages.push({ role: 'assistant', content: md });
+    saveCurrentChat();
+    closeImageViewer();
+  } catch (e) {
+    showToast('OCR failed: ' + (e.message || e));
+  }
 }
 
 async function editFromImageViewer(promptText) {
@@ -775,10 +843,18 @@ function chatPreviewFullscreen() {
   if (pane) pane.classList.toggle('fullscreen');
 }
 
-// Parse [SHOW_PREVIEW ...] and [SHOW_DESKTOP] markers from AI responses
+// Parse AI-emitted markers from a response and act on them. Supported:
+//   [SHOW_PREVIEW path=foo.html title="My page"]
+//   [SHOW_PREVIEW url=https://...]
+//   [SHOW_DESKTOP]
+//   [GENERATE_IMAGE prompt="sunset over a mountain lake"]
+//   [GENERATE_VIDEO prompt="slow pan across a rainforest"]
+//   [EDIT_IMAGE prompt="make the house white"]  (uses last generated image)
+// The image/video markers let the AI call generation itself without the
+// user having to switch modes or retry. The AI just writes the marker in
+// its response and the frontend dispatches the call.
 function processAIMarkers(text) {
-  // [SHOW_PREVIEW path=foo.html title="My page"]
-  // [SHOW_PREVIEW url=https://... ]
+  // [SHOW_PREVIEW ...]
   const previewRe = /\[SHOW_PREVIEW\s+([^\]]+)\]/i;
   const m = text.match(previewRe);
   if (m) {
@@ -797,9 +873,41 @@ function processAIMarkers(text) {
       chatPreviewShow(url, title);
     }
   }
-  // [SHOW_DESKTOP] → start and show the noVNC desktop
+  // [SHOW_DESKTOP]
   if (/\[SHOW_DESKTOP\]/i.test(text)) {
     showAgentDesktop();
+  }
+  // [GENERATE_IMAGE prompt="..."] — AI-triggered image gen
+  const genImgRe = /\[GENERATE_IMAGE\s+prompt=(?:"([^"]+)"|'([^']+)'|([^\]]+))\]/i;
+  const gi = text.match(genImgRe);
+  if (gi) {
+    const prompt = (gi[1] || gi[2] || gi[3] || '').trim();
+    if (prompt) handleImageRequest(prompt);
+  }
+  // [GENERATE_VIDEO prompt="..."]
+  const genVidRe = /\[GENERATE_VIDEO\s+prompt=(?:"([^"]+)"|'([^']+)'|([^\]]+))\]/i;
+  const gv = text.match(genVidRe);
+  if (gv) {
+    const prompt = (gv[1] || gv[2] || gv[3] || '').trim();
+    if (prompt) handleVideoRequest(prompt);
+  }
+  // [EDIT_IMAGE prompt="..."] — re-edit the most recent image in history
+  const editImgRe = /\[EDIT_IMAGE\s+prompt=(?:"([^"]+)"|'([^']+)'|([^\]]+))\]/i;
+  const ei = text.match(editImgRe);
+  if (ei) {
+    const prompt = (ei[1] || ei[2] || ei[3] || '').trim();
+    // Find the most recent image URL in the message history
+    let lastImg = null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const c = messages[i].content;
+      if (typeof c === 'string') {
+        const im = c.match(/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/);
+        if (im) { lastImg = im[1]; break; }
+      }
+    }
+    if (prompt && lastImg) {
+      handleEditImageRequest(prompt, { url: lastImg, isImage: true });
+    }
   }
 }
 

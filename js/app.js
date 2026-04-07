@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v51 · direct API first · auto max_tokens · Advanced tab';
+const KEMLLM_BUILD = 'v52 · memory · ocr · export · debug panel · ai-triggered image gen · wait for response';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -404,7 +404,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   document.getElementById('send-btn')?.addEventListener('click', sendMessage);
-  document.getElementById('stop-btn')?.addEventListener('click', stopAgentLoop);
+  document.getElementById('stop-btn')?.addEventListener('click', () => {
+    // Stop the agent loop if running, OR clear the busy flag for a normal chat
+    if (typeof agentLoopRunning !== 'undefined' && agentLoopRunning) {
+      stopAgentLoop();
+    } else if (typeof chatBusy !== 'undefined' && chatBusy) {
+      setChatBusy(false);
+      showToast('Cancelled (response may still finish in the background)');
+    }
+  });
 
   // Floating Desktop button (only shows when the HF backend has the new Dockerfile)
   document.getElementById('chat-desktop-btn')?.addEventListener('click', async () => {
@@ -431,6 +439,39 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('img-viewer-close')?.addEventListener('click', closeImageViewer);
   document.getElementById('img-viewer-download')?.addEventListener('click', downloadImageFromViewer);
   document.getElementById('img-viewer-reuse')?.addEventListener('click', useViewerImageInChat);
+  document.getElementById('img-viewer-ocr')?.addEventListener('click', ocrFromImageViewer);
+
+  // Memory CRUD
+  document.getElementById('sp-mem-add')?.addEventListener('click', addMemoryFromInput);
+  document.getElementById('sp-mem-new')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addMemoryFromInput(); }
+  });
+
+  // Sandbox web access toggle
+  const sandboxWebEl = document.getElementById('sp-sandbox-web');
+  if (sandboxWebEl) {
+    sandboxWebEl.checked = profileGet('sandbox-web') === '1';
+    sandboxWebEl.addEventListener('change', () => {
+      profileSet('sandbox-web', sandboxWebEl.checked ? '1' : '0');
+      showToast(sandboxWebEl.checked ? 'Sandbox web access enabled' : 'Sandbox web access disabled');
+    });
+  }
+
+  // Debug log
+  document.getElementById('sp-debug-clear')?.addEventListener('click', clearDebugLog);
+  // Render debug log when Settings panel becomes active (lazy)
+  const observer = new MutationObserver(() => {
+    const panel = document.getElementById('settings-panel');
+    if (panel && panel.classList.contains('active') && typeof renderDebugLog === 'function') {
+      renderDebugLog();
+      if (typeof renderMemories === 'function') renderMemories();
+    }
+  });
+  const settingsPanel = document.getElementById('settings-panel');
+  if (settingsPanel) observer.observe(settingsPanel, { attributes: true, attributeFilter: ['class'] });
+
+  // Export all chats as JSON
+  document.getElementById('dr-export')?.addEventListener('click', exportAllChats);
   document.getElementById('img-viewer-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const input = document.getElementById('img-viewer-input');

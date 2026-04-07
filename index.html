@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=51">
+<link rel="stylesheet" href="css/style.css?v=52">
 <!-- KaTeX for math rendering (lazy-loaded by chat.js when first math is detected) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" media="print" onload="this.media='all'">
 </head>
@@ -90,10 +90,16 @@
         <div class="dr-title">All chats</div>
         <button id="dr-close" class="dr-close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
-      <button id="dr-new" class="dr-new">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        New Chat
-      </button>
+      <div style="display:flex;gap:8px;margin:4px 12px 10px;">
+        <button id="dr-new" class="dr-new" style="flex:1;margin:0;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Chat
+        </button>
+        <button id="dr-export" class="dr-new" style="flex:1;margin:0;" title="Export all chats as JSON">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export
+        </button>
+      </div>
       <div class="dr-section">Recent</div>
       <div id="hist-list" class="hist-list"></div>
     </div>
@@ -335,6 +341,41 @@
           </div>
         </div>
 
+        <div class="sp-section">
+          <div class="sp-h">Memory</div>
+          <div class="sp-row">
+            <div class="sub" style="margin-bottom:10px;">Facts the AI should remember across every conversation. Injected into the system prompt of every chat. Add, edit, or delete — full control, no hidden state.</div>
+            <div id="sp-mem-list"></div>
+            <div style="display:flex;gap:8px;margin-top:10px;">
+              <input id="sp-mem-new" class="sp-input font" placeholder="e.g. My name is Alex. I use TypeScript and prefer 2-space indents.">
+              <button id="sp-mem-add" class="sp-btn">Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sp-section">
+          <div class="sp-h">Sandbox</div>
+          <div class="sp-row">
+            <label class="sp-toggle">
+              <input id="sp-sandbox-web" type="checkbox">
+              <span>Allow web access in code execution</span>
+            </label>
+            <div class="sub">Off by default. When off, Pyodide's pyfetch is blocked and the HF backend is instructed to refuse network calls. Turn on only when you explicitly need the sandbox to hit the internet.</div>
+          </div>
+        </div>
+
+        <details class="sp-section sp-advanced">
+          <summary class="sp-h" style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;">
+            <span style="display:inline-block;transition:transform .2s var(--ease-out);font-size:10px;">▶</span>
+            Debug
+          </summary>
+          <div class="sp-row" style="margin-top:12px;">
+            <div class="sub" style="margin-bottom:8px;">Last 50 outgoing API requests with status code and response time. Useful for diagnosing failures.</div>
+            <div id="sp-debug-log" class="sp-debug-log"></div>
+            <button id="sp-debug-clear" class="sp-btn sec" style="margin-top:8px;">Clear log</button>
+          </div>
+        </details>
+
         <details class="sp-section sp-advanced">
           <summary class="sp-h" style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;">
             <span style="display:inline-block;transition:transform .2s var(--ease-out);font-size:10px;">▶</span>
@@ -438,6 +479,9 @@
   <div class="img-viewer-topbar">
     <div class="img-viewer-title" id="img-viewer-title">Image</div>
     <div class="img-viewer-actions">
+      <button id="img-viewer-ocr" class="img-viewer-btn" title="Extract text (OCR)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+      </button>
       <button id="img-viewer-download" class="img-viewer-btn" title="Download">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       </button>
@@ -462,13 +506,13 @@
 
 <div id="toast"></div>
 
-<script src="js/state.js?v=51"></script>
-<script src="js/models.js?v=51"></script>
-<script src="js/api.js?v=51"></script>
-<script src="js/chat.js?v=51"></script>
-<script src="js/code.js?v=51"></script>
-<script src="js/agent.js?v=51"></script>
-<script src="js/ui.js?v=51"></script>
-<script src="js/app.js?v=51"></script>
+<script src="js/state.js?v=52"></script>
+<script src="js/models.js?v=52"></script>
+<script src="js/api.js?v=52"></script>
+<script src="js/chat.js?v=52"></script>
+<script src="js/code.js?v=52"></script>
+<script src="js/agent.js?v=52"></script>
+<script src="js/ui.js?v=52"></script>
+<script src="js/app.js?v=52"></script>
 </body>
 </html>

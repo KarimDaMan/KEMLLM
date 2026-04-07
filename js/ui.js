@@ -428,6 +428,84 @@ function renderCustomModels() {
   list.innerHTML = customs.map(m => `<div class="sp-cm"><span class="mdot" style="background:${m.color || '#a78bfa'}"></span><div class="sp-cm-info"><div class="sp-cm-n">${escapeHTML(m.name)} <span class="mdi-tag">${m.type}</span></div><div class="sp-cm-s">${escapeHTML(m.replicateId)}</div></div><button class="sp-cm-del" onclick="deleteCustomModel('${m.id}')">×</button></div>`).join('');
 }
 
+// ===== Memory CRUD =====
+function getMemories() {
+  try { return JSON.parse(profileGet('memories') || '[]'); } catch { return []; }
+}
+function setMemories(mems) {
+  profileSet('memories', JSON.stringify(mems));
+  renderMemories();
+}
+function renderMemories() {
+  const list = document.getElementById('sp-mem-list');
+  if (!list) return;
+  const mems = getMemories();
+  if (!mems.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:4px 0;">No memories yet</div>';
+    return;
+  }
+  list.innerHTML = mems.map((m, i) =>
+    `<div class="sp-mem"><div class="sp-mem-text">${escapeHTML(m)}</div><button class="sp-mem-del" onclick="deleteMemory(${i})" title="Delete">×</button></div>`
+  ).join('');
+}
+function addMemoryFromInput() {
+  const el = document.getElementById('sp-mem-new');
+  if (!el) return;
+  const v = el.value.trim();
+  if (!v) return;
+  const mems = getMemories();
+  mems.push(v);
+  setMemories(mems);
+  el.value = '';
+  showToast('Memory added');
+}
+function deleteMemory(i) {
+  const mems = getMemories();
+  if (i < 0 || i >= mems.length) return;
+  mems.splice(i, 1);
+  setMemories(mems);
+}
+
+// ===== Debug log render =====
+function renderDebugLog() {
+  const el = document.getElementById('sp-debug-log');
+  if (!el) return;
+  if (typeof DEBUG_LOG === 'undefined' || !DEBUG_LOG.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:6px 0;">No requests logged yet</div>';
+    return;
+  }
+  el.innerHTML = DEBUG_LOG.map(e => {
+    const statusClass = e.ok ? 'dbg-ok' : 'dbg-err';
+    const time = new Date(e.ts).toLocaleTimeString();
+    const short = e.url.length > 70 ? e.url.slice(0, 70) + '…' : e.url;
+    return `<div class="dbg-row"><span class="dbg-ts">${time}</span><span class="dbg-method">${e.method}</span><span class="dbg-status ${statusClass}">${e.status || '∅'}</span><span class="dbg-ms">${e.ms}ms</span><span class="dbg-url" title="${escapeHTML(e.url)}">${escapeHTML(short)}</span></div>`;
+  }).join('');
+}
+function clearDebugLog() {
+  if (typeof DEBUG_LOG !== 'undefined') DEBUG_LOG.length = 0;
+  renderDebugLog();
+}
+
+// ===== Export chat history as JSON =====
+function exportAllChats() {
+  const data = {
+    exported_at: new Date().toISOString(),
+    profile_id: activeProfileId,
+    chats: (typeof loadHistory === 'function' ? loadHistory() : []),
+    persona: profileGet('persona') || '',
+    memories: getMemories(),
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'kemllm-export-' + Date.now() + '.json';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1000);
+  showToast('Exported ' + data.chats.length + ' chats');
+}
+
 function renderModelsPanel() {
   const grid = document.getElementById('mp-grid');
   if (!grid) return;

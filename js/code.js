@@ -87,41 +87,51 @@ async function runJavaScript(code) {
   });
 }
 
-// --- Fallback HTTP runner for languages Pyodide/iframe can't handle ---
-const PISTON_LANGS = {
-  c: { language: 'c', version: '10.2.0', ext: 'c' },
-  cpp: { language: 'c++', version: '10.2.0', ext: 'cpp' },
-  'c++': { language: 'c++', version: '10.2.0', ext: 'cpp' },
-  rust: { language: 'rust', version: '1.68.2', ext: 'rs' },
-  rs: { language: 'rust', version: '1.68.2', ext: 'rs' },
-  go: { language: 'go', version: '1.16.2', ext: 'go' },
-  java: { language: 'java', version: '15.0.2', ext: 'java' },
-  csharp: { language: 'csharp', version: '6.12.0', ext: 'cs' },
-  cs: { language: 'csharp', version: '6.12.0', ext: 'cs' },
-  bash: { language: 'bash', version: '5.2.0', ext: 'sh' },
-  sh: { language: 'bash', version: '5.2.0', ext: 'sh' },
-  lua: { language: 'lua', version: '5.4.4', ext: 'lua' }
+// --- Remote execution via the HF Agent backend ---
+// emkc.org Piston is whitelist-only as of 2026-02; we no longer try it.
+// If the user has an HF Agent Backend configured, route non-Python/non-JS
+// languages through /sessions/{id}/exec on that backend.
+const REMOTE_LANG_CMD = {
+  c:      code => `cat > /tmp/m.c <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\ncc /tmp/m.c -o /tmp/m && /tmp/m`,
+  cpp:    code => `cat > /tmp/m.cpp <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\ng++ /tmp/m.cpp -o /tmp/m && /tmp/m`,
+  'c++':  code => `cat > /tmp/m.cpp <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\ng++ /tmp/m.cpp -o /tmp/m && /tmp/m`,
+  rust:   code => `cat > /tmp/m.rs <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\nrustc /tmp/m.rs -o /tmp/m 2>&1 && /tmp/m`,
+  rs:     code => `cat > /tmp/m.rs <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\nrustc /tmp/m.rs -o /tmp/m 2>&1 && /tmp/m`,
+  go:     code => `cat > /tmp/m.go <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\ngo run /tmp/m.go`,
+  java:   code => `cat > /tmp/Main.java <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\ncd /tmp && javac Main.java && java Main`,
+  csharp: code => `cat > /tmp/m.cs <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\necho "C# needs dotnet installed"`,
+  cs:     code => `cat > /tmp/m.cs <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\necho "C# needs dotnet installed"`,
+  bash:   code => code,
+  sh:     code => code,
+  lua:    code => `cat > /tmp/m.lua <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\nlua /tmp/m.lua`,
 };
-const RUNNER_ENDPOINTS = [
-  'https://emkc.org/api/v2/piston/execute'
-];
+
 async function runViaRemote(lang, code) {
-  const cfg = PISTON_LANGS[(lang || '').toLowerCase()];
-  if (!cfg) throw new Error('Language not supported: ' + lang);
-  const body = JSON.stringify({
-    language: cfg.language,
-    version: cfg.version,
-    files: [{ name: 'main.' + cfg.ext, content: code }]
-  });
-  let lastErr = null;
-  for (const url of RUNNER_ENDPOINTS) {
-    try {
-      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
-      if (res.ok) { const data = await res.json(); data.runtime = 'remote'; return data; }
-      lastErr = new Error('Runner ' + res.status);
-    } catch (e) { lastErr = e; }
+  const key = (lang || '').toLowerCase();
+  const builder = REMOTE_LANG_CMD[key];
+  if (!builder) {
+    throw new Error('Language "' + lang + '" needs the HF Agent Backend. Set it up in Settings → Agent Backend (see agent-backend/SETUP.md).');
   }
-  throw lastErr || new Error('No remote runner available');
+  // Route through the agent backend if configured and running
+  if (typeof hfFetch === 'function' && typeof getHfBackendUrl === 'function' && getHfBackendUrl()) {
+    // Boot the session if we don't have one
+    if (typeof agentSessionId !== 'undefined' && !agentSessionId && typeof agentStart === 'function') {
+      await agentStart();
+    }
+    if (typeof agentSessionId !== 'undefined' && agentSessionId) {
+      const r = await hfFetch('/sessions/' + agentSessionId + '/exec', {
+        method: 'POST',
+        body: JSON.stringify({ command: builder(code) })
+      });
+      if (!r.ok) throw new Error('Agent backend ' + r.status);
+      const d = await r.json();
+      return {
+        run: { stdout: d.stdout || '', stderr: d.stderr || '', code: d.exit_code || 0 },
+        runtime: 'agent-backend'
+      };
+    }
+  }
+  throw new Error('Running ' + lang + ' needs the HF Agent Backend. Go to Settings → Agent Backend URL and deploy it (5 min, see agent-backend/SETUP.md).');
 }
 
 // Unified entry point — replaces the old runViaPiston

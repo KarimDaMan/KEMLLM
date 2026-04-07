@@ -61,8 +61,9 @@ function saveRepKey() {
 }
 
 // ===== Provider routing =====
-// Priority: user's own provider key > Replicate fallback (if rep key present).
-// On any error, if Replicate is available and a different path was used, retry via Replicate.
+// Replicate is the PRIMARY backend for every model. Direct provider keys
+// (Anthropic / OpenAI / Google / xAI) are OPTIONAL overrides — they get
+// tried only if Replicate fails or has no route for the model.
 // Optional `overrideSystem` param replaces the default system prompt (used by Agent Mode).
 async function callChat(model, messages, onChunk, overrideSystem) {
   const provider = model.provider;
@@ -72,57 +73,55 @@ async function callChat(model, messages, onChunk, overrideSystem) {
   const tryProvider = async () => {
     if (provider === 'anthropic') {
       const k = getKey('anthropic');
-      if (k) return callAnthropicDirect(model, fullMsgs, k, onChunk);
-      throw new Error('NO_PROVIDER_KEY');
+      if (!k) throw new Error('NO_PROVIDER_KEY');
+      return callAnthropicDirect(model, fullMsgs, k, onChunk);
     }
     if (provider === 'openai') {
       const k = getKey('openai');
-      if (k) return callOpenAIStyle('https://api.openai.com/v1/chat/completions', model.apiId, fullMsgs, k, onChunk);
-      throw new Error('NO_PROVIDER_KEY');
+      if (!k) throw new Error('NO_PROVIDER_KEY');
+      return callOpenAIStyle('https://api.openai.com/v1/chat/completions', model.apiId, fullMsgs, k, onChunk);
     }
     if (provider === 'google') {
       const k = getKey('google');
-      if (k) return callGoogleDirect(model, fullMsgs, k, onChunk);
-      throw new Error('NO_PROVIDER_KEY');
+      if (!k) throw new Error('NO_PROVIDER_KEY');
+      return callGoogleDirect(model, fullMsgs, k, onChunk);
     }
     if (provider === 'xai') {
       const k = getKey('xai');
-      if (k) return callOpenAIStyle('https://api.x.ai/v1/chat/completions', model.apiId, fullMsgs, k, onChunk);
-      throw new Error('NO_PROVIDER_KEY');
+      if (!k) throw new Error('NO_PROVIDER_KEY');
+      return callOpenAIStyle('https://api.x.ai/v1/chat/completions', model.apiId, fullMsgs, k, onChunk);
     }
     throw new Error('NO_PROVIDER_KEY');
   };
 
   const tryReplicate = async () => {
     const rk = getRepKey();
-    if (!model.replicateId) {
-      const provName = { anthropic:'Anthropic', openai:'OpenAI', google:'Google AI', xai:'xAI' }[provider] || provider;
-      throw new Error(`${model.name} requires a direct ${provName} API key. Go to Settings → API Keys → paste your ${provName} key (https://${provider === 'anthropic' ? 'console.anthropic.com' : provider === 'openai' ? 'platform.openai.com' : provider === 'google' ? 'aistudio.google.com' : 'x.ai'}) → Save. Or pick an open-source model (Llama, Mistral, DeepSeek) that works with just your Replicate key.`);
-    }
-    if (!rk) throw new Error('Add your Replicate key in Settings → API Keys to use ' + model.name + '. Get one at https://replicate.com/account/api-tokens');
+    if (!rk) throw new Error('NO_REPLICATE_KEY');
+    if (!model.replicateId) throw new Error('NO_REPLICATE_ID');
     return callReplicateChat(model, fullMsgs, rk, onChunk);
   };
 
-  // Default path: Replicate first (unless user has their own provider key)
-  const hasProviderKey =
-    (provider === 'anthropic' && getKey('anthropic')) ||
-    (provider === 'openai' && getKey('openai')) ||
-    (provider === 'google' && getKey('google')) ||
-    (provider === 'xai' && getKey('xai'));
-
-  if (hasProviderKey) {
-    try { return await tryProvider(); }
-    catch (e) {
-      // Fall back to Replicate on provider error
-      if (getRepKey() && model.replicateId) {
-        try { return await tryReplicate(); }
-        catch (e2) { throw e2; }
+  // PRIMARY: Replicate
+  try {
+    return await tryReplicate();
+  } catch (repErr) {
+    // Fall back to direct provider key if configured
+    try {
+      return await tryProvider();
+    } catch (provErr) {
+      // Neither worked — give a clear message
+      const rk = getRepKey();
+      if (!rk && provErr.message === 'NO_PROVIDER_KEY') {
+        throw new Error('Add your Replicate key in Settings → API Keys to use ' + model.name + '. Get one at https://replicate.com/account/api-tokens');
       }
-      throw e;
+      if (repErr.message === 'NO_REPLICATE_ID' && provErr.message === 'NO_PROVIDER_KEY') {
+        const provName = { anthropic:'Anthropic', openai:'OpenAI', google:'Google AI', xai:'xAI' }[provider] || provider;
+        throw new Error(model.name + ' has no Replicate path. Add a ' + provName + ' API key in Settings.');
+      }
+      // Replicate was the primary attempt — surface its error
+      throw repErr;
     }
   }
-  // No provider key → Replicate only
-  return tryReplicate();
 }
 
 function getSystemPrompt(model) {

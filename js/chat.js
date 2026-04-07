@@ -122,10 +122,12 @@ function runInAgent(id) {
   const el = document.getElementById(id);
   if (!el) return;
   const cmd = el.textContent;
-  siNav('agent');
-  if (!agentSandboxId) {
+  // Agent panel was removed — switch to chat panel and flip to agent mode
+  if (typeof setChatMode === 'function') setChatMode('agent');
+  if (typeof siNav === 'function') siNav('chat');
+  if (!agentReady) {
     agentLog('› Pending: starting sandbox first…', 'sys');
-    agentStart().then(() => { if (agentSandboxId) agentRun(cmd, true); });
+    agentStart().then(() => { if (agentReady) agentRun(cmd, true); });
   } else {
     agentRun(cmd, true);
   }
@@ -662,8 +664,13 @@ async function waitForHFReady(base, tok, maxSeconds, progress) {
 }
 
 async function showAgentDesktop() {
-  if (agentBackend !== 'hf') {
-    showToast('Desktop needs the HF Agent Backend');
+  // Hide the home screen so the progress lines are actually visible
+  const home = document.getElementById('home-screen');
+  if (home) home.classList.add('hidden');
+  if (typeof termBootStop === 'function') termBootStop();
+
+  if (agentBackend !== 'hf' && !getHfBackendUrl()) {
+    showToast('Desktop needs the HF Agent Backend configured in Settings');
     return;
   }
   const base = getHfBackendUrl();

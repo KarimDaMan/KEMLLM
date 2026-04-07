@@ -18,30 +18,47 @@ let agentBackend = 'pyodide'; // 'hf' or 'pyodide'
 let agentSessionId = null;    // for HF backend
 let agentStartPromise = null; // shared promise so concurrent callers all await the same boot
 
+// The standalone #ag-term terminal was removed when agent became a chat
+// mode. agentLog now writes into the main #msgs area as a lightweight
+// system line so the user actually sees boot progress, error messages,
+// and the POST /sessions body diagnostic. Falls back to the old element
+// if it ever comes back.
 function agentLog(text, cls) {
-  const term = document.getElementById('ag-term');
-  if (!term) return null;
-  const welcome = term.querySelector('.ag-welcome');
-  if (welcome) welcome.remove();
+  const legacy = document.getElementById('ag-term');
+  if (legacy) {
+    const welcome = legacy.querySelector('.ag-welcome');
+    if (welcome) welcome.remove();
+    const div = document.createElement('div');
+    div.className = 'ag-line ' + (cls || 'out');
+    div.textContent = text;
+    legacy.appendChild(div);
+    legacy.scrollTop = legacy.scrollHeight;
+    return div;
+  }
+  const msgs = document.getElementById('msgs');
+  if (!msgs) return null;
   const div = document.createElement('div');
-  div.className = 'ag-line ' + (cls || 'out');
+  div.className = 'msg agent-log ' + (cls || 'out');
+  // Color-code by class so errors stand out
+  let color = 'var(--text3)';
+  if (cls === 'err') color = 'var(--red)';
+  else if (cls === 'sys') color = 'var(--text2)';
+  else if (cls === 'out') color = '#cbd5e1';
+  else if (cls === 'cmd' || cls === 'user') color = 'var(--blue)';
+  else if (cls === 'agent-cmd' || cls === 'ai' || cls === 'agent') color = 'var(--purple)';
+  div.style.cssText = 'font-family:var(--mono);font-size:11.5px;color:' + color + ';padding:3px 24px;max-width:780px;margin:0 auto;white-space:pre-wrap;word-break:break-word;';
   div.textContent = text;
-  term.appendChild(div);
-  term.scrollTop = term.scrollHeight;
+  msgs.appendChild(div);
+  // Scroll to bottom
+  const chatArea = document.getElementById('chat-area');
+  if (chatArea) chatArea.scrollTop = chatArea.scrollHeight;
   return div;
 }
 
 function agentLogHTML(html, cls) {
-  const term = document.getElementById('ag-term');
-  if (!term) return null;
-  const welcome = term.querySelector('.ag-welcome');
-  if (welcome) welcome.remove();
-  const div = document.createElement('div');
-  div.className = 'ag-line ' + (cls || 'out');
-  div.innerHTML = html;
-  term.appendChild(div);
-  term.scrollTop = term.scrollHeight;
-  return div;
+  const el = agentLog('', cls);
+  if (el) { el.textContent = ''; el.innerHTML = html; }
+  return el;
 }
 
 function agentSetStatus(state) {

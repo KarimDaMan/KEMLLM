@@ -64,11 +64,18 @@ function saveRepKey() {
 // Replicate is the PRIMARY backend for every model. Direct provider keys
 // (Anthropic / OpenAI / Google / xAI) are OPTIONAL overrides — they get
 // tried only if Replicate fails or has no route for the model.
+// EXCEPTION: messages with image attachments MUST go through a direct
+// provider API because Replicate's chat proxies flatten input to text
+// and drop the images. In that case we flip the priority: provider first,
+// Replicate only if the provider has no key.
 // Optional `overrideSystem` param replaces the default system prompt (used by Agent Mode).
 async function callChat(model, messages, onChunk, overrideSystem) {
   const provider = model.provider;
   const sysAddon = overrideSystem != null ? overrideSystem : getSystemPrompt(model);
   const fullMsgs = sysAddon ? [{ role: 'system', content: sysAddon }, ...messages] : messages;
+  const hasVisionAttachments = messages.some(m =>
+    m.attachments && m.attachments.some(a => a.isImage !== false && (a.isImage || (a.mime || '').startsWith('image/')))
+  );
 
   const tryProvider = async () => {
     if (provider === 'anthropic') {
@@ -101,7 +108,24 @@ async function callChat(model, messages, onChunk, overrideSystem) {
     return callReplicateChat(model, fullMsgs, rk, onChunk);
   };
 
-  // PRIMARY: Replicate
+  // Vision route: images need a direct multimodal provider API.
+  // Replicate's chat proxies flatten messages to text and drop images.
+  if (hasVisionAttachments) {
+    try {
+      return await tryProvider();
+    } catch (provErr) {
+      if (provErr.message === 'NO_PROVIDER_KEY') {
+        const provName = { anthropic:'Anthropic', openai:'OpenAI', google:'Google AI', xai:'xAI' }[provider] || provider;
+        throw new Error(
+          'Image attachments need a direct ' + provName + ' API key (Replicate\'s chat proxies drop images). ' +
+          'Add your ' + provName + ' key in Settings → API Keys, or remove the image and resend.'
+        );
+      }
+      throw provErr;
+    }
+  }
+
+  // PRIMARY: Replicate (text-only messages)
   try {
     return await tryReplicate();
   } catch (repErr) {

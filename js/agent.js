@@ -127,6 +127,44 @@ function agentReset() {
   agentBackend = 'pyodide';
   agentStartPromise = null;
 }
+// Detect HF Spaces sleeping/building HTML responses so we can wake the
+// Space instead of failing with a confusing JSON parse error.
+function looksLikeHfSleepingPage(text) {
+  if (!text) return false;
+  const t = text.trim().slice(0, 500).toLowerCase();
+  if (t.startsWith('<!doctype') || t.startsWith('<html')) return true;
+  if (t.includes('preparing space') || t.includes('this space is sleeping') ||
+      t.includes('building') || t.includes('runtime error')) return true;
+  return false;
+}
+
+// Poll the HF Space root until it returns valid JSON (the awake state).
+// HF cold-start usually takes 20-60s. Give up after maxWaitMs.
+async function waitForHfSpaceAwake(maxWaitMs) {
+  maxWaitMs = maxWaitMs || 120000; // 2 minutes
+  const start = Date.now();
+  let attempt = 0;
+  while (Date.now() - start < maxWaitMs) {
+    attempt++;
+    try {
+      const r = await hfFetch('/', { method: 'GET' });
+      const txt = await r.text();
+      if (r.ok && !looksLikeHfSleepingPage(txt)) {
+        try {
+          const j = JSON.parse(txt);
+          if (j && j.ok != null) return j;
+        } catch {}
+      }
+      const elapsed = Math.round((Date.now() - start) / 1000);
+      agentLog(`  ⏳ HF Space waking up… ${elapsed}s (attempt ${attempt})`, 'sys');
+    } catch (e) {
+      agentLog(`  ⏳ HF Space unreachable, retrying… ${e.message || e}`, 'sys');
+    }
+    await new Promise(r => setTimeout(r, 4000));
+  }
+  return null;
+}
+
 async function _agentStartInner() {
   agentBusy = true;
   agentLog('› agent.js build: ' + (typeof KEMLLM_BUILD !== 'undefined' ? KEMLLM_BUILD : 'unknown'), 'sys');
@@ -137,20 +175,44 @@ async function _agentStartInner() {
     agentBackend = 'hf';
     agentLog('› connecting to ' + hfUrl, 'sys');
     try {
-      // Wake the Space if asleep
-      const health = await hfFetch('/', { method: 'GET' });
-      if (!health.ok) throw new Error('backend health check ' + health.status);
-      const hd = await health.json();
+      // Health check — read as text first so we can detect HF sleeping pages
+      let health = await hfFetch('/', { method: 'GET' });
+      let hd = null;
+      let healthText = '';
+      try { healthText = await health.text(); } catch {}
+      if (looksLikeHfSleepingPage(healthText) || !health.ok) {
+        agentLog('  ⏳ HF Space is asleep — waking it up (this can take 20-60s)…', 'sys');
+        hd = await waitForHfSpaceAwake(120000);
+        if (!hd) {
+          throw new Error(
+            'HF Space did not wake up within 2 minutes. ' +
+            'It may need a manual restart — visit your Space\'s Settings tab and use "Factory rebuild", ' +
+            'or update a file (Dockerfile or app.py) and commit it to trigger a rebuild.'
+          );
+        }
+      } else {
+        try { hd = JSON.parse(healthText); }
+        catch { throw new Error('Health response is not JSON: ' + healthText.slice(0, 200)); }
+      }
       agentLog('  ✓ backend up · ' + (hd.service || 'kemllm-agent') + (hd.auth_required ? ' · token ok' : ' · OPEN MODE (no token)'), 'sys');
+
       const r = await hfFetch('/sessions', { method: 'POST', body: '{}' });
       const rawText = await r.text();
       agentLog('  ← POST /sessions ' + r.status + ' body: ' + rawText.slice(0, 300), 'sys');
       if (!r.ok) {
+        if (looksLikeHfSleepingPage(rawText)) {
+          throw new Error('Space went back to sleep mid-request. Retry in a few seconds.');
+        }
         throw new Error('create session ' + r.status + ': ' + rawText.slice(0, 200));
       }
       let data;
       try { data = JSON.parse(rawText); }
-      catch (e) { throw new Error('create session: response is not JSON: ' + rawText.slice(0, 200)); }
+      catch (e) {
+        if (looksLikeHfSleepingPage(rawText)) {
+          throw new Error('Space returned an HTML page (still booting?). Retry in a few seconds.');
+        }
+        throw new Error('create session: response is not JSON: ' + rawText.slice(0, 200));
+      }
       agentSessionId = data.session_id || data.sandboxID || data.sandbox_id || data.id;
       if (!agentSessionId) {
         throw new Error('create session succeeded but response has no session_id field. Got keys: ' + Object.keys(data || {}).join(','));

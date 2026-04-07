@@ -716,3 +716,37 @@ input,textarea{font-family:inherit;color:inherit;}
   0%{transform:rotate(0deg);}
   100%{transform:rotate(360deg);}
 }
+
+/* ========== ABSOLUTE TAP-FIX for sidebar items ==========
+   Forces pointer-events on every sidebar nav item and removes any
+   stale animation/transform state that could put the click target
+   in the wrong place. This is the nuclear option for the recurring
+   "sidebar items grayed out and unclickable" problem on iOS / narrow
+   windows. */
+#sb-icons .si,
+#sb-icons .sb-chat,
+#sb-icons .si-ava-row,
+#sb-icons .sb-newchat,
+#sb-icons .sb-viewall,
+#sb-icons .si-logo {
+  pointer-events: auto !important;
+  -webkit-tap-highlight-color: transparent !important;
+  touch-action: manipulation !important;
+  user-select: none;
+  -webkit-user-select: none;
+  position: relative;
+  /* Make the entire row a positive tap target — at least 44px tall */
+  min-height: 44px;
+}
+/* Kill the staggered entry animation entirely on touch devices, so the
+   items are guaranteed at their final position the moment they're rendered.
+   The animation was technically completing fine, but `both` fill mode +
+   the transform created occasional repaint glitches that made click hits
+   land outside the visible row on iOS. */
+@media (hover: none) and (pointer: coarse) {
+  #app.show .sb-nav .si {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

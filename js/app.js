@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v37 · regenerate preserves atts; Pyodide retries on failure';
+const KEMLLM_BUILD = 'v38 · sidebar event delegation + nuclear pointer-events';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -286,20 +286,36 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-github')?.addEventListener('click', githubLogin);
   document.getElementById('btn-demo')?.addEventListener('click', demoLogin);
 
-  // Sidebar nav
-  document.querySelectorAll('.si').forEach(el => {
-    el.addEventListener('click', () => {
-      const action = el.dataset.action;
-      if (action === 'new-chat') {
-        newChat();
-        siNav('chat');
-        return;
-      }
-      const p = el.dataset.panel;
-      if (p === 'connectors') { openMCP(); return; }
-      if (p) siNav(p);
-    });
-  });
+  // Sidebar nav — use event delegation so dynamically-added items also work
+  // and so we don't depend on the elements existing at DOMContentLoaded time.
+  // We listen on the document so even if a parent has weird CSS, the click
+  // event still bubbles up here.
+  function handleSidebarNavClick(e) {
+    const el = e.target.closest('.si');
+    if (!el || !document.getElementById('sb-icons')?.contains(el)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const action = el.dataset.action;
+    if (action === 'new-chat') {
+      newChat();
+      siNav('chat');
+      return;
+    }
+    const p = el.dataset.panel;
+    if (p === 'connectors') { openMCP(); return; }
+    if (p) siNav(p);
+  }
+  document.addEventListener('click', handleSidebarNavClick, true);
+  // iOS sometimes drops synthetic click events on the sidebar; touchend as backup
+  document.addEventListener('touchend', (e) => {
+    const el = e.target.closest('.si');
+    if (!el || !document.getElementById('sb-icons')?.contains(el)) return;
+    // Only handle if it was a real tap (not a scroll/long-press)
+    if (e.changedTouches && e.changedTouches.length === 1) {
+      e.preventDefault();
+      handleSidebarNavClick(e);
+    }
+  }, { passive: false });
   document.getElementById('si-logo')?.addEventListener('click', () => siNav('chat'));
   document.getElementById('sb-viewall')?.addEventListener('click', toggleDrawer);
   document.getElementById('sb-new-chat')?.addEventListener('click', newChat);

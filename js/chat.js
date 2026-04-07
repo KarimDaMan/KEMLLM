@@ -268,7 +268,11 @@ async function sendMessage() {
       return;
     }
     renderUserMessage(text, atts);
-    messages.push({ role: 'user', content: text });
+    // Preserve attachments so vision + agent mode works
+    const agentUserMsg = atts.length
+      ? { role: 'user', content: text, attachments: atts }
+      : { role: 'user', content: text };
+    messages.push(agentUserMsg);
     await runAgentModeChat(text);
     saveCurrentChat();
     return;

@@ -182,8 +182,12 @@ async function callAnthropicDirect(model, messages, apiKey, onChunk) {
   const sys = messages.find(m => m.role === 'system')?.content || '';
   const msgs = messages.filter(m => m.role !== 'system').map(m => {
     const role = m.role === 'assistant' ? 'assistant' : 'user';
-    if (m.attachments && m.attachments.length) {
-      const parts = m.attachments.map(a => {
+    // Only pass image attachments to Claude — it doesn't accept arbitrary
+    // file types. Non-image files are ignored here (the AI can still
+    // reference them by name via the text prompt).
+    const images = (m.attachments || []).filter(a => a.isImage || (a.mime || '').startsWith('image/'));
+    if (images.length) {
+      const parts = images.map(a => {
         const d = parseDataUrl(a.dataUrl);
         if (!d) return null;
         return { type: 'image', source: { type: 'base64', media_type: d.mediaType, data: d.base64 } };
@@ -227,10 +231,11 @@ async function callAnthropicBuiltin(model, messages, onChunk) {
 // ===== OpenAI / xAI (compatible) =====
 async function callOpenAIStyle(url, modelId, messages, apiKey, onChunk) {
   const oaiMsgs = messages.map(m => {
-    if (m.attachments && m.attachments.length) {
+    const images = (m.attachments || []).filter(a => a.isImage || (a.mime || '').startsWith('image/'));
+    if (images.length) {
       const parts = [];
       if (m.content) parts.push({ type: 'text', text: m.content });
-      m.attachments.forEach(a => parts.push({ type: 'image_url', image_url: { url: a.dataUrl } }));
+      images.forEach(a => parts.push({ type: 'image_url', image_url: { url: a.dataUrl } }));
       return { role: m.role, content: parts };
     }
     return { role: m.role, content: m.content };
@@ -261,12 +266,20 @@ async function callGoogleDirect(model, messages, apiKey, onChunk) {
   const contents = messages.filter(m => m.role !== 'system').map(m => {
     const parts = [];
     if (m.content) parts.push({ text: m.content });
-    if (m.attachments && m.attachments.length) {
-      m.attachments.forEach(a => {
-        const d = parseDataUrl(a.dataUrl);
-        if (d) parts.push({ inlineData: { mimeType: d.mediaType, data: d.base64 } });
-      });
-    }
+    // Gemini supports images, audio, video, PDF inline. Pass images
+    // explicitly (most common case); for other types, try inlineData
+    // with the real mime so Gemini decides whether to accept it.
+    (m.attachments || []).forEach(a => {
+      const d = parseDataUrl(a.dataUrl);
+      if (!d) return;
+      // Skip non-media attachments (e.g. code files) to avoid Gemini rejecting the whole request
+      const isMedia = (a.mime || '').startsWith('image/') ||
+                      (a.mime || '').startsWith('audio/') ||
+                      (a.mime || '').startsWith('video/') ||
+                      (a.mime || '') === 'application/pdf';
+      if (!isMedia) return;
+      parts.push({ inlineData: { mimeType: d.mediaType, data: d.base64 } });
+    });
     return { role: m.role === 'assistant' ? 'model' : 'user', parts };
   });
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.apiId}:generateContent?key=${apiKey}`;

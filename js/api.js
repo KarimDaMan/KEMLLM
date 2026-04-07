@@ -56,22 +56,37 @@ function loadAllSettings() {
 }
 function saveKey(provider) {
   const el = document.getElementById('key-' + provider);
-  if (el) {
-    profileSet('key-' + provider, el.value.trim());
-    showToast('Saved');
-    // Re-render dropdowns and models panel so newly-unlocked (or hidden) models update immediately
-    if (typeof renderModelDropdowns === 'function') renderModelDropdowns();
-    if (typeof renderModelsPanel === 'function') renderModelsPanel();
+  if (!el) return;
+  const newVal = el.value.trim();
+  const existing = profileGet('key-' + provider) || '';
+  // Don't silently wipe a saved key with an empty input. The user
+  // has to explicitly confirm they want to clear it.
+  if (!newVal && existing) {
+    if (!confirm('Clear the saved ' + provider + ' API key?')) {
+      el.value = existing;
+      return;
+    }
   }
+  profileSet('key-' + provider, newVal);
+  showToast('Saved');
+  if (typeof renderModelDropdowns === 'function') renderModelDropdowns();
+  if (typeof renderModelsPanel === 'function') renderModelsPanel();
 }
 function saveRepKey() {
   const el = document.getElementById('rep-key');
-  if (el) {
-    profileSet('rep-key', el.value.trim());
-    showToast('Saved');
-    if (typeof renderModelDropdowns === 'function') renderModelDropdowns();
-    if (typeof renderModelsPanel === 'function') renderModelsPanel();
+  if (!el) return;
+  const newVal = el.value.trim();
+  const existing = profileGet('rep-key') || '';
+  if (!newVal && existing) {
+    if (!confirm('Clear the saved Replicate API key?')) {
+      el.value = existing;
+      return;
+    }
   }
+  profileSet('rep-key', newVal);
+  showToast('Saved');
+  if (typeof renderModelDropdowns === 'function') renderModelDropdowns();
+  if (typeof renderModelsPanel === 'function') renderModelsPanel();
 }
 
 // ===== Provider routing =====

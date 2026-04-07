@@ -178,6 +178,19 @@ function _hashSyncData(data) {
   try { return JSON.stringify(data); } catch { return ''; }
 }
 
+// Keys where an empty remote value must NOT overwrite a non-empty local value.
+// Protects API keys from being wiped by an accidentally-blank push from
+// another device (or from the first push before the user has filled them in).
+const SENSITIVE_KEYS = [
+  'rep-key',
+  'key-anthropic',
+  'key-openai',
+  'key-google',
+  'key-xai',
+  'hf-backend-url',
+  'hf-backend-token',
+];
+
 async function pullSync(opts) {
   const silent = opts && opts.silent;
   const p = getSyncProfile();
@@ -193,15 +206,36 @@ async function pullSync(opts) {
     const newHash = _hashSyncData(body.data);
     if (newHash === _lastPulledHash) return; // nothing changed
     _lastPulledHash = newHash;
-    // Merge each key into local profile storage WITHOUT re-triggering pushSync
+    // Merge each key into local profile storage WITHOUT re-triggering pushSync.
+    // For SENSITIVE_KEYS (api keys), an empty remote value never overwrites
+    // a non-empty local value — this protects against a blank sync blob
+    // wiping out good keys.
     Object.keys(body.data).forEach(k => {
-      if (SYNC_KEYS.includes(k) && body.data[k] != null) {
-        // Use raw localStorage write to avoid the pushSync recursion in profileSet
-        if (activeProfileId) {
-          localStorage.setItem(`p_${activeProfileId}_${k}`, body.data[k]);
-        }
+      if (!SYNC_KEYS.includes(k)) return;
+      const remote = body.data[k];
+      if (remote == null) return;
+      if (SENSITIVE_KEYS.includes(k) && !remote) {
+        const local = activeProfileId ? localStorage.getItem(`p_${activeProfileId}_${k}`) : null;
+        if (local) return; // keep the good local value
+      }
+      if (activeProfileId) {
+        localStorage.setItem(`p_${activeProfileId}_${k}`, remote);
       }
     });
+    // Recovery: if the remote blob is missing a sensitive key but the local
+    // value exists, re-push to heal the KV blob. This undoes any prior
+    // accidental wipe.
+    let needsHeal = false;
+    for (const k of SENSITIVE_KEYS) {
+      if (!body.data[k]) {
+        const local = activeProfileId ? localStorage.getItem(`p_${activeProfileId}_${k}`) : null;
+        if (local) { needsHeal = true; break; }
+      }
+    }
+    if (needsHeal) {
+      console.log('[KEMLLM] healing KV blob — pushing local keys up');
+      pushSync();
+    }
     if (!silent) showToast('Synced from cloud');
     // Re-render UI elements that read from these keys
     if (typeof loadHistory === 'function') loadHistory();
@@ -237,7 +271,11 @@ function pushSync() {
     const data = {};
     SYNC_KEYS.forEach(k => {
       const v = profileGet(k);
-      if (v != null) data[k] = v;
+      if (v == null) return;
+      // Never push empty strings for sensitive keys — an empty push
+      // would clobber good values on other devices on the next pull.
+      if (SENSITIVE_KEYS.includes(k) && !v) return;
+      data[k] = v;
     });
     try {
       const r = await fetch(SYNC_BASE, {

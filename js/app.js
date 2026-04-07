@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v61 · route Replicate through kemllmx (kemllmbackend proxy not deployed); auto-start noVNC stack in Dockerfile.desktop';
+const KEMLLM_BUILD = 'v62 · real README; inline start-desktop.sh into Dockerfile.desktop so only 2 files need uploading to HF';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

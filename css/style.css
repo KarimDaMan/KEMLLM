@@ -422,8 +422,12 @@ input,textarea{font-family:inherit;color:inherit;}
   from{opacity:0;transform:translateY(-6px) scale(.97);}
   to{opacity:1;transform:translateY(0) scale(1);}
 }
-.mdi{transition:all .18s var(--ease);}
-.mdi:hover{transform:translateX(3px);}
+.mdi{transition:background .18s var(--ease),color .18s var(--ease);}
+@media (hover: hover) and (pointer: fine) {
+  .mdi:hover{transform:translateX(3px);}
+}
+.mdi{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+.mdi:active{background:var(--bg3);}
 
 /* Modals */
 .modal-overlay{transition:opacity .25s var(--ease-out);opacity:0;}
@@ -570,6 +574,8 @@ input,textarea{font-family:inherit;color:inherit;}
   .code-lang-sel{font-size:11px;padding:4px 6px;}
   .code-btn{padding:5px 10px;font-size:11px;}
   .dr-inner{max-width:92vw;}
+  /* Prevent iOS auto-zoom on input focus: font-size must be >= 16px */
+  .sp-input,.mi,select.sp-input,textarea.sp-input,#code-editor,#ag-cmd{font-size:16px;}
 }
 
 @media (max-width:500px){

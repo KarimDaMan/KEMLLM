@@ -2,7 +2,7 @@
 
 **Last updated:** session of 2026-04-07 (overnight fixes)
 **Live at:** `https://karimdaman.github.io/KEMLLM/`
-**Current build marker:** `v33 · chat reload renders attachments + robust content handling`
+**Current build marker:** `v37 · regenerate preserves atts; Pyodide retries on failure`
 
 Look for the build marker in the browser console (red banner) or at the top of the agent terminal area the first time you use Agent mode. If you see anything earlier than `v31`, your browser is caching old JavaScript — open a private/incognito window.
 
@@ -165,6 +165,10 @@ KEMLLM/
 
 ## Commit log (newest first)
 
+- `0053b3e` — regenerateMessage preserves attachments; Pyodide retries on failure
+- `15a4949` — Dropdowns clamp to viewport; flip above button if no room below
+- `7519fc8` — Mobile polish: prevent iOS input zoom; guard dropdown hover transform
+- `dd45b46` — **Mobile sidebar tap fix** — items no longer gray out without firing click
 - `6cf601b` — Chat reload renders attachment chips; robust content handling
 - `ac37cb1` — newChat resets agent loop; strips attachments from localStorage
 - `8da87ed` — Add STATUS.md
@@ -182,9 +186,58 @@ KEMLLM/
 ## Single most important thing to verify tomorrow
 
 Open the app in a **private/incognito window** and look for the build marker:
-- Console (devtools): red banner saying `KEMLLM v33 · ...`
-- Or: the first line in the chat area when you press the Desktop button says `› agent.js build: v33 · ...`
+- Console (devtools): red banner saying `KEMLLM v37 · ...`
+- Or: the first line in the chat area when you press the Desktop button says `› agent.js build: v37 · ...`
 
-If you see any version earlier than v33, your cache is still holding stale JS. Fix: clear site data in browser settings, close all tabs, reload.
+If you see any version earlier than v37, your cache is still holding stale JS. Fix: clear site data in browser settings, close all tabs, reload.
 
-Once you're confirmed on v33, the previously-silent agent log lines will actually appear in the chat area — including the raw `POST /sessions` response body, which will finally reveal what your HF backend is returning (if it's misbehaving at all).
+Once you're confirmed on v37, the previously-silent agent log lines will actually appear in the chat area — including the raw `POST /sessions` response body, which will finally reveal what your HF backend is returning (if it's misbehaving at all).
+
+## Every fix from this overnight session, in plain English
+
+### The single biggest bug discovery
+`agentLog()` — the function every part of the agent boot/run code uses to show diagnostic output — was writing to `#ag-term`, a DOM element I deleted when I moved agent into a chat mode. For every commit after that, ALL the helpful diagnostic lines (boot progress, error messages, backend response bodies, build markers) were silently vanishing into the void. That's why you kept seeing the same error and never any new information — the new information was being generated but never shown. Fixed in commit `9ec3c0b`; agentLog now writes to the main chat area as color-coded mono-font lines.
+
+### Mobile sidebar can't tap items
+Three interlocking causes:
+1. **Sticky `:hover`** on touch devices — the first tap applied the hover state, which persisted. The second tap would then fire the click, but users interpreted the first tap as "grayed out and broken".
+2. **iOS default tap highlight** — a dark translucent overlay appears on tap, which looked exactly like a disabled state.
+3. **`transition: all`** on sidebar items combined with `:hover { transform }` — during the 140ms tween, the click target was physically offset from where the user was looking.
+
+Fixes (`dd45b46`): all `transform`-based `:hover` rules wrapped in `@media (hover: hover) and (pointer: fine)` so they only apply to real pointer devices. Touch-friendly `:active` fallbacks added. `-webkit-tap-highlight-color: transparent` and `touch-action: manipulation` on every clickable sidebar item. Mobile sidebar z-index raised to 9990 to eliminate any stacking doubt. Transitions narrowed to `background, color` only.
+
+### iOS Safari auto-zooming on input focus
+Any input with `font-size < 16px` triggers a viewport zoom when focused on iOS. Settings inputs at 13px, modal inputs at 12.5px, and the code editor were all affected. Fixed (`7519fc8`) by bumping them all to 16px inside `@media (max-width: 820px)`.
+
+### Dropdowns falling off the edge of small screens
+`positionDrop()` just set `top: r.bottom, left: r.left` without any viewport clamping. On mobile this meant the 300-320px chat/image/video model dropdown could extend past the right edge and get chopped, or fall below the input bar and be hidden. Fixed (`15a4949`) by measuring the dropdown, clamping horizontally, and flipping it above the button if there's no room below.
+
+### Vision chat dropping attached images
+`callReplicateChat` was turning messages into a plain text prompt, silently discarding the `attachments` array on every message. Since Replicate is the primary chat backend, this meant vision never worked unless the user also had a direct Anthropic/OpenAI/Google key. Fixed (`1736f77`) — `callReplicateChat` now extracts the first image and sends it under `image`, `image_input`, and `input_image` fields simultaneously so whichever schema the model uses, it picks it up. And (`fb753a1`) provider-specific paths filter attachments to images only (before, a PDF would be wrapped as `type: 'image'` in the Anthropic request, rejecting the whole thing).
+
+### Agent boot getting stuck on pyodide after a failed HF attempt
+`agentStart()` short-circuited with `Promise.resolve()` whenever `agentReady` was true. If a previous HF attempt had failed and fallen back to Pyodide, `agentReady` was already `true` but on the wrong backend. The Desktop button would call `agentStart()`, get an instant resolve, see `agentBackend === 'pyodide'`, and bail with "needs HF backend". Stuck until page refresh. Fixed (`015dba7`) — now if we're ready on pyodide BUT the user has an HF URL configured, we reset and retry HF. Also added `agentReset()` that the Desktop button proactively calls if state looks broken.
+
+### CORS preflight failing silently
+flask-cors default `allow_headers` in older versions doesn't include `Authorization`. When the frontend sent `Authorization: Bearer <token>` on a POST, the preflight OPTIONS response didn't list Authorization as allowed, the browser rejected the actual POST with "Failed to fetch", and no useful error appeared in the backend logs. Fixed in `agent-backend/app.py` with explicit `allow_headers` list AND an `@app.after_request` hook that stamps the full CORS header set on every response. Belt-and-suspenders.
+
+### `localStorage` blowing up from attachment payloads
+`saveCurrentChat()` was persisting the full `messages` array including base64 data URLs for every image attachment. A single image can be multiple megabytes; a few chats would hit the ~5 MB localStorage quota and silently fail. Fixed (`ac37cb1`) by stripping payloads before save (keeping name/size/mime/isImage metadata) and wrapping the write in a try/catch that drops oldest chats on `QuotaExceededError`.
+
+### Chat reload showing broken image icons
+After `localStorage` strip, reloading a chat tried to render `<img src="undefined">`. Fixed (`6cf601b`) — `renderUserMessage` detects missing dataUrls and falls back to a file chip with icon/name/size. And `loadChat` now passes `m.attachments` through so the chips actually appear.
+
+### `regenerateMessage` losing attachments
+Clicking Regenerate on a vision-chat message re-sent the text but without the image. Fixed (`0053b3e`) — now restores the attachments into `pendingAttachments` before re-sending, best-effort (post-reload the dataUrls are gone).
+
+### Pyodide cache locked on failure
+`getPyodide()` stored the `loadPyodide()` promise in a module var and returned it on every subsequent call. If the jsdelivr CDN hiccuped on first load, every future attempt would return the same rejected promise — never retrying, never recovering until page refresh. Fixed (`0053b3e`) — on rejection, clear the cached promise so the next call starts fresh.
+
+### Image generation 404 on attached images
+The IMG_REGEX was matching any message with "image" or "show" in it, so attaching a photo and saying "what's in this image?" was being routed to Replicate image GENERATION instead of vision chat. And the selected image model's slug was a placeholder that 404'd. Fixed earlier (`2a4bc20`) — attachments skip IMG_REGEX entirely, and image generation has a fallback chain through real known-working Replicate models.
+
+### Sidebar "Chat" button was redundant
+The "Chat" sidebar nav item did nothing useful (the chat list below already handles switching between chats). Replaced it with a "New Chat" button (`26d7b46`). Each panel now has its own URL too (`#/chat`, `#/code`, `#/models`, `#/settings`) so browser back/forward and deep-links work.
+
+### Image editing was wired but unused
+Added `handleEditImageRequest` + `editImage()` with FLUX Kontext Pro and a fallback chain (`2bced16`). EDIT_REGEX detects "edit/change/modify/turn/remove/add/enhance/colorize/..." keywords when there's an image attached and routes to img2img instead of vision chat.

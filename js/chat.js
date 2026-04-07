@@ -558,6 +558,35 @@ function processAIMarkers(text) {
   }
 }
 
+// Probe the HF backend's /desktop endpoint to see if the new Dockerfile
+// (with Xvfb + noVNC) has been deployed. If so, reveal the floating
+// Desktop button in the chat panel.
+let _desktopProbedOnce = false;
+async function probeDesktopSupport() {
+  const btn = document.getElementById('chat-desktop-btn');
+  if (!btn) return;
+  const base = getHfBackendUrl();
+  const tok = getHfBackendToken();
+  if (!base) { btn.classList.remove('show'); return; }
+  try {
+    const r = await fetch(base + '/desktop?token=' + encodeURIComponent(tok), { method: 'GET' });
+    // Possible responses:
+    //   200   → noVNC already running inside sandbox, ready to show
+    //   502   → endpoint exists, backend up, but noVNC not started yet (still means Dockerfile is good)
+    //   401   → endpoint exists but token mismatch
+    //   404   → old backend without /desktop, update needed
+    //   500   → requests lib missing, update needed
+    if (r.status === 200 || r.status === 502 || r.status === 401) {
+      btn.classList.add('show');
+      _desktopProbedOnce = true;
+    } else {
+      btn.classList.remove('show');
+    }
+  } catch {
+    btn.classList.remove('show');
+  }
+}
+
 // Start or restart a noVNC desktop inside the sandbox and show it in the preview
 async function showAgentDesktop() {
   if (!agentSessionId || agentBackend !== 'hf') {

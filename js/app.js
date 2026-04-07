@@ -333,6 +333,20 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('send-btn')?.addEventListener('click', sendMessage);
   document.getElementById('stop-btn')?.addEventListener('click', stopAgentLoop);
 
+  // Floating Desktop button (only shows when the HF backend has the new Dockerfile)
+  document.getElementById('chat-desktop-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('chat-desktop-btn');
+    btn?.classList.add('loading');
+    try {
+      // Make sure we're in agent mode and the sandbox is up
+      if (chatMode !== 'agent') setChatMode('agent');
+      if (!agentReady) await agentStart();
+      await showAgentDesktop();
+    } finally {
+      btn?.classList.remove('loading');
+    }
+  });
+
   // Chat preview pane controls
   document.getElementById('chat-preview-close')?.addEventListener('click', chatPreviewClose);
   document.getElementById('chat-preview-reload')?.addEventListener('click', chatPreviewReload);
@@ -373,6 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const v = document.getElementById('hf-backend-url').value.trim().replace(/\/$/, '');
     profileSet('hf-backend-url', v);
     showToast('Backend URL saved');
+    probeDesktopSupport();
   });
   document.getElementById('save-hf-token')?.addEventListener('click', () => {
     const v = document.getElementById('hf-backend-token').value.trim();

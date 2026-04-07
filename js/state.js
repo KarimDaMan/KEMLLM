@@ -73,6 +73,8 @@ function activateProfile(id) {
   loadMCPState();
   applyTheme(profileGet('theme') || 'dark');
   applyAccent(profileGet('accent') || '#4a9eff');
+  // Check if HF backend supports the desktop stack → reveal the floating button
+  if (typeof probeDesktopSupport === 'function') probeDesktopSupport();
 }
 
 function demoLogin() {

@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v54 · per-model image-edit input schema (nano-banana as array, flux as string)';
+const KEMLLM_BUILD = 'v55 · point Replicate proxy at kemllmbackend worker';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -553,7 +553,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!k) { showToast('Enter a key first'); return; }
     showToast('Testing Replicate…');
     try {
-      const res = await fetch('https://kemllmx.karimghannam2014.workers.dev/replicate/v1/account', {
+      const res = await fetch('https://kemllmbackend.karimghannam2014.workers.dev/replicate/v1/account', {
         headers: { 'Authorization': 'Bearer ' + k }
       });
       if (res.ok) {

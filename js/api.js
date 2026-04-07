@@ -44,7 +44,7 @@ function logDebugRequest(entry) {
 
 // Replicate is proxied through the Cloudflare worker to avoid CORS issues.
 // The worker forwards any /replicate/* path to api.replicate.com/*
-const REPLICATE_BASE = 'https://kemllmx.karimghannam2014.workers.dev/replicate';
+const REPLICATE_BASE = 'https://kemllmbackend.karimghannam2014.workers.dev/replicate';
 async function replicateFetch(path, init) {
   const url = REPLICATE_BASE + path;
   try {

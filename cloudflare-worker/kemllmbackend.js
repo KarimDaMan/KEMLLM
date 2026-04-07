@@ -145,6 +145,29 @@ export default {
       return json({ ok: true });
     }
 
+    // ===== Replicate proxy =====
+    // Forwards /replicate/* → https://api.replicate.com/*
+    // Caller supplies their own `Authorization: Bearer r8_...` header.
+    if (url.pathname.startsWith('/replicate/')) {
+      const target = 'https://api.replicate.com/' + url.pathname.slice('/replicate/'.length) + url.search;
+      const fwdHeaders = new Headers();
+      const auth = request.headers.get('Authorization');
+      if (auth) fwdHeaders.set('Authorization', auth);
+      const ct = request.headers.get('Content-Type');
+      if (ct) fwdHeaders.set('Content-Type', ct);
+      const pref = request.headers.get('Prefer');
+      if (pref) fwdHeaders.set('Prefer', pref);
+      fwdHeaders.set('User-Agent', 'KEMLLM-worker');
+      let body = undefined;
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        body = await request.arrayBuffer();
+      }
+      const upstream = await fetch(target, { method: request.method, headers: fwdHeaders, body });
+      const respHeaders = new Headers(upstream.headers);
+      for (const [k, v] of Object.entries(CORS)) respHeaders.set(k, v);
+      return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
+    }
+
     // ===== Health =====
     return json({
       service: 'kemllm-backend',

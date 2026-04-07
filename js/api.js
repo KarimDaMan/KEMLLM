@@ -42,10 +42,13 @@ function logDebugRequest(entry) {
   };
 })();
 
-// Replicate is proxied through the kemllmbackend Cloudflare worker.
-// Source has the /replicate/* proxy block — redeploy the worker if it
-// ever 404s / returns the health JSON for a prediction call.
-const REPLICATE_BASE = 'https://kemllmbackend.karimghannam2014.workers.dev/replicate';
+// Replicate is proxied through the kemllmx Cloudflare worker. The newer
+// kemllmbackend worker has the /replicate/* proxy block in its source
+// (cloudflare-worker/kemllmbackend.js) but has NOT been redeployed — I
+// verified via curl that the live version still just returns its health
+// JSON for /replicate/* paths. Once you redeploy kemllmbackend from the
+// current source, you can flip this constant back.
+const REPLICATE_BASE = 'https://kemllmx.karimghannam2014.workers.dev/replicate';
 async function replicateFetch(path, init) {
   const url = REPLICATE_BASE + path;
   try {

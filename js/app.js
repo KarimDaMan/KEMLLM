@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v60 · uncap AI memory; loosen remember instruction';
+const KEMLLM_BUILD = 'v61 · route Replicate through kemllmx (kemllmbackend proxy not deployed); auto-start noVNC stack in Dockerfile.desktop';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -561,7 +561,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!k) { showToast('Enter a key first'); return; }
     showToast('Testing Replicate…');
     try {
-      const res = await fetch('https://kemllmbackend.karimghannam2014.workers.dev/replicate/v1/account', {
+      const res = await fetch('https://kemllmx.karimghannam2014.workers.dev/replicate/v1/account', {
         headers: { 'Authorization': 'Bearer ' + k }
       });
       if (res.ok) {

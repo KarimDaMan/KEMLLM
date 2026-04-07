@@ -42,10 +42,13 @@ RUN useradd -m -s /bin/bash agent \
 
 WORKDIR /app
 COPY app.py /app/app.py
-RUN chown -R agent:agent /app /home/agent
+COPY start-desktop.sh /app/start-desktop.sh
+RUN chmod +x /app/start-desktop.sh \
+ && chown -R agent:agent /app /home/agent
 
 USER agent
 WORKDIR /home/agent
 
 EXPOSE 7860
-CMD ["python3", "/app/app.py"]
+# bash (not sh) so the /dev/tcp port probe in the script works.
+CMD ["/bin/bash", "/app/start-desktop.sh"]

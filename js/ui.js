@@ -82,8 +82,30 @@ function closeSidebar() {
 // ===== Dropdowns =====
 function positionDrop(btn, drop) {
   const r = btn.getBoundingClientRect();
-  drop.style.top = (r.bottom + 6) + 'px';
-  drop.style.left = r.left + 'px';
+  const vw = window.innerWidth || document.documentElement.clientWidth;
+  const vh = window.innerHeight || document.documentElement.clientHeight;
+  // Show the drop briefly to measure it, then clamp to the viewport
+  drop.style.visibility = 'hidden';
+  drop.style.display = 'block';
+  drop.style.top = '0';
+  drop.style.left = '0';
+  const dr = drop.getBoundingClientRect();
+  drop.style.display = '';
+  drop.style.visibility = '';
+  const dropW = dr.width || 300;
+  const dropH = dr.height || 400;
+  let top = r.bottom + 6;
+  let left = r.left;
+  // Clamp horizontally: never overflow the right edge
+  if (left + dropW > vw - 8) left = Math.max(8, vw - dropW - 8);
+  // If the dropdown would fall below the viewport, flip above the button
+  if (top + dropH > vh - 8) {
+    const aboveTop = r.top - dropH - 6;
+    if (aboveTop >= 8) top = aboveTop;
+    else top = Math.max(8, vh - dropH - 8);
+  }
+  drop.style.top = top + 'px';
+  drop.style.left = left + 'px';
 }
 function toggleChatDrop() {
   const drop = document.getElementById('mdrop');

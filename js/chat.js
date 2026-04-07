@@ -463,14 +463,68 @@ function newChat() {
 }
 
 // ===== Attachments =====
+// Accept ANY file type. Images are passed to the AI as vision input.
+// Non-image files (ISO, PDF, zip, txt, code, anything) are base64-read and
+// attached to the message; in Agent mode they're uploaded to the sandbox
+// filesystem so the AI can cat/unzip/mount/inspect them.
 function addAttachment(file) {
-  if (!file.type.startsWith('image/')) return;
+  const isImage = file.type.startsWith('image/');
   const reader = new FileReader();
   reader.onload = e => {
-    pendingAttachments.push({ dataUrl: e.target.result, name: file.name });
+    const dataUrl = e.target.result; // data:mime;base64,...
+    pendingAttachments.push({
+      dataUrl,
+      name: file.name,
+      size: file.size,
+      mime: file.type || 'application/octet-stream',
+      isImage
+    });
     renderAttachPreview();
+    // In Agent mode, auto-upload to the sandbox so it's usable
+    if (chatMode === 'agent' && agentReady && !isImage) {
+      uploadAttachmentToSandbox(pendingAttachments[pendingAttachments.length - 1]);
+    }
   };
   reader.readAsDataURL(file);
+}
+
+async function uploadAttachmentToSandbox(att) {
+  if (agentBackend !== 'hf' || !agentSessionId) return;
+  try {
+    // Strip the "data:<mime>;base64," prefix
+    const b64 = att.dataUrl.split(',')[1] || '';
+    // Use a simple python one-liner to write the file by decoding the b64
+    const py = `import base64; open('/home/agent/sessions/${agentSessionId}/${escapeShell(att.name)}','wb').write(base64.b64decode('${b64}'))`;
+    // Actually just POST to /write with content — but content would be binary.
+    // Easier: do it via the exec endpoint with a python one-liner.
+    await hfFetch('/sessions/' + agentSessionId + '/exec', {
+      method: 'POST',
+      body: JSON.stringify({
+        command: `python3 -c "import base64,sys; open('${escapeShell(att.name)}','wb').write(base64.b64decode(sys.stdin.read()))" <<'EOF_B64'\n${b64}\nEOF_B64`
+      })
+    });
+    showToast('Uploaded ' + att.name + ' to sandbox');
+  } catch (e) {
+    showToast('Upload failed: ' + e.message);
+  }
+}
+function escapeShell(s) { return String(s).replace(/['"\\`$]/g, '_'); }
+
+function formatBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  return (n / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+function fileIcon(mime, name) {
+  if (mime.startsWith('image/')) return '🖼';
+  if (/\.iso$/i.test(name)) return '💿';
+  if (/\.(zip|tar|gz|7z|rar|xz|bz2)$/i.test(name)) return '📦';
+  if (/\.pdf$/i.test(name)) return '📕';
+  if (/\.(mp4|mkv|mov|webm|avi)$/i.test(name)) return '🎬';
+  if (/\.(mp3|wav|ogg|flac|m4a)$/i.test(name)) return '🎵';
+  if (/\.(py|js|ts|rs|go|java|c|cpp|cs|rb|php|sh|html|css|json|md|txt|yaml|toml|xml)$/i.test(name)) return '📄';
+  return '📎';
 }
 function removeAttachment(idx) {
   pendingAttachments.splice(idx, 1);
@@ -479,7 +533,10 @@ function removeAttachment(idx) {
 function renderAttachPreview() {
   const el = document.getElementById('attach-preview');
   if (!el) return;
-  el.innerHTML = pendingAttachments.map((a, i) =>
-    `<div class="attach-wrap"><img class="attach-thumb" src="${a.dataUrl}"><button class="attach-x" onclick="removeAttachment(${i})">×</button></div>`
-  ).join('');
+  el.innerHTML = pendingAttachments.map((a, i) => {
+    if (a.isImage) {
+      return `<div class="attach-wrap"><img class="attach-thumb" src="${a.dataUrl}"><button class="attach-x" onclick="removeAttachment(${i})">×</button></div>`;
+    }
+    return `<div class="attach-wrap attach-file"><div class="attach-file-inner"><div class="attach-icon">${fileIcon(a.mime, a.name)}</div><div class="attach-meta"><div class="attach-name">${escapeHTML(a.name)}</div><div class="attach-size">${formatBytes(a.size)}</div></div></div><button class="attach-x" onclick="removeAttachment(${i})">×</button></div>`;
+  }).join('');
 }

@@ -97,9 +97,9 @@ async function callChat(model, messages, onChunk, overrideSystem) {
     const rk = getRepKey();
     if (!model.replicateId) {
       const provName = { anthropic:'Anthropic', openai:'OpenAI', google:'Google AI', xai:'xAI' }[provider] || provider;
-      throw new Error(`${model.name} is only available through the ${provName} API directly. Add your ${provName} key in Settings.`);
+      throw new Error(`${model.name} requires a direct ${provName} API key. Go to Settings → API Keys → paste your ${provName} key (https://${provider === 'anthropic' ? 'console.anthropic.com' : provider === 'openai' ? 'platform.openai.com' : provider === 'google' ? 'aistudio.google.com' : 'x.ai'}) → Save. Or pick an open-source model (Llama, Mistral, DeepSeek) that works with just your Replicate key.`);
     }
-    if (!rk) throw new Error('Add your Replicate key in Settings to use ' + model.name + '.');
+    if (!rk) throw new Error('Add your Replicate key in Settings → API Keys to use ' + model.name + '. Get one at https://replicate.com/account/api-tokens');
     return callReplicateChat(model, fullMsgs, rk, onChunk);
   };
 

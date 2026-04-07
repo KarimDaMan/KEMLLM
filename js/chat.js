@@ -39,9 +39,10 @@ function setChatMode(mode) {
       ? 'Code mode · ask for code, auto-runs in browser'
       : 'Ask anything, generate images, run code...';
   }
-  // If switching to agent, make sure backend is primed
+  // If switching to agent, make sure backend is primed (fire-and-forget,
+  // but subsequent callers share the same agentStartPromise so nothing races)
   if (mode === 'agent' && !agentReady) {
-    agentStart();
+    agentStart().catch(() => {});
   }
 }
 
@@ -663,11 +664,22 @@ async function showAgentDesktop() {
   }
   p.done('HF Space is up', '✓');
 
-  // Step 2: make sure we have an agent session for running commands
+  // Step 2: make sure we have an agent session for running commands.
+  // agentStart is now concurrent-safe and returns the same promise for
+  // every caller, so awaiting it here works even if setChatMode already
+  // kicked one off fire-and-forget.
   if (!agentSessionId) {
     const ps = renderProgressLine('creating sandbox session…');
-    await agentStart();
-    if (!agentSessionId) { ps.fail('could not create session'); return; }
+    try {
+      await agentStart();
+    } catch (e) {
+      ps.fail('agentStart threw: ' + (e.message || e));
+      return;
+    }
+    if (!agentSessionId) {
+      ps.fail('agentStart finished but no session_id. Backend may be in a weird state or agentBackend fell back to pyodide. Current: ' + agentBackend);
+      return;
+    }
     ps.done('sandbox session ready', '✓');
   }
 

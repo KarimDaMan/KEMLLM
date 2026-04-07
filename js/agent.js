@@ -16,6 +16,7 @@ let agentBusy = false;
 let agentMessages = [];
 let agentBackend = 'pyodide'; // 'hf' or 'pyodide'
 let agentSessionId = null;    // for HF backend
+let agentStartPromise = null; // shared promise so concurrent callers all await the same boot
 
 function agentLog(text, cls) {
   const term = document.getElementById('ag-term');
@@ -78,8 +79,19 @@ async function hfFetch(path, init) {
 }
 
 // ===== Boot =====
-async function agentStart() {
-  if (agentBusy) return;
+// Concurrent-safe: if a boot is already in progress, every caller awaits
+// the same promise instead of early-returning. Fixes a race where the
+// Desktop button clicked agentStart twice and the second caller skipped
+// the real boot with `if (agentBusy) return` while the first was still
+// mid-POST, causing "could not create session" even though the session
+// was about to exist.
+function agentStart() {
+  if (agentStartPromise) return agentStartPromise;
+  if (agentReady) return Promise.resolve();
+  agentStartPromise = _agentStartInner().finally(() => { agentStartPromise = null; });
+  return agentStartPromise;
+}
+async function _agentStartInner() {
   agentBusy = true;
 
   const hfUrl = getHfBackendUrl();

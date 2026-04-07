@@ -331,3 +331,176 @@ input,textarea{font-family:inherit;color:inherit;}
 /* ====== TOAST ====== */
 #toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--bg2);border:1px solid var(--border2);color:var(--text);padding:11px 20px;border-radius:9px;font-size:12.5px;z-index:10000;opacity:0;transition:all .25s;pointer-events:none;}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ========== ANIMATIONS & POLISH ========== */
+
+/* Global easing variable */
+:root{--ease:cubic-bezier(.22,1,.36,1);--ease-out:cubic-bezier(.16,1,.3,1);}
+
+/* Smoother default transitions everywhere */
+.si,.tb-model,.ib,.ib-icon,.tb-tab,.sb-chat,.sb-newchat,.sb-viewall,.si-ava-row,.mdi,.mp-card,.sp-swatch,.mcp-btn,.um-item,.code-file,.code-btn,.sp-btn,.lbtn,.mbtn,.hi{transition:all .22s var(--ease);}
+.si:hover,.tb-model:hover,.ib:hover,.ib-icon:hover,.sb-chat:hover,.um-item:hover,.code-file:hover{transform:translateX(0);}
+
+/* Login screen entrance */
+#login.show .login-box{animation:loginPop .55s var(--ease-out) both;}
+@keyframes loginPop{
+  0%{opacity:0;transform:translateY(24px) scale(.94);}
+  100%{opacity:1;transform:translateY(0) scale(1);}
+}
+.login-logo{animation:fadeSlide .6s var(--ease-out) .1s both;}
+.login-tag{animation:fadeSlide .6s var(--ease-out) .2s both;}
+#btn-github{animation:fadeSlide .6s var(--ease-out) .3s both;}
+#btn-demo{animation:fadeSlide .6s var(--ease-out) .38s both;}
+.login-note{animation:fadeSlide .6s var(--ease-out) .46s both;}
+@keyframes fadeSlide{
+  from{opacity:0;transform:translateY(12px);}
+  to{opacity:1;transform:translateY(0);}
+}
+
+/* App enter */
+#app.show{animation:appFade .4s var(--ease-out) both;}
+@keyframes appFade{from{opacity:0;}to{opacity:1;}}
+
+/* Sidebar items stagger in */
+#app.show .sb-nav .si{animation:sbSlide .5s var(--ease-out) both;}
+#app.show .sb-nav .si:nth-child(1){animation-delay:.08s;}
+#app.show .sb-nav .si:nth-child(2){animation-delay:.13s;}
+#app.show .sb-nav .si:nth-child(3){animation-delay:.18s;}
+#app.show .sb-nav .si:nth-child(4){animation-delay:.23s;}
+#app.show .sb-nav .si:nth-child(5){animation-delay:.28s;}
+@keyframes sbSlide{
+  from{opacity:0;transform:translateX(-14px);}
+  to{opacity:1;transform:translateX(0);}
+}
+
+/* Sidebar hover micro lift */
+.si:hover{transform:translateX(2px);}
+.sb-chat:hover{transform:translateX(2px);}
+.um-item:hover{transform:translateX(2px);}
+
+/* Active sidebar indicator */
+.si.active::before{content:'';position:absolute;left:-10px;top:50%;width:3px;height:16px;background:var(--accent);border-radius:0 3px 3px 0;transform:translateY(-50%);animation:indicator .3s var(--ease-out);}
+@keyframes indicator{from{height:0;}to{height:16px;}}
+
+/* Panel switch animation */
+.panel.active{animation:panelIn .4s var(--ease-out);}
+@keyframes panelIn{
+  from{opacity:0;transform:translateY(6px);}
+  to{opacity:1;transform:translateY(0);}
+}
+
+/* Topbar pills entrance */
+#topbar > *{animation:pillIn .5s var(--ease-out) both;}
+#topbar > *:nth-child(1){animation-delay:.15s;}
+#topbar > *:nth-child(2){animation-delay:.20s;}
+#topbar > *:nth-child(3){animation-delay:.25s;}
+@keyframes pillIn{
+  from{opacity:0;transform:translateY(-6px);}
+  to{opacity:1;transform:translateY(0);}
+}
+
+/* Dropdowns: scale + fade in */
+.drop{transform-origin:top left;}
+.drop.open,.drop[style*="display: block"]{animation:dropIn .22s var(--ease-out);}
+@keyframes dropIn{
+  from{opacity:0;transform:translateY(-6px) scale(.97);}
+  to{opacity:1;transform:translateY(0) scale(1);}
+}
+.mdi{transition:all .18s var(--ease);}
+.mdi:hover{transform:translateX(3px);}
+
+/* Modals */
+.modal-overlay{transition:opacity .25s var(--ease-out);opacity:0;}
+.modal-overlay.open{opacity:1;}
+.modal-overlay.open .modal-box{animation:modalIn .35s var(--ease-out);}
+@keyframes modalIn{
+  from{opacity:0;transform:translateY(18px) scale(.95);}
+  to{opacity:1;transform:translateY(0) scale(1);}
+}
+
+/* Drawer (all chats) */
+#drawer{transition:opacity .22s var(--ease-out);opacity:0;}
+#drawer.open{opacity:1;}
+#drawer.open .dr-inner{animation:drawerIn .4s var(--ease-out);}
+@keyframes drawerIn{
+  from{opacity:0;transform:translateY(-30px) scale(.96);}
+  to{opacity:1;transform:translateY(0) scale(1);}
+}
+
+/* Messages entrance — more refined than fadeIn */
+.msg{animation:msgIn .42s var(--ease-out) both;}
+@keyframes msgIn{
+  from{opacity:0;transform:translateY(10px);}
+  to{opacity:1;transform:translateY(0);}
+}
+
+/* Typing dots: smoother bounce */
+@keyframes tb{
+  0%,70%,100%{transform:translateY(0);opacity:.35;}
+  35%{transform:translateY(-6px);opacity:1;}
+}
+
+/* Input box — lift on focus */
+#input-box{transition:all .28s var(--ease);}
+#input-box:focus-within{transform:translateY(-2px);box-shadow:0 10px 40px rgba(0,0,0,.6),0 0 0 1px rgba(74,158,255,.15);border-color:#3a3a3a;}
+
+/* Send button press */
+#send-btn{transition:transform .18s var(--ease),box-shadow .22s var(--ease),opacity .2s;}
+#send-btn:hover{transform:scale(1.08);box-shadow:0 0 24px rgba(74,158,255,.45);}
+#send-btn:active{transform:scale(.94);}
+
+/* Home screen logo — subtle breathing */
+.hs-logo{animation:breathe 5s ease-in-out infinite;}
+@keyframes breathe{
+  0%,100%{transform:scale(1);opacity:.95;}
+  50%{transform:scale(1.015);opacity:1;}
+}
+.hs-logo svg{animation:spin-slow 18s linear infinite;}
+@keyframes spin-slow{
+  0%,100%{transform:rotate(0deg);}
+  50%{transform:rotate(4deg);}
+}
+
+/* Model cards hover */
+.mp-card{transition:all .28s var(--ease);}
+.mp-card:hover{transform:translateY(-3px);border-color:#333;box-shadow:0 8px 24px rgba(0,0,0,.45);}
+
+/* Swatches */
+.sp-swatch:hover{transform:scale(1.15);}
+.sp-swatch.sel{animation:swatchPulse .35s var(--ease-out);}
+@keyframes swatchPulse{
+  0%{transform:scale(1);}
+  50%{transform:scale(1.2);}
+  100%{transform:scale(1);}
+}
+
+/* Toast — slide-bounce */
+#toast{transition:opacity .3s var(--ease-out),transform .45s var(--ease-out);}
+#toast.show{animation:toastPop .5s var(--ease-out);}
+@keyframes toastPop{
+  0%{opacity:0;transform:translateX(-50%) translateY(60px) scale(.9);}
+  60%{opacity:1;transform:translateX(-50%) translateY(-4px) scale(1.02);}
+  100%{opacity:1;transform:translateX(-50%) translateY(0) scale(1);}
+}
+
+/* Buttons generic hover lift */
+.lbtn:hover,.mbtn:hover,.sp-btn:hover,.code-btn:hover{transform:translateY(-1px);}
+.lbtn:active,.mbtn:active,.sp-btn:active,.code-btn:active{transform:translateY(0);}
+
+/* Code run button pulse when running */
+.code-btn.run:hover{box-shadow:0 0 20px rgba(74,158,255,.4);}
+
+/* Connector badge pulse on update */
+.si-badge{transition:transform .2s var(--ease-out);}
+
+/* Smooth history drawer scrollbar */
+.sb-chats,.hist-list,#chat-area,#mdrop,#img-drop,#vid-drop{scroll-behavior:smooth;}
+
+/* Ripple effect on sidebar items (tiny accent line) */
+.si::after,.sb-chat::after{content:'';position:absolute;left:0;top:0;width:100%;height:100%;border-radius:inherit;background:radial-gradient(circle,rgba(74,158,255,.18) 0%,transparent 70%);opacity:0;transform:scale(.6);transition:all .4s var(--ease-out);pointer-events:none;}
+.si:active::after,.sb-chat:active::after{opacity:1;transform:scale(1);transition:all 0s;}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important;}
+}

@@ -203,7 +203,64 @@ function renderAIMessage(model, contentHTML, rawText) {
     </div>`;
   msgs.appendChild(div);
   scrollToBottom();
+  // Render LaTeX math (lazy-loads KaTeX on first encounter)
+  renderMathIn(div.querySelector('.ai-txt'));
   return div;
+}
+
+// ===== KaTeX math rendering (lazy) =====
+let _katexPromise = null;
+function loadKatex() {
+  if (_katexPromise) return _katexPromise;
+  _katexPromise = (async () => {
+    if (window.katex && window.renderMathInElement) return;
+    // Load core KaTeX
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js';
+      s.onload = res;
+      s.onerror = () => rej(new Error('failed to load katex.min.js'));
+      document.head.appendChild(s);
+    });
+    // Load auto-render extension
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js';
+      s.onload = res;
+      s.onerror = () => rej(new Error('failed to load auto-render.min.js'));
+      document.head.appendChild(s);
+    });
+  })();
+  _katexPromise.catch(() => { _katexPromise = null; });
+  return _katexPromise;
+}
+
+async function renderMathIn(el) {
+  if (!el) return;
+  // Quick scan: only load KaTeX if the element actually contains math delimiters
+  const text = el.innerText || '';
+  const hasMath =
+    /\$\$[\s\S]+?\$\$/.test(text) ||
+    /\$[^$\n]+\$/.test(text) ||
+    /\\\([\s\S]+?\\\)/.test(text) ||
+    /\\\[[\s\S]+?\\\]/.test(text);
+  if (!hasMath) return;
+  try {
+    await loadKatex();
+    if (typeof window.renderMathInElement !== 'function') return;
+    window.renderMathInElement(el, {
+      delimiters: [
+        { left: '$$', right: '$$', display: true },
+        { left: '$',  right: '$',  display: false },
+        { left: '\\[', right: '\\]', display: true },
+        { left: '\\(', right: '\\)', display: false },
+      ],
+      throwOnError: false,
+      ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+    });
+  } catch (e) {
+    console.warn('[KEMLLM] math render failed:', e);
+  }
 }
 
 function copyAIMessage(btn) {

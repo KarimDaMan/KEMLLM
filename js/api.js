@@ -303,6 +303,39 @@ async function callGoogleDirect(model, messages, apiKey, onChunk) {
 }
 
 // ===== Replicate (chat fallback + image/video) — goes through worker proxy =====
+
+// Universal Replicate prediction call with automatic fallback between the
+// two endpoint styles. Returns the parsed prediction (with `output`).
+//
+// Why two endpoints: Replicate has /v1/models/<owner>/<name>/predictions
+// for "official models" (curated stable list) and /v1/predictions for
+// everything including community models. Trying the official one first
+// is fastest; falling back to the universal one lets non-official models
+// also work.
+async function replicatePredict(modelId, input, apiKey) {
+  let res = await replicateFetch(`/v1/models/${modelId}/predictions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + apiKey,
+      'Prefer': 'wait',
+    },
+    body: JSON.stringify({ input }),
+  });
+  if (res.status === 404) {
+    res = await replicateFetch('/v1/predictions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey,
+        'Prefer': 'wait',
+      },
+      body: JSON.stringify({ model: modelId, input }),
+    });
+  }
+  return res;
+}
+
 async function callReplicateChat(model, messages, apiKey, onChunk) {
   const prompt = messages.map(m => {
     const content = typeof m.content === 'string' ? m.content : '';
@@ -327,18 +360,16 @@ async function callReplicateChat(model, messages, apiKey, onChunk) {
     input.input_image = firstImage.dataUrl;
   }
 
-  const res = await replicateFetch(`/v1/models/${model.replicateId}/predictions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + apiKey,
-      'Prefer': 'wait'
-    },
-    body: JSON.stringify({ input })
-  });
+  const res = await replicatePredict(model.replicateId, input, apiKey);
   if (!res.ok) {
     const t = await res.text();
-    throw new Error('Replicate ' + res.status + ': ' + t.slice(0, 200));
+    if (res.status === 404) {
+      throw new Error(
+        `Replicate 404 — model "${model.replicateId}" not found at either /v1/models/<id>/predictions or /v1/predictions. ` +
+        `Check the model slug. Or add a direct ${model.provider} API key in Settings.`
+      );
+    }
+    throw new Error('Replicate ' + res.status + ' on ' + model.replicateId + ': ' + t.slice(0, 200));
   }
   const data = await res.json();
   let out = data.output;
@@ -381,15 +412,7 @@ async function editImage(prompt, imageDataUrl) {
         input_image: imageDataUrl,
         image: imageDataUrl,
       };
-      const res = await replicateFetch(`/v1/models/${id}/predictions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + apiKey,
-          'Prefer': 'wait'
-        },
-        body: JSON.stringify({ input })
-      });
+      const res = await replicatePredict(id, input, apiKey);
       if (res.status === 404) {
         lastErr = new Error('Model "' + id + '" not found');
         continue;
@@ -397,7 +420,6 @@ async function editImage(prompt, imageDataUrl) {
       if (!res.ok) {
         const t = await res.text();
         lastErr = new Error('Edit ' + res.status + ': ' + t.slice(0, 200));
-        // 422 usually means wrong input schema — try next model
         if (res.status === 422) continue;
         throw lastErr;
       }
@@ -428,18 +450,10 @@ async function generateImage(prompt) {
   let lastErr = null;
   for (const id of idsToTry) {
     try {
-      const res = await replicateFetch(`/v1/models/${id}/predictions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + apiKey,
-          'Prefer': 'wait'
-        },
-        body: JSON.stringify({ input: { prompt } })
-      });
+      const res = await replicatePredict(id, { prompt }, apiKey);
       if (res.status === 404) {
         lastErr = new Error('Model "' + id + '" not found on Replicate');
-        continue; // try next fallback
+        continue;
       }
       if (!res.ok) {
         const t = await res.text();

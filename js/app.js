@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v43 · slim Dockerfile + hardened app.py boot diagnostics';
+const KEMLLM_BUILD = 'v44 · REAL Replicate slugs + KaTeX math + universal predict endpoint';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

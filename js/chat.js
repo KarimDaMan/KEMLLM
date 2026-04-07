@@ -802,15 +802,22 @@ function setAgentLoopUI(running) {
 }
 
 function newChat() {
+  // If an agent loop is running, stop it cleanly first
+  if (agentLoopRunning) {
+    agentLoopAbort = true;
+  }
   messages = [];
   currentChatId = null;
   pendingAttachments = [];
+  agentInjectQueue = [];
   renderAttachPreview();
   document.getElementById('msgs').innerHTML = '';
   const home = document.getElementById('home-screen');
   if (home) home.classList.remove('hidden');
   if (window.termBootStart) window.termBootStart();
   closeDrawer();
+  // Close any open preview pane from a previous chat
+  if (typeof chatPreviewClose === 'function') chatPreviewClose();
 }
 
 // ===== Attachments =====

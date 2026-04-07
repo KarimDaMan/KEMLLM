@@ -5,19 +5,52 @@
 function loadHistory() {
   return profileGetJSON('history', []);
 }
+// Strip attachment payloads before persisting to localStorage — data URLs
+// for images/PDFs can be megabytes each and will blow the ~5MB quota.
+// We keep lightweight metadata (name, size, mime) so the UI can show
+// a chip on reload, but the actual bytes are dropped.
+function stripAttachmentPayloads(msgs) {
+  return msgs.map(m => {
+    if (!m.attachments || !m.attachments.length) return m;
+    return {
+      ...m,
+      attachments: m.attachments.map(a => ({
+        name: a.name,
+        size: a.size,
+        mime: a.mime,
+        isImage: a.isImage,
+      }))
+    };
+  });
+}
+
 function saveCurrentChat() {
   if (!messages.length) return;
   let list = loadHistory();
+  const slim = stripAttachmentPayloads(messages);
   if (!currentChatId) {
     currentChatId = 'c_' + Date.now();
-    const title = (messages[0]?.content || 'New chat').slice(0, 50);
-    list.unshift({ id: currentChatId, title, messages, ts: Date.now() });
+    const rawTitle = messages[0]?.content;
+    const title = (typeof rawTitle === 'string' ? rawTitle : 'New chat').slice(0, 50);
+    list.unshift({ id: currentChatId, title, messages: slim, ts: Date.now() });
     if (list.length > 60) list = list.slice(0, 60);
   } else {
     const idx = list.findIndex(c => c.id === currentChatId);
-    if (idx >= 0) list[idx].messages = messages;
+    if (idx >= 0) list[idx].messages = slim;
   }
-  profileSetJSON('history', list);
+  try {
+    profileSetJSON('history', list);
+  } catch (e) {
+    // Quota exceeded — drop oldest chats until it fits
+    while (list.length > 1) {
+      list.pop();
+      try {
+        profileSetJSON('history', list);
+        showToast('Dropped oldest chats (storage full)');
+        break;
+      } catch {}
+    }
+  }
   renderHistory();
 }
 function renderHistory() {
@@ -77,7 +110,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v31 · filter non-image attachments per provider';
+const KEMLLM_BUILD = 'v32 · strip attachments from localStorage + newChat cleanup';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

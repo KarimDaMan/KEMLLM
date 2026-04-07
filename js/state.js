@@ -25,19 +25,103 @@ function profileGetJSON(k, fallback) {
 }
 function profileSetJSON(k, v) { profileSet(k, JSON.stringify(v)); }
 
+// Single-profile architecture: there is always exactly ONE profile, with
+// the fixed id 'main'. Demo mode and GitHub sign-in both operate on the
+// same profile — they just flip cloud sync on or off. Any legacy random-id
+// profiles are migrated to `main` on first load (see migrateToSingleProfile
+// below).
+const MAIN_ID = 'main';
+
 function getProfiles() {
   try { return JSON.parse(localStorage.getItem(KEY_PROFILES) || '[]'); }
   catch { return []; }
 }
 function saveProfiles(p) { localStorage.setItem(KEY_PROFILES, JSON.stringify(p)); }
 
-function createProfile(name, github) {
-  const id = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-  const colors = ['#4a9eff', '#a78bfa', '#f472b6', '#4ade80', '#fb923c', '#f87171'];
-  const color = colors[Math.floor(Math.random() * colors.length)];
-  const p = { id, name, github: github || null, color, created: Date.now() };
+// Collapses the profile list to a single entry with id 'main' and
+// migrates any per-profile localStorage keys (prefix `p_<oldId>_`) to
+// the `p_main_` prefix. Preserves github/sync_token/avatar/name by
+// preferring the most recent profile that has them set. Safe to call
+// multiple times — after the first run everything lives under `main`.
+function migrateToSingleProfile() {
   const list = getProfiles();
-  list.push(p);
+  // Already canonical single-profile layout → nothing to do.
+  if (list.length === 1 && list[0].id === MAIN_ID) return;
+
+  // Pick the "best" source profile to promote: prefer one with a github
+  // account + sync_token, else the most recently used one, else create
+  // a fresh empty profile.
+  let src = list.find(p => p.github && p.sync_token);
+  if (!src) src = list.sort((a, b) => (b.last_used || b.created || 0) - (a.last_used || a.created || 0))[0];
+  const srcId = src ? src.id : null;
+
+  // Move all `p_<srcId>_*` localStorage entries to `p_main_*`.
+  if (srcId && srcId !== MAIN_ID) {
+    const toMove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(`p_${srcId}_`)) toMove.push(k);
+    }
+    toMove.forEach(k => {
+      const tail = k.slice(`p_${srcId}_`.length);
+      const newKey = `p_${MAIN_ID}_${tail}`;
+      // Don't clobber an existing main value that was newer.
+      if (localStorage.getItem(newKey) == null) {
+        localStorage.setItem(newKey, localStorage.getItem(k));
+      }
+      localStorage.removeItem(k);
+    });
+  }
+
+  // Clean up orphaned per-profile keys from OTHER old profiles.
+  list.forEach(p => {
+    if (!p.id || p.id === MAIN_ID || p.id === srcId) return;
+    const prefix = `p_${p.id}_`;
+    const toDel = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix)) toDel.push(k);
+    }
+    toDel.forEach(k => localStorage.removeItem(k));
+  });
+
+  // Write the canonical single-entry profiles array.
+  const mainProfile = {
+    id: MAIN_ID,
+    name: (src && src.name) || 'You',
+    github: (src && src.github) || null,
+    sync_token: (src && src.sync_token) || null,
+    avatar: (src && src.avatar) || '',
+    color: (src && src.color) || '#4a9eff',
+    created: (src && src.created) || Date.now(),
+  };
+  saveProfiles([mainProfile]);
+  // Update the active-profile pointer if it was pointing at the old id.
+  const activeRef = localStorage.getItem('kemllm_active');
+  if (activeRef && activeRef !== MAIN_ID) {
+    localStorage.setItem('kemllm_active', MAIN_ID);
+  }
+}
+
+function createProfile(name, github) {
+  // Always return the single `main` profile. If it already exists, update
+  // its name/github fields; otherwise create it fresh.
+  const list = getProfiles();
+  let p = list.find(x => x.id === MAIN_ID);
+  if (!p) {
+    p = {
+      id: MAIN_ID,
+      name: name || 'You',
+      github: github || null,
+      color: '#4a9eff',
+      created: Date.now(),
+    };
+    list.length = 0;
+    list.push(p);
+  } else {
+    if (name) p.name = name;
+    if (github) p.github = github;
+  }
   saveProfiles(list);
   return p;
 }
@@ -87,9 +171,10 @@ function activateProfile(id) {
 }
 
 function demoLogin() {
-  let demo = getProfiles().find(p => p.name === 'Demo User');
-  if (!demo) demo = createProfile('Demo User', null);
-  activateProfile(demo.id);
+  migrateToSingleProfile();
+  let main = getProfiles().find(p => p.id === MAIN_ID);
+  if (!main) main = createProfile('You', null);
+  activateProfile(MAIN_ID);
 }
 
 const GITHUB_CLIENT_ID = 'Ov23li20jlCBobnJjusT';
@@ -114,19 +199,22 @@ function handleGithubCallback() {
   const avatar = params.get('gh_avatar') || '';
   const syncToken = params.get('sync_token') || '';
   window.history.replaceState({}, document.title, window.location.pathname);
-  let ghProfile = getProfiles().find(p => p.github === login);
-  if (!ghProfile) {
-    ghProfile = createProfile(name, login);
-  }
-  // Update profile metadata (avatar, sync token)
+  // Single-profile architecture: promote the existing main profile in
+  // place. All previously-used data (chats, API keys, memories) stays
+  // under `p_main_*` and is untouched — signing in just enables sync.
+  migrateToSingleProfile();
+  let main = getProfiles().find(p => p.id === MAIN_ID);
+  if (!main) main = createProfile(name, login);
   const list = getProfiles();
-  const idx = list.findIndex(p => p.id === ghProfile.id);
+  const idx = list.findIndex(p => p.id === MAIN_ID);
   if (idx >= 0) {
+    list[idx].github = login;
+    list[idx].name = name || list[idx].name;
     if (avatar) list[idx].avatar = avatar;
     if (syncToken) list[idx].sync_token = syncToken;
     saveProfiles(list);
   }
-  activateProfile(ghProfile.id);
+  activateProfile(MAIN_ID);
   showToast('Signed in as ' + login);
   return true;
 }
@@ -310,9 +398,13 @@ function switchProfile() {
 function signOut() { switchProfile(); }
 
 function checkExistingProfile() {
-  const id = localStorage.getItem('kemllm_active');
-  if (id && getProfiles().find(p => p.id === id)) {
-    activateProfile(id);
+  migrateToSingleProfile();
+  const list = getProfiles();
+  // If there's a main profile and it has EITHER been used before OR been
+  // linked to GitHub, auto-activate it — no login screen needed.
+  const main = list.find(p => p.id === MAIN_ID);
+  if (main && (localStorage.getItem('kemllm_active') === MAIN_ID || main.github)) {
+    activateProfile(MAIN_ID);
     return true;
   }
   return false;

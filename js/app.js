@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v65 · sync memories/ai-memory/sandbox-web across devices; CORS Prefer fix still needs worker redeploy';
+const KEMLLM_BUILD = 'v66 · single-profile architecture (auto-migrates random ids to p_main); desktop button moved into mode row, agent-mode-only';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

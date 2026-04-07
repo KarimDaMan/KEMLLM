@@ -40,8 +40,17 @@ function setChatMode(mode) {
   }
   chatMode = mode;
   document.querySelectorAll('.mode-btn').forEach(b => {
+    // The desktop button has no data-mode — skip the active toggle for it.
+    if (b.id === 'chat-desktop-btn') return;
     b.classList.toggle('active', b.dataset.mode === mode);
   });
+  // Desktop button only visible while in Agent mode AND when the /desktop
+  // probe has succeeded (probeDesktopSupport sets data-desktop-ready=1).
+  const dBtn = document.getElementById('chat-desktop-btn');
+  if (dBtn) {
+    const ready = dBtn.dataset.desktopReady === '1';
+    dBtn.classList.toggle('show', mode === 'agent' && ready);
+  }
   const lock = document.getElementById('mode-agent-lock');
   if (lock) lock.style.display = agentUnlocked ? 'none' : '';
   const input = document.getElementById('input-text');
@@ -1014,24 +1023,23 @@ async function probeDesktopSupport() {
   if (!btn) return;
   const base = getHfBackendUrl();
   const tok = getHfBackendToken();
-  if (!base) { btn.classList.remove('show'); return; }
+  const hide = () => {
+    btn.dataset.desktopReady = '0';
+    btn.classList.remove('show');
+  };
+  if (!base) return hide();
   try {
     const r = await fetch(base + '/desktop?token=' + encodeURIComponent(tok), { method: 'GET' });
-    // Possible responses:
-    //   200   → noVNC already running inside sandbox, ready to show
-    //   502   → endpoint exists, backend up, but noVNC not started yet (still means Dockerfile is good)
-    //   401   → endpoint exists but token mismatch
-    //   404   → old backend without /desktop, update needed
-    //   500   → requests lib missing, update needed
+    // 200 = noVNC running · 502 = stack present but not started yet · 401 = token mismatch
     if (r.status === 200 || r.status === 502 || r.status === 401) {
-      btn.classList.add('show');
+      btn.dataset.desktopReady = '1';
       _desktopProbedOnce = true;
+      // Only actually reveal it if the user is currently in Agent mode.
+      if (chatMode === 'agent') btn.classList.add('show');
     } else {
-      btn.classList.remove('show');
+      hide();
     }
-  } catch {
-    btn.classList.remove('show');
-  }
+  } catch { hide(); }
 }
 
 // Start or restart a noVNC desktop inside the sandbox and show it in the preview

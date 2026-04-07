@@ -807,12 +807,12 @@ input,textarea{font-family:inherit;color:inherit;}
 }
 
 /* Floating Desktop button — top-right of the chat panel, only shows when ready */
-.chat-desktop-btn{position:absolute;top:14px;right:14px;z-index:45;display:none;align-items:center;gap:7px;padding:8px 14px;border-radius:999px;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,.4);transition:all .18s var(--ease);}
-.chat-desktop-btn.show{display:inline-flex;}
-.chat-desktop-btn:hover{background:var(--bg3);transform:translateY(-1px);border-color:var(--accent);}
-.chat-desktop-btn svg{width:13px;height:13px;}
-.chat-desktop-btn.loading{pointer-events:none;opacity:.6;}
-.chat-desktop-btn .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);animation:agPulse 2s ease-in-out infinite;}
+/* Desktop button lives inside the mode row next to Chat/Code/Agent. It's
+   hidden until probeDesktopSupport detects a working /desktop endpoint. */
+#chat-desktop-btn{display:none;}
+#chat-desktop-btn.show{display:inline-flex;}
+.mode-btn-desktop{gap:6px;}
+.mode-btn-desktop svg{width:14px;height:14px;}
 
 @keyframes spinBounce{
   0%{transform:rotate(0deg);}

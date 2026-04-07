@@ -82,51 +82,38 @@ function demoLogin() {
 }
 
 const GITHUB_CLIENT_ID = 'Ov23li20jlCBobnJjusT';
-const GITHUB_REDIRECT = 'https://kemllmx.karimghannam2014.workers.dev/';
-const GITHUB_EXCHANGE = 'https://kemllmx.karimghannam2014.workers.dev/api/github-exchange';
+const GITHUB_CALLBACK = 'https://kemllmbackend.karimghannam2014.workers.dev/github/callback';
 
 function githubLogin() {
-  const state = 'kemllm_' + Math.random().toString(36).slice(2, 12);
-  localStorage.setItem('gh_oauth_state', state);
-  const url = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(GITHUB_REDIRECT)}&scope=read:user%20user:email&state=${state}`;
+  const url = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(GITHUB_CALLBACK)}&scope=read:user%20user:email`;
   window.location.href = url;
 }
 
-async function handleGithubCallback() {
+function handleGithubCallback() {
   const params = new URLSearchParams(window.location.search);
-  const code = params.get('code');
-  const state = params.get('state');
-  if (!code) return false;
-  const savedState = localStorage.getItem('gh_oauth_state');
-  if (state && savedState && state !== savedState) {
-    showToast('OAuth state mismatch');
+  const err = params.get('gh_error');
+  if (err) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    showToast('GitHub sign-in failed: ' + err);
     return false;
   }
-  localStorage.removeItem('gh_oauth_state');
+  const login = params.get('gh_user');
+  if (!login) return false;
+  const name = params.get('gh_name') || login;
+  const avatar = params.get('gh_avatar') || '';
   window.history.replaceState({}, document.title, window.location.pathname);
-  try {
-    const res = await fetch(GITHUB_EXCHANGE, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code })
-    });
-    if (!res.ok) throw new Error('Exchange failed: ' + res.status);
-    const data = await res.json();
-    // Expected: { login, name, email, avatar_url, access_token }
-    let ghProfile = getProfiles().find(p => p.github === data.login);
-    if (!ghProfile) {
-      ghProfile = createProfile(data.name || data.login || 'GitHub User', data.login);
-    }
-    if (data.access_token) {
-      localStorage.setItem(`p_${ghProfile.id}_gh_token`, data.access_token);
-    }
-    activateProfile(ghProfile.id);
-    showToast('Signed in as ' + (data.login || 'GitHub user'));
-    return true;
-  } catch (e) {
-    showToast('GitHub sign-in failed: ' + e.message);
-    return false;
+  let ghProfile = getProfiles().find(p => p.github === login);
+  if (!ghProfile) {
+    ghProfile = createProfile(name, login);
   }
+  if (avatar) {
+    const list = getProfiles();
+    const idx = list.findIndex(p => p.id === ghProfile.id);
+    if (idx >= 0) { list[idx].avatar = avatar; saveProfiles(list); }
+  }
+  activateProfile(ghProfile.id);
+  showToast('Signed in as ' + login);
+  return true;
 }
 
 function switchProfile() {

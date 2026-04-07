@@ -352,14 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
   termBootStart();
 
   // Handle GitHub OAuth callback if present
-  const hasCode = new URLSearchParams(window.location.search).get('code');
-  if (hasCode) {
-    handleGithubCallback().then(ok => {
-      if (!ok && !checkExistingProfile()) {
-        document.getElementById('login').classList.add('show');
-      }
-    });
-  } else if (!checkExistingProfile()) {
+  if (!handleGithubCallback() && !checkExistingProfile()) {
     document.getElementById('login').classList.add('show');
   }
 });

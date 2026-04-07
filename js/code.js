@@ -17,12 +17,14 @@ async function getPyodide() {
         const s = document.createElement('script');
         s.src = 'https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js';
         s.onload = resolve;
-        s.onerror = () => reject(new Error('Failed to load Pyodide'));
+        s.onerror = () => reject(new Error('Failed to load Pyodide from jsdelivr CDN. Check your internet connection.'));
         document.head.appendChild(s);
       });
     }
     return window.loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.2/full/' });
   })();
+  // If it fails, clear the cached promise so the next call retries
+  _pyodidePromise.catch(() => { _pyodidePromise = null; });
   return _pyodidePromise;
 }
 

@@ -214,18 +214,25 @@ function copyAIMessage(btn) {
 }
 
 function regenerateMessage() {
-  // Pop last assistant message, re-send
+  // Remove last assistant DOM + state
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === 'assistant') { messages.splice(i, 1); break; }
   }
   const lastAI = document.querySelector('#msgs .msg-a:last-child');
   if (lastAI) lastAI.remove();
+  // Remove the last user message + its DOM
   const last = messages[messages.length - 1];
   if (last?.role === 'user') {
     messages.pop();
     document.querySelectorAll('#msgs .msg-u').forEach((el, i, arr) => {
       if (i === arr.length - 1) el.remove();
     });
+    // Restore attachments (best-effort — dataUrls may have been stripped
+    // after a chat reload, in which case we only have the metadata)
+    if (last.attachments && last.attachments.length) {
+      pendingAttachments = last.attachments.filter(a => a.dataUrl).slice();
+      renderAttachPreview();
+    }
     const input = document.getElementById('input-text');
     input.value = typeof last.content === 'string' ? last.content : '';
     sendMessage();

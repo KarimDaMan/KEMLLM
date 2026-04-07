@@ -1,8 +1,8 @@
 # KEMLLM — Current Status
 
-**Last updated:** session of 2026-04-07
+**Last updated:** session of 2026-04-07 (overnight fixes)
 **Live at:** `https://karimdaman.github.io/KEMLLM/`
-**Current build marker:** `v31 · filter non-image attachments per provider`
+**Current build marker:** `v33 · chat reload renders attachments + robust content handling`
 
 Look for the build marker in the browser console (red banner) or at the top of the agent terminal area the first time you use Agent mode. If you see anything earlier than `v31`, your browser is caching old JavaScript — open a private/incognito window.
 
@@ -163,8 +163,11 @@ KEMLLM/
 
 ---
 
-## Commit log since the last big fix
+## Commit log (newest first)
 
+- `6cf601b` — Chat reload renders attachment chips; robust content handling
+- `ac37cb1` — newChat resets agent loop; strips attachments from localStorage
+- `8da87ed` — Add STATUS.md
 - `fb753a1` — Filter non-image attachments per provider; preserve atts in agent mode
 - `9ec3c0b` — **CRITICAL:** `agentLog` was writing to a DOM element that no longer exists
 - `1736f77` — Vision chat via Replicate when no direct provider key
@@ -172,8 +175,16 @@ KEMLLM/
 - `26d7b46` — Hash router per panel; sidebar "Chat" → "New Chat"
 - `2bced16` — Image editing (FLUX Kontext) + aggressive cache busting
 - `2a4bc20` — Fix Replicate 404 on attachments + HF Space cold-start handling
-- `efc7e78` — Revert: put Replicate IDs back on all chat models
 - `1078743` — Agent mode: autonomous loop with mid-run user injection
 - `c14634c` — AI can show a preview pane AND a full interactive Linux desktop
 - `b1a1fe5` — Floating Desktop button
-- `69ee9a6` — Add Agent Mode — shared Linux sandbox via e2b; test button
+
+## Single most important thing to verify tomorrow
+
+Open the app in a **private/incognito window** and look for the build marker:
+- Console (devtools): red banner saying `KEMLLM v33 · ...`
+- Or: the first line in the chat area when you press the Desktop button says `› agent.js build: v33 · ...`
+
+If you see any version earlier than v33, your cache is still holding stale JS. Fix: clear site data in browser settings, close all tabs, reload.
+
+Once you're confirmed on v33, the previously-silent agent log lines will actually appear in the chat area — including the raw `POST /sessions` response body, which will finally reveal what your HF backend is returning (if it's misbehaving at all).

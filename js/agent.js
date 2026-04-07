@@ -72,6 +72,13 @@ function agentSetStatus(state) {
   }
 }
 
+let agentTemplate = 'base';
+
+function agentSandboxHost() {
+  // e2b sandboxes are reachable at https://<port>-<sandboxId>.e2b.dev/
+  return agentSandboxId ? agentSandboxId : null;
+}
+
 async function agentStart() {
   if (!getE2BKey()) {
     agentLog('✗ Add your e2b API key in Settings first. Get one free at e2b.dev/dashboard.', 'err');
@@ -80,24 +87,71 @@ async function agentStart() {
   }
   if (agentBusy) return;
   agentBusy = true;
-  agentLog('› booting sandbox…', 'sys');
+  const tplSel = document.getElementById('ag-template');
+  agentTemplate = (tplSel && tplSel.value) || 'base';
+  agentLog('› booting ' + agentTemplate + ' sandbox…', 'sys');
   try {
     const res = await e2bFetch('/sandboxes', {
       method: 'POST',
-      body: JSON.stringify({ templateID: 'base' })
+      body: JSON.stringify({ templateID: agentTemplate })
     });
     if (!res.ok) throw new Error('e2b ' + res.status + ': ' + (await res.text()).slice(0, 200));
     const data = await res.json();
     agentSandboxId = data.sandboxID || data.id;
-    agentLog('✓ sandbox ready · id=' + agentSandboxId, 'sys');
+    agentLog('✓ sandbox ready · id=' + agentSandboxId + ' · template=' + agentTemplate, 'sys');
+    agentLog('  hostname template: https://<port>-' + agentSandboxId + '.e2b.dev/', 'sys');
     agentLog('', 'sys');
     agentSetStatus('running');
+    // If desktop template, auto-load the preview
+    if (agentTemplate === 'desktop') {
+      agentPreviewSet(':6080');
+      agentPreviewShow(true);
+    }
   } catch (e) {
     agentLog('✗ failed: ' + e.message, 'err');
     agentSetStatus('error');
   } finally {
     agentBusy = false;
   }
+}
+
+// ===== Preview pane =====
+function agentPreviewShow(show) {
+  const p = document.getElementById('ag-preview');
+  if (!p) return;
+  p.classList.toggle('show', show);
+}
+function agentPreviewSet(urlOrPort) {
+  const frame = document.getElementById('ag-preview-frame');
+  const empty = document.getElementById('ag-preview-empty');
+  if (!frame || !agentSandboxId) return;
+  let full;
+  const s = (urlOrPort || '').trim();
+  if (!s) return;
+  if (s.startsWith('http://') || s.startsWith('https://')) {
+    full = s;
+  } else if (s.startsWith(':')) {
+    const port = s.slice(1).split('/')[0];
+    const rest = s.slice(1 + port.length) || '/';
+    full = `https://${port}-${agentSandboxId}.e2b.dev${rest}`;
+  } else if (s.startsWith('/')) {
+    full = `https://3000-${agentSandboxId}.e2b.dev${s}`;
+  } else {
+    full = `https://${s}-${agentSandboxId}.e2b.dev/`;
+  }
+  frame.src = full;
+  if (empty) empty.style.display = 'none';
+  frame.style.display = 'block';
+  agentPreviewShow(true);
+}
+function agentPreviewReload() {
+  const frame = document.getElementById('ag-preview-frame');
+  if (frame && frame.src && frame.src !== 'about:blank') frame.src = frame.src;
+}
+function agentPreviewFullscreen() {
+  const p = document.getElementById('ag-preview');
+  if (!p) return;
+  p.classList.toggle('fullscreen');
 }
 
 async function agentStop() {
@@ -158,11 +212,13 @@ async function agentRun(cmd, fromAgent, silent) {
 function getAgentSystemPrompt() {
   const model = findModel(selectedChat, 'chat');
   const persona = (profileGet('persona') || '').trim();
-  let s = `You are ${model?.name || 'the KEMLLM Agent'}, running inside KEMLLM Agent Mode.`;
-  s += ' You have a real Linux shell sandbox that you share with the user. You can execute any shell command to accomplish tasks: inspect files, install packages, run scripts, fetch URLs, etc.';
-  s += '\n\nTo run a command, write a fenced bash code block like this:\n```bash\nyour command here\n```\nYou may include multiple code blocks in a response. They will be executed in order and the output shown to you and the user.';
-  s += '\n\nBe terse. This is a terminal. No bullet-point summaries, no filler like "Sure!" or "Great question!". Short direct sentences. When the task is done, say so briefly.';
-  s += ' Do not pretend to run commands — either run them via a code block, or explain what you would do and ask the user.';
+  const name = model?.name || 'the KEMLLM Agent';
+  let s = `You are ${name}, running inside KEMLLM Agent Mode.`;
+  s += ' IMPORTANT: You have direct access to a real Linux sandbox VM (Ubuntu, provided by e2b.dev). This is YOUR OWN COMPUTER. You can run ANY shell command in it to accomplish tasks: inspect the filesystem, install packages with apt or pip, write and execute scripts, fetch URLs with curl, edit files, compile code, anything a real Linux machine can do. The sandbox is already running and ready.';
+  s += '\n\nTo run a command, write a fenced bash code block:\n```bash\nyour command here\n```\nYou may include multiple bash blocks in a single response; they execute in order and the combined output is shown back to you as a follow-up message so you can continue.';
+  s += '\n\nYou share this machine with the user. The user can also type commands directly at the terminal. Treat it as a shared workspace.';
+  s += '\n\nStyle: Be terse. This is a terminal. No bullet-point summaries. No filler words like "Sure!", "Certainly!", or "Great question!". Short direct sentences. When a task is done, say so in one line. Do not ask permission before running non-destructive commands — just run them.';
+  s += '\n\nDo NOT pretend to run commands. Either actually run them via a bash block, or explicitly say you cannot.';
   if (persona) s += '\n\nUser persona: ' + persona;
   return s;
 }
@@ -182,17 +238,10 @@ async function agentChat(userMsg) {
   // Show thinking indicator
   const thinkingEl = agentLog('…', 'sys');
 
+  const agentSys = getAgentSystemPrompt();
   try {
-    const messagesForApi = [
-      { role: 'system', content: getAgentSystemPrompt() },
-      ...agentMessages
-    ];
     let full = '';
-    await callChat(model, agentMessages, (chunk) => { full += chunk; }); // callChat adds its own system prompt
-    // Replace the default system prompt with agent one by re-calling with explicit override
-    // (Simplest path: just use callChat's result — it'll be close enough because agent prompt
-    // is appended via persona-like logic. But for true override we build manually.)
-
+    await callChat(model, agentMessages, (chunk) => { full += chunk; }, agentSys);
     if (thinkingEl) thinkingEl.remove();
 
     // Render AI text
@@ -212,7 +261,7 @@ async function agentChat(userMsg) {
       const typing2 = agentLog('…', 'sys');
       try {
         let more = '';
-        await callChat(model, agentMessages, (chunk) => { more += chunk; });
+        await callChat(model, agentMessages, (chunk) => { more += chunk; }, agentSys);
         if (typing2) typing2.remove();
         renderAgentAIText(more);
         agentMessages.push({ role: 'assistant', content: more });
@@ -257,6 +306,10 @@ function setupAgentPanel() {
   const stopBtn = document.getElementById('ag-stop');
   const clearBtn = document.getElementById('ag-clear');
   const cmdInput = document.getElementById('ag-cmd');
+  const previewToggle = document.getElementById('ag-preview-toggle');
+  const previewUrl = document.getElementById('ag-preview-url');
+  const previewReload = document.getElementById('ag-preview-reload');
+  const previewFs = document.getElementById('ag-preview-fullscreen');
   if (!startBtn) return;
   startBtn.addEventListener('click', agentStart);
   stopBtn.addEventListener('click', agentStop);
@@ -266,15 +319,19 @@ function setupAgentPanel() {
       const raw = cmdInput.value;
       if (!raw.trim()) return;
       cmdInput.value = '';
-      // "!cmd" or leading "$ " = direct shell
-      if (raw.startsWith('!')) {
-        agentRun(raw.slice(1).trim(), false, false);
-      } else if (raw.startsWith('$ ')) {
-        agentRun(raw.slice(2).trim(), false, false);
-      } else {
-        agentChat(raw.trim());
-      }
+      if (raw.startsWith('!')) agentRun(raw.slice(1).trim(), false, false);
+      else if (raw.startsWith('$ ')) agentRun(raw.slice(2).trim(), false, false);
+      else agentChat(raw.trim());
     }
   });
+  previewToggle?.addEventListener('click', () => {
+    const p = document.getElementById('ag-preview');
+    if (p) p.classList.toggle('show');
+  });
+  previewUrl?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') agentPreviewSet(previewUrl.value);
+  });
+  previewReload?.addEventListener('click', agentPreviewReload);
+  previewFs?.addEventListener('click', agentPreviewFullscreen);
   agentSetStatus('offline');
 }

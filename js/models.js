@@ -13,39 +13,42 @@ const PROVIDER_COLORS = {
 };
 
 const CHAT_MODELS = [
-  // Anthropic
+  // Anthropic — available via direct API or Replicate proxy
   { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'anthropic', apiId: 'claude-sonnet-4-6', replicateId: 'anthropic/claude-sonnet-4-6' },
   { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', provider: 'anthropic', apiId: 'claude-opus-4-6', replicateId: 'anthropic/claude-opus-4-6' },
-  { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', provider: 'anthropic', apiId: 'claude-sonnet-4-20250514', replicateId: 'anthropic/claude-sonnet-4-5' },
-  { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', provider: 'anthropic', apiId: 'claude-haiku-4-5-20251001', replicateId: 'anthropic/claude-haiku-4-5' },
-  // OpenAI
-  { id: 'gpt-5.4', name: 'GPT-5.4', provider: 'openai', apiId: 'gpt-5.4' },
-  { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', provider: 'openai', apiId: 'gpt-5.4-mini' },
-  { id: 'gpt-5.4-nano', name: 'GPT-5.4 Nano', provider: 'openai', apiId: 'gpt-5.4-nano' },
-  { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', provider: 'openai', apiId: 'gpt-5.3-codex' },
-  { id: 'gpt-5.2', name: 'GPT-5.2', provider: 'openai', apiId: 'gpt-5.2' },
-  { id: 'gpt-5', name: 'GPT-5', provider: 'openai', apiId: 'gpt-5' },
-  { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'openai', apiId: 'gpt-4.1' },
-  { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', apiId: 'gpt-4o' },
+  { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', provider: 'anthropic', apiId: 'claude-3-7-sonnet-latest', replicateId: 'anthropic/claude-3.7-sonnet' },
+  { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'anthropic', apiId: 'claude-3-5-sonnet-latest', replicateId: 'anthropic/claude-3.5-sonnet' },
+  { id: 'claude-3-5-haiku', name: 'Claude 3.5 Haiku', provider: 'anthropic', apiId: 'claude-3-5-haiku-latest', replicateId: 'anthropic/claude-3.5-haiku' },
+  // OpenAI — direct API or Replicate proxy
+  { id: 'gpt-5.4', name: 'GPT-5.4', provider: 'openai', apiId: 'gpt-5.4', replicateId: 'openai/gpt-5.4' },
+  { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', provider: 'openai', apiId: 'gpt-5.4-mini', replicateId: 'openai/gpt-5.4-mini' },
+  { id: 'gpt-5.4-nano', name: 'GPT-5.4 Nano', provider: 'openai', apiId: 'gpt-5.4-nano', replicateId: 'openai/gpt-5.4-nano' },
+  { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', provider: 'openai', apiId: 'gpt-5.3-codex', replicateId: 'openai/gpt-5.3-codex' },
+  { id: 'gpt-5.2', name: 'GPT-5.2', provider: 'openai', apiId: 'gpt-5.2', replicateId: 'openai/gpt-5.2' },
+  { id: 'gpt-5', name: 'GPT-5', provider: 'openai', apiId: 'gpt-5', replicateId: 'openai/gpt-5' },
+  { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'openai', apiId: 'gpt-4.1', replicateId: 'openai/gpt-4.1' },
+  { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', apiId: 'gpt-4o', replicateId: 'openai/gpt-4o' },
   // Google
-  { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', provider: 'google', apiId: 'gemini-3.1-pro-preview' },
-  { id: 'gemini-3-flash', name: 'Gemini 3 Flash', provider: 'google', apiId: 'gemini-3-flash-preview' },
-  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite', provider: 'google', apiId: 'gemini-3.1-flash-lite-preview' },
-  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google', apiId: 'gemini-2.5-pro' },
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google', apiId: 'gemini-2.5-flash' },
+  { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', provider: 'google', apiId: 'gemini-3.1-pro-preview', replicateId: 'google/gemini-3.1-pro' },
+  { id: 'gemini-3-flash', name: 'Gemini 3 Flash', provider: 'google', apiId: 'gemini-3-flash-preview', replicateId: 'google/gemini-3-flash' },
+  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite', provider: 'google', apiId: 'gemini-3.1-flash-lite-preview', replicateId: 'google/gemini-3.1-flash-lite' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google', apiId: 'gemini-2.5-pro', replicateId: 'google/gemini-2.5-pro' },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google', apiId: 'gemini-2.5-flash', replicateId: 'google/gemini-2.5-flash' },
   // xAI
-  { id: 'grok-4.20', name: 'Grok 4.20', provider: 'xai', apiId: 'grok-4.20' },
-  { id: 'grok-4-heavy', name: 'Grok 4 Heavy', provider: 'xai', apiId: 'grok-4-heavy' },
-  { id: 'grok-4.1', name: 'Grok 4.1', provider: 'xai', apiId: 'grok-4.1' },
-  { id: 'grok-4.1-fast', name: 'Grok 4.1 Fast', provider: 'xai', apiId: 'grok-4.1-fast' },
-  { id: 'grok-4', name: 'Grok 4', provider: 'xai', apiId: 'grok-4' },
-  { id: 'grok-3', name: 'Grok 3', provider: 'xai', apiId: 'grok-3' },
-  { id: 'grok-3-mini', name: 'Grok 3 Mini', provider: 'xai', apiId: 'grok-3-mini' },
-  { id: 'grok-2', name: 'Grok 2', provider: 'xai', apiId: 'grok-2' },
-  // Open Source via Replicate
-  { id: 'llama-3.3-70b', name: 'Llama 3.3 70B', provider: 'meta', replicateId: 'meta/meta-llama-3-3-70b-instruct' },
-  { id: 'llama-3.1-405b', name: 'Llama 3.1 405B', provider: 'meta', replicateId: 'meta/meta-llama-3.1-405b-instruct' },
+  { id: 'grok-4.20', name: 'Grok 4.20', provider: 'xai', apiId: 'grok-4.20', replicateId: 'xai/grok-4.20' },
+  { id: 'grok-4-heavy', name: 'Grok 4 Heavy', provider: 'xai', apiId: 'grok-4-heavy', replicateId: 'xai/grok-4-heavy' },
+  { id: 'grok-4.1', name: 'Grok 4.1', provider: 'xai', apiId: 'grok-4.1', replicateId: 'xai/grok-4.1' },
+  { id: 'grok-4.1-fast', name: 'Grok 4.1 Fast', provider: 'xai', apiId: 'grok-4.1-fast', replicateId: 'xai/grok-4.1-fast' },
+  { id: 'grok-4', name: 'Grok 4', provider: 'xai', apiId: 'grok-4', replicateId: 'xai/grok-4' },
+  { id: 'grok-3', name: 'Grok 3', provider: 'xai', apiId: 'grok-3', replicateId: 'xai/grok-3' },
+  { id: 'grok-3-mini', name: 'Grok 3 Mini', provider: 'xai', apiId: 'grok-3-mini', replicateId: 'xai/grok-3-mini' },
+  { id: 'grok-2', name: 'Grok 2', provider: 'xai', apiId: 'grok-2', replicateId: 'xai/grok-2' },
+  // Open Source — these are the actual Replicate model slugs
+  { id: 'llama-3-70b', name: 'Llama 3 70B', provider: 'meta', replicateId: 'meta/meta-llama-3-70b-instruct' },
+  { id: 'llama-3-8b', name: 'Llama 3 8B', provider: 'meta', replicateId: 'meta/meta-llama-3-8b-instruct' },
+  { id: 'llama-2-70b', name: 'Llama 2 70B', provider: 'meta', replicateId: 'meta/llama-2-70b-chat' },
   { id: 'mistral-7b', name: 'Mistral 7B', provider: 'mistral', replicateId: 'mistralai/mistral-7b-instruct-v0.2' },
+  { id: 'mixtral-8x7b', name: 'Mixtral 8x7B', provider: 'mistral', replicateId: 'mistralai/mixtral-8x7b-instruct-v0.1' },
   { id: 'deepseek-r1', name: 'DeepSeek R1', provider: 'deepseek', replicateId: 'deepseek-ai/deepseek-r1' }
 ];
 

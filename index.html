@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=7">
+<link rel="stylesheet" href="css/style.css?v=9">
 </head>
 <body>
 
@@ -197,7 +197,7 @@
       </div>
     </div>
 
-    <!-- AGENT PANEL (terminal-styled chat with sandbox access) -->
+    <!-- AGENT PANEL (terminal-styled chat with sandbox access + preview) -->
     <div id="agent-panel" class="panel">
       <div class="ag-wrap">
         <div class="ag-head">
@@ -207,26 +207,56 @@
             <span id="ag-status" class="ag-status">offline</span>
           </div>
           <div class="ag-actions">
+            <select id="ag-template" class="code-lang-sel" title="Sandbox OS / template">
+              <option value="base">Ubuntu 22 · base</option>
+              <option value="code-interpreter-v1">Python · code interpreter</option>
+              <option value="node-js">Node 20 · JavaScript</option>
+              <option value="desktop">Desktop · GUI + Chromium</option>
+              <option value="nextjs">Next.js dev</option>
+              <option value="rust">Rust toolchain</option>
+              <option value="golang">Go toolchain</option>
+              <option value="data-analysis">Jupyter · pandas + numpy</option>
+            </select>
             <button id="ag-start" class="code-btn run">Start</button>
             <button id="ag-stop" class="code-btn" style="display:none;">Stop</button>
             <button id="ag-clear" class="code-btn">Clear</button>
+            <button id="ag-preview-toggle" class="code-btn" title="Toggle preview pane">Preview</button>
           </div>
         </div>
-        <div id="ag-term" class="ag-term" tabindex="0">
-          <div class="ag-welcome">
-            <div class="ag-line sys">╔══════════════════════════════════════════╗</div>
-            <div class="ag-line sys">║  KEMLLM Agent · Linux sandbox v1         ║</div>
-            <div class="ag-line sys">╚══════════════════════════════════════════╝</div>
-            <div class="ag-line sys"></div>
-            <div class="ag-line sys">Chat with the AI — it has full shell access.</div>
-            <div class="ag-line sys">Prefix with <span style="color:var(--blue);">!</span> to run a shell command directly.</div>
-            <div class="ag-line sys">Add your e2b API key in Settings and press <span style="color:var(--green);">Start</span>.</div>
-            <div class="ag-line sys"></div>
+        <div class="ag-body">
+          <div class="ag-left">
+            <div id="ag-term" class="ag-term" tabindex="0">
+              <div class="ag-welcome">
+                <div class="ag-line sys">╔════════════════════════════════════════════╗</div>
+                <div class="ag-line sys">║  KEMLLM Agent · shared Linux sandbox       ║</div>
+                <div class="ag-line sys">╚════════════════════════════════════════════╝</div>
+                <div class="ag-line sys"></div>
+                <div class="ag-line sys">• Pick a template above, press <span style="color:var(--green);">Start</span>.</div>
+                <div class="ag-line sys">• Chat with the AI — it has full shell access.</div>
+                <div class="ag-line sys">• Prefix with <span style="color:var(--blue);">!</span> to run a shell command directly.</div>
+                <div class="ag-line sys">• Add your e2b API key in Settings first (free at e2b.dev).</div>
+                <div class="ag-line sys"></div>
+              </div>
+            </div>
+            <div class="ag-input-row">
+              <span class="ag-prompt">&gt;</span>
+              <input id="ag-cmd" type="text" placeholder="Ask the agent, or prefix with ! for a shell command" autocomplete="off" spellcheck="false">
+            </div>
           </div>
-        </div>
-        <div class="ag-input-row">
-          <span class="ag-prompt">&gt;</span>
-          <input id="ag-cmd" type="text" placeholder="Ask the agent, or prefix with ! to run a shell command" autocomplete="off" spellcheck="false">
+          <div id="ag-preview" class="ag-preview">
+            <div class="ag-preview-head">
+              <span>Preview</span>
+              <div style="display:flex;gap:6px;">
+                <input id="ag-preview-url" type="text" placeholder="e.g. :3000 or /path" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:6px;font-size:11px;width:140px;font-family:var(--mono);">
+                <button id="ag-preview-reload" class="code-btn" style="padding:4px 10px;font-size:11px;">↻</button>
+                <button id="ag-preview-fullscreen" class="code-btn" style="padding:4px 10px;font-size:11px;" title="Fullscreen">⛶</button>
+              </div>
+            </div>
+            <iframe id="ag-preview-frame" class="ag-preview-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" src="about:blank"></iframe>
+            <div id="ag-preview-empty" class="ag-preview-empty">
+              Start a sandbox, expose a port (e.g. <code>python3 -m http.server 3000</code>), then enter <code>:3000</code> above.
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -420,13 +450,13 @@
 <div id="sb-backdrop"></div>
 <div id="toast"></div>
 
-<script src="js/state.js?v=7"></script>
-<script src="js/models.js?v=7"></script>
-<script src="js/api.js?v=7"></script>
-<script src="js/chat.js?v=7"></script>
-<script src="js/code.js?v=7"></script>
-<script src="js/agent.js?v=7"></script>
-<script src="js/ui.js?v=7"></script>
-<script src="js/app.js?v=7"></script>
+<script src="js/state.js?v=9"></script>
+<script src="js/models.js?v=9"></script>
+<script src="js/api.js?v=9"></script>
+<script src="js/chat.js?v=9"></script>
+<script src="js/code.js?v=9"></script>
+<script src="js/agent.js?v=9"></script>
+<script src="js/ui.js?v=9"></script>
+<script src="js/app.js?v=9"></script>
 </body>
 </html>

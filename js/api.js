@@ -58,9 +58,10 @@ function saveRepKey() {
 // ===== Provider routing =====
 // Priority: user's own provider key > Replicate fallback (if rep key present).
 // On any error, if Replicate is available and a different path was used, retry via Replicate.
-async function callChat(model, messages, onChunk) {
+// Optional `overrideSystem` param replaces the default system prompt (used by Agent Mode).
+async function callChat(model, messages, onChunk, overrideSystem) {
   const provider = model.provider;
-  const sysAddon = getSystemPrompt(model);
+  const sysAddon = overrideSystem != null ? overrideSystem : getSystemPrompt(model);
   const fullMsgs = sysAddon ? [{ role: 'system', content: sysAddon }, ...messages] : messages;
 
   const tryProvider = async () => {
@@ -89,8 +90,11 @@ async function callChat(model, messages, onChunk) {
 
   const tryReplicate = async () => {
     const rk = getRepKey();
+    if (!model.replicateId) {
+      const provName = { anthropic:'Anthropic', openai:'OpenAI', google:'Google AI', xai:'xAI' }[provider] || provider;
+      throw new Error(`${model.name} is only available through the ${provName} API directly. Add your ${provName} key in Settings.`);
+    }
     if (!rk) throw new Error('Add your Replicate key in Settings to use ' + model.name + '.');
-    if (!model.replicateId) throw new Error(model.name + ' has no Replicate mapping. Add a direct provider key in Settings.');
     return callReplicateChat(model, fullMsgs, rk, onChunk);
   };
 

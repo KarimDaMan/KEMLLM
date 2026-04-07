@@ -651,15 +651,14 @@ input,textarea{font-family:inherit;color:inherit;}
 }
 
 /* ========== MODE PILLS (Chat / Code / Agent) ========== */
-.mode-row{max-width:720px;margin:10px auto 0;display:flex;gap:6px;padding:0 6px;}
+.mode-row{max-width:720px;margin:0 auto 10px;display:flex;gap:6px;padding:0 6px;justify-content:center;}
 .mode-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:999px;background:var(--bg2);border:1px solid var(--border2);color:var(--text2);font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;transition:all .2s var(--ease);}
 .mode-btn:hover{background:var(--bg3);color:var(--text);border-color:#333;}
 .mode-btn.active{background:rgba(248,113,113,.12);border-color:var(--accent);color:var(--accent);}
 .mode-btn svg{width:13px;height:13px;}
 .mode-lock{font-size:10px;opacity:.7;margin-left:2px;}
-#chat-panel:has(#home-screen:not(.hidden)) .mode-row{display:none;}
 @media (max-width:500px){
-  .mode-row{margin-top:8px;gap:4px;}
+  .mode-row{margin-bottom:8px;gap:4px;}
   .mode-btn{padding:6px 10px;font-size:11px;}
   .mode-btn svg{width:12px;height:12px;}
 }

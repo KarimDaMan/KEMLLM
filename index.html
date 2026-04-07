@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=12">
+<link rel="stylesheet" href="css/style.css?v=13">
 </head>
 <body>
 
@@ -141,14 +141,6 @@
         <div id="msgs"></div>
       </div>
       <div id="input-wrap">
-        <div id="attach-preview" class="attach-preview"></div>
-        <div id="input-box">
-          <button id="attach-btn" class="attach-btn" title="Attach image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
-          <input id="attach-input" type="file" accept="image/*" multiple style="display:none">
-          <textarea id="input-text" rows="1" placeholder="Ask anything, generate images, run code..."></textarea>
-          <button id="send-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
-          <button id="stop-btn" title="Stop"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></button>
-        </div>
         <div id="mode-row" class="mode-row">
           <button class="mode-btn active" data-mode="chat" title="Normal chat">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -163,6 +155,14 @@
             Agent
             <span class="mode-lock" id="mode-agent-lock">🔒</span>
           </button>
+        </div>
+        <div id="attach-preview" class="attach-preview"></div>
+        <div id="input-box">
+          <button id="attach-btn" class="attach-btn" title="Attach image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+          <input id="attach-input" type="file" accept="image/*" multiple style="display:none">
+          <textarea id="input-text" rows="1" placeholder="Ask anything, generate images, run code..."></textarea>
+          <button id="send-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+          <button id="stop-btn" title="Stop"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></button>
         </div>
       </div>
     </div>
@@ -406,13 +406,13 @@
 <div id="sb-backdrop"></div>
 <div id="toast"></div>
 
-<script src="js/state.js?v=12"></script>
-<script src="js/models.js?v=12"></script>
-<script src="js/api.js?v=12"></script>
-<script src="js/chat.js?v=12"></script>
-<script src="js/code.js?v=12"></script>
-<script src="js/agent.js?v=12"></script>
-<script src="js/ui.js?v=12"></script>
-<script src="js/app.js?v=12"></script>
+<script src="js/state.js?v=13"></script>
+<script src="js/models.js?v=13"></script>
+<script src="js/api.js?v=13"></script>
+<script src="js/chat.js?v=13"></script>
+<script src="js/code.js?v=13"></script>
+<script src="js/agent.js?v=13"></script>
+<script src="js/ui.js?v=13"></script>
+<script src="js/app.js?v=13"></script>
 </body>
 </html>

@@ -43,8 +43,14 @@ input,textarea{font-family:inherit;color:inherit;}
 .si-logo{display:flex;align-items:center;gap:10px;padding:6px 8px;margin-bottom:12px;cursor:pointer;color:var(--text);font-family:var(--kode);font-size:16px;font-weight:600;letter-spacing:1.5px;}
 .si-logo svg{width:22px;height:22px;flex-shrink:0;}
 .sb-nav{display:flex;flex-direction:column;gap:1px;margin-bottom:10px;}
-.si{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--text2);transition:all .14s;position:relative;font-size:13px;font-weight:500;}
-.si:hover{background:var(--bg3);color:var(--text);}
+.si{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--text2);transition:background .14s, color .14s;position:relative;font-size:13px;font-weight:500;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+/* Only apply hover effects on devices that actually support hovering,
+   so mobile taps don't get a sticky :hover state that eats the click. */
+@media (hover: hover) and (pointer: fine) {
+  .si:hover{background:var(--bg3);color:var(--text);}
+}
+/* On touch devices use :active for visual feedback */
+.si:active{background:var(--bg3);color:var(--text);}
 .si.active{background:var(--bg3);color:var(--text);}
 .si svg{width:16px;height:16px;flex-shrink:0;}
 .si-lbl{flex:1;min-width:0;}
@@ -339,7 +345,9 @@ input,textarea{font-family:inherit;color:inherit;}
 
 /* Smoother default transitions everywhere */
 .si,.tb-model,.ib,.ib-icon,.tb-tab,.sb-chat,.sb-newchat,.sb-viewall,.si-ava-row,.mdi,.mp-card,.sp-swatch,.mcp-btn,.um-item,.code-file,.code-btn,.sp-btn,.lbtn,.mbtn,.hi{transition:all .22s var(--ease);}
-.si:hover,.tb-model:hover,.ib:hover,.ib-icon:hover,.sb-chat:hover,.um-item:hover,.code-file:hover{transform:translateX(0);}
+@media (hover: hover) and (pointer: fine) {
+  .si:hover,.tb-model:hover,.ib:hover,.ib-icon:hover,.sb-chat:hover,.um-item:hover,.code-file:hover{transform:translateX(0);}
+}
 
 /* Login screen entrance */
 #login.show .login-box{animation:loginPop .55s var(--ease-out) both;}
@@ -374,9 +382,17 @@ input,textarea{font-family:inherit;color:inherit;}
 }
 
 /* Sidebar hover micro lift */
-.si:hover{transform:translateX(2px);}
-.sb-chat:hover{transform:translateX(2px);}
-.um-item:hover{transform:translateX(2px);}
+@media (hover: hover) and (pointer: fine) {
+  .si:hover{transform:translateX(2px);}
+}
+@media (hover: hover) and (pointer: fine) {
+  .sb-chat:hover{transform:translateX(2px);}
+  .um-item:hover{transform:translateX(2px);}
+}
+/* Touch-friendly tap feedback + disable default tap highlight */
+.sb-chat,.um-item,.mode-btn,.lbtn,.mbtn,.sp-btn,.code-btn,.tb-model,.ib,.ib-icon{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+.sb-chat:active{background:var(--bg3);color:var(--text);}
+.um-item:active{background:var(--bg3);}
 
 /* Active sidebar indicator */
 .si.active::before{content:'';position:absolute;left:-10px;top:50%;width:3px;height:16px;background:var(--accent);border-radius:0 3px 3px 0;transform:translateY(-50%);animation:indicator .3s var(--ease-out);}
@@ -519,12 +535,12 @@ input,textarea{font-family:inherit;color:inherit;}
 #sb-toggle{display:none;background:none;border:none;color:var(--text);width:38px;height:38px;border-radius:9px;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;}
 #sb-toggle:hover{background:var(--bg3);}
 #sb-toggle svg{width:20px;height:20px;}
-#sb-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:95;animation:appFade .25s var(--ease-out);}
+#sb-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9980;animation:appFade .25s var(--ease-out);}
 #sb-backdrop.show{display:block;}
 
 @media (max-width:820px){
   #sb-toggle{display:flex;}
-  #sb-icons{position:fixed;top:0;left:0;height:100vh;z-index:120;transform:translateX(-110%);transition:transform .3s var(--ease-out);box-shadow:6px 0 40px rgba(0,0,0,.6);}
+  #sb-icons{position:fixed;top:0;left:0;height:100vh;z-index:9990;transform:translateX(-110%);transition:transform .3s var(--ease-out);box-shadow:6px 0 40px rgba(0,0,0,.6);pointer-events:auto;}
   #sb-icons.open{transform:translateX(0);}
   #main{width:100vw;}
   #topbar{padding:0 12px;gap:6px;height:56px;overflow-x:auto;scrollbar-width:none;}

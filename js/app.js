@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v56 · code execution strip + popup modal with HTML preview; dead EDIT_REGEX removed';
+const KEMLLM_BUILD = 'v57 · restore Replicate proxy in kemllmbackend worker; cap chat input at 35vh; constrain AI images to 50vh';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -394,7 +394,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (input) {
     input.addEventListener('input', () => {
       input.style.height = 'auto';
-      input.style.height = Math.min(input.scrollHeight, 200) + 'px';
+      // Cap growth at 35% of the viewport so the textarea never pushes the
+      // whole input box off-screen on mobile/small windows. Content past
+      // the cap scrolls inside the textarea (overflow-y:auto in CSS).
+      const cap = Math.min(200, Math.floor(window.innerHeight * 0.35));
+      input.style.height = Math.min(input.scrollHeight, cap) + 'px';
     });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {

@@ -3,9 +3,28 @@
 
 let currentPanel = 'chat';
 
-function siNav(panel) {
+// ===== Hash-based router =====
+// Each panel gets its own URL so browser back/forward/reload work.
+// Routes: #/chat, #/code, #/models, #/settings
+// Legacy (no hash) → defaults to chat.
+const VALID_PANELS = ['chat', 'code', 'models', 'settings'];
+
+function panelFromHash() {
+  const h = (location.hash || '').replace(/^#\/?/, '').split('/')[0].toLowerCase();
+  return VALID_PANELS.includes(h) ? h : 'chat';
+}
+
+function setHashForPanel(panel) {
+  const want = '#/' + panel;
+  if (location.hash !== want) {
+    history.pushState({ panel }, '', want);
+  }
+}
+
+function siNav(panel, skipHash) {
   // Agent panel no longer exists — agent is now a mode inside chat
   if (panel === 'agent') { panel = 'chat'; setChatMode('agent'); }
+  if (!VALID_PANELS.includes(panel)) panel = 'chat';
   currentPanel = panel;
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   const target = document.getElementById(panel + '-panel');
@@ -17,6 +36,23 @@ function siNav(panel) {
   if (tabs) tabs.classList.toggle('hidden', !(panel === 'chat' || panel === 'code'));
   closeDrawer();
   if (isMobile()) closeSidebar();
+  if (!skipHash) setHashForPanel(panel);
+  // Update document title so it shows in browser history / tab bar
+  const pretty = panel.charAt(0).toUpperCase() + panel.slice(1);
+  document.title = 'KEMLLM · ' + pretty;
+}
+
+function initRouter() {
+  // On initial page load, honor the URL hash
+  siNav(panelFromHash(), true);
+  // Back/forward button support
+  window.addEventListener('popstate', () => {
+    siNav(panelFromHash(), true);
+  });
+  // Deep-link changes typed into the URL bar
+  window.addEventListener('hashchange', () => {
+    siNav(panelFromHash(), true);
+  });
 }
 
 function toggleDrawer() {

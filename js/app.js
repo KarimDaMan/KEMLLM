@@ -77,7 +77,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v26 · image-edit + cache-bust';
+const KEMLLM_BUILD = 'v27 · hash router + New Chat button';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -254,6 +254,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Sidebar nav
   document.querySelectorAll('.si').forEach(el => {
     el.addEventListener('click', () => {
+      const action = el.dataset.action;
+      if (action === 'new-chat') {
+        newChat();
+        siNav('chat');
+        return;
+      }
       const p = el.dataset.panel;
       if (p === 'connectors') { openMCP(); return; }
       if (p) siNav(p);
@@ -450,6 +456,8 @@ document.addEventListener('DOMContentLoaded', () => {
   renderModelsPanel();
   createStars();
   termBootStart();
+  // Wire hash router so URLs update on nav and deep-links work
+  if (typeof initRouter === 'function') initRouter();
 
   // Handle GitHub OAuth callback if present
   if (!handleGithubCallback() && !checkExistingProfile()) {

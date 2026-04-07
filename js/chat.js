@@ -273,12 +273,15 @@ async function sendMessage() {
   messages.push(userMsg);
   renderUserMessage(text, atts);
 
-  // Check image/video routing
-  if (IMG_REGEX.test(text)) {
-    return handleImageRequest(text);
-  }
-  if (VID_REGEX.test(text)) {
-    return handleVideoRequest(text);
+  // Image/video routing ONLY when no attachments. If the user attached
+  // an image, they want vision (chat with image context), not generation.
+  if (!atts.length) {
+    if (IMG_REGEX.test(text)) {
+      return handleImageRequest(text);
+    }
+    if (VID_REGEX.test(text)) {
+      return handleVideoRequest(text);
+    }
   }
 
   const model = findModel(selectedChat, 'chat');
@@ -588,12 +591,34 @@ async function probeDesktopSupport() {
 }
 
 // Start or restart a noVNC desktop inside the sandbox and show it in the preview
+async function waitForHFReady(base, tok, maxSeconds) {
+  maxSeconds = maxSeconds || 90;
+  const start = Date.now();
+  renderSystemLine('⏳ waking HF Space (first boot after sleep can take ~60s)');
+  while ((Date.now() - start) / 1000 < maxSeconds) {
+    try {
+      const r = await fetch(base + '/', { method: 'GET' });
+      if (r.ok) {
+        const d = await r.json().catch(() => null);
+        if (d && d.ok) return true;
+      }
+    } catch {}
+    await new Promise(res => setTimeout(res, 3000));
+  }
+  return false;
+}
+
 async function showAgentDesktop() {
   if (!agentSessionId || agentBackend !== 'hf') {
     showToast('Desktop needs the HF Agent Backend running');
     return;
   }
   showToast('Starting desktop…');
+  // If the Space is asleep, poll until it wakes — iframe would otherwise
+  // show HF's "Preparing Space" screen until the user manually reloads.
+  const base = getHfBackendUrl();
+  const tok = getHfBackendToken();
+  await waitForHFReady(base, tok, 90);
   // Runs Xvfb + fluxbox + x11vnc + websockify if they're installed.
   // The Dockerfile below adds them. Desktop is served on port 6080.
   const bootCmd = `

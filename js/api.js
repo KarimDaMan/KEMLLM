@@ -282,25 +282,54 @@ async function callReplicateChat(model, messages, apiKey, onChunk) {
   return out;
 }
 
+// Known-working fallback image models on Replicate.
+// If the user-selected model 404s, we try these in order so the user
+// still gets an image instead of a cryptic error.
+const IMAGE_FALLBACK_IDS = [
+  'black-forest-labs/flux-schnell',
+  'black-forest-labs/flux-1.1-pro',
+  'stability-ai/stable-diffusion-3-medium',
+  'ideogram-ai/ideogram-v3-turbo',
+];
+
 async function generateImage(prompt) {
   const apiKey = getRepKey();
   if (!apiKey) throw new Error('Add your Replicate key in Settings to generate images');
   const m = findModel(selectedImage, 'image');
   if (!m) throw new Error('No image model selected');
-  const res = await replicateFetch(`/v1/models/${m.replicateId}/predictions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + apiKey,
-      'Prefer': 'wait'
-    },
-    body: JSON.stringify({ input: { prompt } })
-  });
-  if (!res.ok) throw new Error('Image gen ' + res.status + ': ' + (await res.text()).slice(0, 200));
-  const data = await res.json();
-  let out = data.output;
-  if (Array.isArray(out)) out = out[0];
-  return out;
+
+  const idsToTry = [m.replicateId, ...IMAGE_FALLBACK_IDS.filter(id => id !== m.replicateId)];
+  let lastErr = null;
+  for (const id of idsToTry) {
+    try {
+      const res = await replicateFetch(`/v1/models/${id}/predictions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + apiKey,
+          'Prefer': 'wait'
+        },
+        body: JSON.stringify({ input: { prompt } })
+      });
+      if (res.status === 404) {
+        lastErr = new Error('Model "' + id + '" not found on Replicate');
+        continue; // try next fallback
+      }
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error('Image gen ' + res.status + ': ' + t.slice(0, 200));
+      }
+      const data = await res.json();
+      let out = data.output;
+      if (Array.isArray(out)) out = out[0];
+      if (id !== m.replicateId) showToast('Used fallback: ' + id);
+      return out;
+    } catch (e) {
+      lastErr = e;
+      if (!String(e.message).includes('not found')) throw e;
+    }
+  }
+  throw lastErr || new Error('All image models failed');
 }
 
 async function generateVideo(prompt) {

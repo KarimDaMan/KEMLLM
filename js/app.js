@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v57 · restore Replicate proxy in kemllmbackend worker; cap chat input at 35vh; constrain AI images to 50vh';
+const KEMLLM_BUILD = 'v58 · rewrite system prompt as terse tool manifest (no personality boilerplate)';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

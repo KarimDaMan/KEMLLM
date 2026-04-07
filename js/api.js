@@ -228,34 +228,46 @@ async function callChat(model, messages, onChunk, overrideSystem) {
   }
 }
 
+// System prompt = terse tool manifest. No personality, no "be helpful"
+// boilerplate, no "you are a software engineer" framing. Just: you're a
+// generative AI, here are your tools, here's how to invoke each one.
 function getSystemPrompt(model) {
-  const persona = (profileGet('persona') || '').trim();
   const name = model?.name || 'an AI assistant';
-  let s = `You are ${name}, accessed through KEMLLM — a universal AI workspace. When asked what model you are, honestly say "${name}".`;
-  s += ' Be direct, precise, and genuinely helpful. Do not be overly enthusiastic, do not use filler like "Great question!" or "Certainly!", and never end responses with a bullet-point summary unless explicitly asked. Match the length of your answer to what the question actually needs — short for short, detailed for detailed.';
-  s += ' You can execute code inside the browser. Python runs in a WebAssembly interpreter (Pyodide); JavaScript/TypeScript runs in a sandboxed iframe; other languages run in a remote sandbox. When code would help answer the question, write a fenced code block (```python, ```javascript, etc.) and it will be executed automatically and the output shown to you. Use this for math, algorithms, data processing, and anything that benefits from running real code. Do NOT speculate about unavailable libraries — just call the standard library.';
-  s += ' For mathematical expressions and equations, use LaTeX: $...$ for inline math (e.g. $x^2 + y^2 = r^2$) and $$...$$ for display math (e.g. $$\\int_0^\\infty e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}$$). The frontend renders these with KaTeX. Use proper LaTeX commands like \\frac, \\sqrt, \\sum, \\int, \\alpha, \\beta, etc. Never write equations as plain text or ASCII when LaTeX would look better.';
-  s += '\n\nIMAGE / VIDEO GENERATION — when the user asks you to create, draw, render, or generate an image, emit the marker:\n  [GENERATE_IMAGE prompt="detailed visual description"]\nWrite a rich, descriptive prompt (composition, lighting, style, colors). The frontend will send that prompt to the currently-selected image model and display the result inline. Same pattern for video: [GENERATE_VIDEO prompt="..."]. To re-edit the most recent image with a new instruction, emit [EDIT_IMAGE prompt="make the house white"]. You can place these markers ANYWHERE in your response — put them on their own line when possible. Do NOT describe the image in words and then refuse to make it — just emit the marker. Do NOT show a placeholder URL. The user does not need to switch modes — the marker triggers generation automatically.';
-  if (window.webSearchOn) {
-    s += ' The user has enabled web search context. Note your training cutoff if asked about recent events.';
+  const lines = [];
+  lines.push(`You are ${name}, a generative AI. You have the following tools:`);
+  lines.push('');
+  lines.push('- CODE EXECUTION. Write a fenced code block (```python, ```javascript, ```bash, etc). It runs automatically and the output is returned to you. Python runs in Pyodide; JavaScript in a sandboxed iframe; other languages in a remote sandbox.');
+  lines.push('- IMAGE GENERATION. Emit `[GENERATE_IMAGE prompt="..."]`. Write a rich visual description (subject, composition, lighting, style, colors). The image is generated and shown inline.');
+  lines.push('- VIDEO GENERATION. Emit `[GENERATE_VIDEO prompt="..."]`.');
+  lines.push('- IMAGE EDITING. Emit `[EDIT_IMAGE prompt="..."]` to re-edit the most recent image in the conversation.');
+  lines.push('- MATH. Use LaTeX inside `$...$` for inline and `$$...$$` for display. Rendered with KaTeX.');
+
+  // Sandbox web access — a real constraint the AI needs to know about.
+  if (profileGet('sandbox-web') !== '1') {
+    lines.push('- NETWORK: OFF. Code execution has no internet access. Do not attempt HTTP requests in code.');
+  } else {
+    lines.push('- NETWORK: ON. Code execution can reach the internet.');
   }
+
+  // Optional user persona.
+  const persona = (profileGet('persona') || '').trim();
   if (persona) {
-    s += '\n\nUser-defined persona/instructions:\n' + persona;
+    lines.push('');
+    lines.push('User instructions:');
+    lines.push(persona);
   }
-  // Persistent memories the user has explicitly added in Settings → Memory.
+
+  // Persistent memories.
   try {
     const mems = JSON.parse(profileGet('memories') || '[]');
     if (Array.isArray(mems) && mems.length) {
-      s += '\n\nPersistent memory (facts the user has told you to remember across all conversations):\n';
-      mems.forEach((m, i) => { s += `${i + 1}. ${m}\n`; });
+      lines.push('');
+      lines.push('Remembered facts:');
+      mems.forEach((m) => { lines.push('- ' + m); });
     }
   } catch {}
-  // Sandbox web access policy — the AI should know whether it's allowed
-  // to hit the network when running code.
-  if (profileGet('sandbox-web') !== '1') {
-    s += '\n\nSandbox network policy: web access is DISABLED. Do not attempt to fetch URLs, make HTTP requests, or use any tool that requires internet. If the task truly needs the web, tell the user they need to enable "Allow web access in code execution" in Settings → Sandbox.';
-  }
-  return s;
+
+  return lines.join('\n');
 }
 
 // Helper: convert a data URL to { mediaType, base64 }

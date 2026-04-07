@@ -241,7 +241,7 @@ function getSystemPrompt(model) {
   lines.push('- VIDEO GENERATION. Emit `[GENERATE_VIDEO prompt="..."]`.');
   lines.push('- IMAGE EDITING. Emit `[EDIT_IMAGE prompt="..."]` to re-edit the most recent image in the conversation.');
   lines.push('- MATH. Use LaTeX inside `$...$` for inline and `$$...$$` for display. Rendered with KaTeX.');
-  lines.push('- PERSISTENT MEMORY. When the user tells you something important about themselves (name, preferences, projects, skills, goals, context) that would be useful in future conversations, emit `[REMEMBER fact="short declarative sentence"]`. One marker per fact. Only remember durable facts, not transient ones. The user cannot see this marker in your reply (it is stripped).');
+  lines.push('- PERSISTENT MEMORY. When the user tells you something useful about themselves (name, preferences, projects, skills, goals, context, opinions, style, anything worth recalling later), emit `[REMEMBER fact="short declarative sentence"]`. One marker per fact. Emit as many markers as appropriate per reply — do not hold back. The user cannot see these markers in your reply (they are stripped).');
 
   // Sandbox web access — a real constraint the AI needs to know about.
   if (profileGet('sandbox-web') !== '1') {

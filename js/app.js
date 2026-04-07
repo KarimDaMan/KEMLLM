@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v59 · AI-written memory: [REMEMBER fact="..."] marker, read-only Settings view, reset button';
+const KEMLLM_BUILD = 'v60 · uncap AI memory; loosen remember instruction';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

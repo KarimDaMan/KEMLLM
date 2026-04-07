@@ -476,8 +476,9 @@ function getAIMemory() {
   try { return JSON.parse(profileGet('ai-memory') || '[]'); } catch { return []; }
 }
 function setAIMemory(mems) {
-  // Cap to last 50 entries so the system prompt doesn't explode.
-  if (mems.length > 50) mems = mems.slice(mems.length - 50);
+  // No cap — the user explicitly wants unlimited memory. Only constraint
+  // is localStorage / KV payload size, which will complain on its own if
+  // it ever matters.
   profileSet('ai-memory', JSON.stringify(mems));
   renderAIMemory();
 }

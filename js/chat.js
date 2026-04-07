@@ -9,6 +9,13 @@ window.webSearchOn = false;
 let chatMode = 'chat'; // 'chat' | 'code' | 'agent'
 let agentUnlocked = false;
 
+// Agent loop state — lets the AI keep running autonomously until the task
+// is done, while the user can inject additional instructions mid-loop.
+let agentLoopRunning = false;
+let agentLoopAbort = false;
+let agentInjectQueue = []; // messages the user types while the loop is running
+const AGENT_LOOP_MAX_ITERATIONS = 25;
+
 function setChatMode(mode) {
   // Agent mode is gated: user must have a backend OR explicitly enable Pyodide
   if (mode === 'agent' && !agentUnlocked) {
@@ -243,8 +250,16 @@ async function sendMessage() {
   pendingAttachments = [];
   renderAttachPreview();
 
-  // AGENT MODE: route through the agent flow instead
+  // AGENT MODE: route through the agent flow
   if (chatMode === 'agent') {
+    // If the loop is already running, queue the message as an interjection
+    // — it'll be merged into the next AI call, and the loop keeps running.
+    if (agentLoopRunning) {
+      renderUserMessage(text, atts);
+      agentInjectQueue.push(text);
+      renderSystemLine('✎ queued — will inject on next iteration');
+      return;
+    }
     renderUserMessage(text, atts);
     messages.push({ role: 'user', content: text });
     await runAgentModeChat(text);
@@ -384,11 +399,15 @@ async function handleVideoRequest(prompt) {
   }
 }
 
-// Agent mode inline in chat — uses the agent backend/pyodide for command execution,
-// renders output as an inline analysis block, then continues the AI response.
+// Agent mode — autonomous loop that keeps running until:
+//   1. the AI's response has no more bash/python blocks (task done)
+//   2. we hit AGENT_LOOP_MAX_ITERATIONS
+//   3. the user presses the stop button (sets agentLoopAbort = true)
+// While it's running, the user can type new messages that get queued
+// and merged into the next AI call, so you can steer the agent mid-task
+// without interrupting it.
 async function runAgentModeChat(userText) {
-  // Pre-set backend so the system prompt tells the AI the truth even
-  // before the sandbox finishes booting
+  // Pre-set backend so the AI's first-turn system prompt reflects reality
   if (profileGet('hf-backend-url')) agentBackend = 'hf';
   if (!agentReady) {
     showToast('Starting sandbox…');
@@ -402,22 +421,51 @@ async function runAgentModeChat(userText) {
   }
   const model = findModel(selectedChat, 'chat');
   if (!model) { showToast('No model selected'); return; }
-
   const agentSys = getAgentSystemPrompt();
-  const typingEl = renderTyping(model);
-  try {
-    let full = '';
-    await callChat(model, messages, (chunk) => { full += chunk; }, agentSys);
-    typingEl.remove();
-    renderAIMessage(model, parseMarkdown(full), full);
-    messages.push({ role: 'assistant', content: full });
 
-    // Execute any bash/python blocks the AI wrote, feed results back once
-    const blocks = extractRunnableBlocks(full);
-    if (blocks.length) {
+  // Set loop state
+  agentLoopRunning = true;
+  agentLoopAbort = false;
+  setAgentLoopUI(true);
+
+  try {
+    for (let iter = 0; iter < AGENT_LOOP_MAX_ITERATIONS; iter++) {
+      if (agentLoopAbort) { renderSystemLine('⏹ stopped by user'); break; }
+
+      // Inject any user messages that came in while we were running
+      if (agentInjectQueue.length) {
+        const extra = agentInjectQueue.splice(0).join('\n');
+        messages.push({ role: 'user', content: '[user interjection] ' + extra });
+        renderSystemLine('✎ user added: ' + extra);
+      }
+
+      const typingEl = renderTyping(model);
+      let full = '';
+      try {
+        await callChat(model, messages, (chunk) => { full += chunk; }, agentSys);
+      } catch (e) {
+        typingEl.remove();
+        renderAIMessage(model, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+        break;
+      }
+      typingEl.remove();
+      renderAIMessage(model, parseMarkdown(full), full);
+      messages.push({ role: 'assistant', content: full });
+
+      if (agentLoopAbort) { renderSystemLine('⏹ stopped by user'); break; }
+
+      // Find any runnable blocks in the latest response
+      const blocks = extractRunnableBlocks(full);
+      if (!blocks.length) {
+        // AI has nothing left to run → the task is done (or it's asking a question)
+        break;
+      }
+
+      // Execute every block, feed combined output back
       let combined = '';
       for (const b of blocks) {
-        const r = await agentRun(b.content, true, true); // silent=true, we render inline
+        if (agentLoopAbort) break;
+        const r = await agentRun(b.content, true, true);
         const stdout = r.stdout || '';
         const stderr = r.stderr || '';
         const aiMsgEl = document.querySelector('#msgs .msg-a:last-child .ai-body');
@@ -429,24 +477,55 @@ async function runAgentModeChat(userText) {
           aiMsgEl.appendChild(det);
           setTimeout(() => { det.open = false; }, 1500);
         }
-        combined += '\n$ ' + b.content + '\n' + stdout + (stderr ? '\n[stderr]\n' + stderr : '') + (r.exitCode ? `\n[exit ${r.exitCode}]` : '');
+        combined += '\n$ ' + b.content + '\n' + stdout +
+          (stderr ? '\n[stderr]\n' + stderr : '') +
+          (r.exitCode ? `\n[exit ${r.exitCode}]` : '');
       }
-      messages.push({ role: 'user', content: '[execution results]\n' + combined.trim() });
-      const typing2 = renderTyping(model);
-      try {
-        let more = '';
-        await callChat(model, messages, (chunk) => { more += chunk; }, agentSys);
-        typing2.remove();
-        renderAIMessage(model, parseMarkdown(more), more);
-        messages.push({ role: 'assistant', content: more });
-      } catch (e) {
-        typing2.remove();
-        renderAIMessage(model, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
-      }
+
+      if (agentLoopAbort) { renderSystemLine('⏹ stopped by user'); break; }
+
+      // Feed results back for the next iteration
+      messages.push({
+        role: 'user',
+        content: '[execution results]\n' + combined.trim() +
+          '\n\nContinue working on the task. If you need to run more commands, write another bash block. If the task is complete, say so in one line and stop.'
+      });
     }
-  } catch (e) {
-    typingEl.remove();
-    renderAIMessage(model, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+  } finally {
+    agentLoopRunning = false;
+    agentLoopAbort = false;
+    setAgentLoopUI(false);
+  }
+}
+
+function stopAgentLoop() {
+  if (!agentLoopRunning) return;
+  agentLoopAbort = true;
+  showToast('Stopping agent…');
+}
+
+function renderSystemLine(text) {
+  const msgs = document.getElementById('msgs');
+  if (!msgs) return;
+  const div = document.createElement('div');
+  div.className = 'msg';
+  div.style.cssText = 'font-size:11.5px;color:var(--text3);font-family:var(--mono);padding:4px 24px;max-width:780px;margin:0 auto;';
+  div.textContent = text;
+  msgs.appendChild(div);
+  scrollToBottom();
+}
+
+function setAgentLoopUI(running) {
+  const sendBtn = document.getElementById('send-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  if (sendBtn) sendBtn.classList.toggle('hide', running);
+  if (stopBtn) stopBtn.classList.toggle('show', running);
+  // Change the input placeholder so the user knows they're injecting, not starting a new turn
+  const input = document.getElementById('input-text');
+  if (input) {
+    input.placeholder = running
+      ? 'Agent is working… type to inject a message into the loop'
+      : 'Agent mode · ask the AI to run commands in a sandbox';
   }
 }
 

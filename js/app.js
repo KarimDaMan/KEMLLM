@@ -331,6 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   document.getElementById('send-btn')?.addEventListener('click', sendMessage);
+  document.getElementById('stop-btn')?.addEventListener('click', stopAgentLoop);
 
   // Click outside to close dropdowns
   document.addEventListener('click', (e) => {

@@ -14,6 +14,10 @@ function profileGet(k) {
 function profileSet(k, v) {
   if (!activeProfileId) return;
   localStorage.setItem(profileKey(k), v);
+  // Schedule a cloud sync push if this key is in the synced set
+  if (typeof SYNC_KEYS !== 'undefined' && SYNC_KEYS.includes(k) && typeof pushSync === 'function') {
+    pushSync();
+  }
 }
 function profileGetJSON(k, fallback) {
   try { const v = profileGet(k); return v ? JSON.parse(v) : fallback; }
@@ -75,6 +79,9 @@ function activateProfile(id) {
   applyAccent(profileGet('accent') || '#4a9eff');
   // Check if HF backend supports the desktop stack → reveal the floating button
   if (typeof probeDesktopSupport === 'function') probeDesktopSupport();
+  // Pull synced data from the cloud (chats/settings/custom models from
+  // any other device the user has signed in on with the same GitHub account)
+  if (typeof pullSync === 'function') pullSync();
 }
 
 function demoLogin() {
@@ -103,20 +110,105 @@ function handleGithubCallback() {
   if (!login) return false;
   const name = params.get('gh_name') || login;
   const avatar = params.get('gh_avatar') || '';
+  const syncToken = params.get('sync_token') || '';
   window.history.replaceState({}, document.title, window.location.pathname);
   let ghProfile = getProfiles().find(p => p.github === login);
   if (!ghProfile) {
     ghProfile = createProfile(name, login);
   }
-  if (avatar) {
-    const list = getProfiles();
-    const idx = list.findIndex(p => p.id === ghProfile.id);
-    if (idx >= 0) { list[idx].avatar = avatar; saveProfiles(list); }
+  // Update profile metadata (avatar, sync token)
+  const list = getProfiles();
+  const idx = list.findIndex(p => p.id === ghProfile.id);
+  if (idx >= 0) {
+    if (avatar) list[idx].avatar = avatar;
+    if (syncToken) list[idx].sync_token = syncToken;
+    saveProfiles(list);
   }
   activateProfile(ghProfile.id);
   showToast('Signed in as ' + login);
   return true;
 }
+
+// ===== Cloud sync via kemllmbackend Cloudflare worker =====
+const SYNC_BASE = 'https://kemllmbackend.karimghannam2014.workers.dev/sync';
+// Keys we DO sync (chat history, settings, custom models, persona, picks).
+// API keys are NOT synced — they stay device-local for security.
+const SYNC_KEYS = [
+  'history',
+  'persona',
+  'custom_models',
+  'mcp_connected',
+  'theme',
+  'accent',
+  'temp',
+  'max-tokens',
+  'selected_chat',
+  'selected_image',
+  'selected_video',
+];
+
+function getSyncProfile() {
+  const p = getProfiles().find(x => x.id === activeProfileId);
+  if (!p || !p.github || !p.sync_token) return null;
+  return p;
+}
+
+async function pullSync() {
+  const p = getSyncProfile();
+  if (!p) return;
+  try {
+    const r = await fetch(`${SYNC_BASE}?user=${encodeURIComponent(p.github)}&token=${encodeURIComponent(p.sync_token)}`);
+    if (!r.ok) {
+      console.warn('[KEMLLM] sync pull failed:', r.status);
+      return;
+    }
+    const body = await r.json();
+    if (!body.ok || !body.data) return;
+    // Merge each key into local profile storage
+    Object.keys(body.data).forEach(k => {
+      if (SYNC_KEYS.includes(k) && body.data[k] != null) {
+        profileSet(k, body.data[k]);
+      }
+    });
+    showToast('Synced from cloud');
+    // Re-render UI elements that read from these keys
+    if (typeof loadHistory === 'function') loadHistory();
+    if (typeof renderHistory === 'function') renderHistory();
+    if (typeof renderCustomModels === 'function') renderCustomModels();
+    if (typeof injectCustomModels === 'function') injectCustomModels();
+    if (typeof loadAllSettings === 'function') loadAllSettings();
+    const accent = profileGet('accent');
+    if (accent && typeof applyAccent === 'function') applyAccent(accent);
+  } catch (e) {
+    console.warn('[KEMLLM] sync pull error:', e);
+  }
+}
+
+let _pushTimer = null;
+function pushSync() {
+  const p = getSyncProfile();
+  if (!p) return;
+  // Debounce — collect rapid saves into one POST
+  clearTimeout(_pushTimer);
+  _pushTimer = setTimeout(async () => {
+    const data = {};
+    SYNC_KEYS.forEach(k => {
+      const v = profileGet(k);
+      if (v != null) data[k] = v;
+    });
+    try {
+      const r = await fetch(SYNC_BASE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: p.github, token: p.sync_token, data }),
+      });
+      if (!r.ok) console.warn('[KEMLLM] sync push failed:', r.status);
+    } catch (e) {
+      console.warn('[KEMLLM] sync push error:', e);
+    }
+  }, 800);
+}
+
 
 function switchProfile() {
   closeUserModal();

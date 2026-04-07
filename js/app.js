@@ -356,6 +356,33 @@ document.addEventListener('DOMContentLoaded', () => {
     el.addEventListener('click', () => loadFile(el.dataset.file));
   });
   setupCodeEditor();
+  setupAgentPanel();
+
+  // e2b key save
+  document.getElementById('save-key-e2b')?.addEventListener('click', () => {
+    const v = document.getElementById('key-e2b').value.trim();
+    profileSet('key-e2b', v);
+    showToast('e2b key saved');
+  });
+  // Replicate key test
+  document.getElementById('test-rep-key')?.addEventListener('click', async () => {
+    const k = document.getElementById('rep-key').value.trim() || getRepKey();
+    if (!k) { showToast('Enter a key first'); return; }
+    showToast('Testing Replicate…');
+    try {
+      const res = await fetch('https://kemllmx.karimghannam2014.workers.dev/replicate/v1/account', {
+        headers: { 'Authorization': 'Bearer ' + k }
+      });
+      if (res.ok) {
+        const d = await res.json();
+        showToast('✓ Replicate OK: ' + (d.username || 'authenticated'));
+      } else {
+        showToast('✗ Replicate ' + res.status);
+      }
+    } catch (e) {
+      showToast('✗ ' + e.message);
+    }
+  });
 
   // Settings handlers
   ['anthropic', 'openai', 'google', 'xai'].forEach(p => {

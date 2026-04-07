@@ -20,7 +20,7 @@ async function replicateFetch(path, init) {
 }
 
 function loadAllSettings() {
-  ['anthropic', 'openai', 'google', 'xai'].forEach(p => {
+  ['anthropic', 'openai', 'google', 'xai', 'e2b'].forEach(p => {
     const v = profileGet('key-' + p) || '';
     const el = document.getElementById('key-' + p);
     if (el) el.value = v;

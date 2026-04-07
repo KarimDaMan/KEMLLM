@@ -47,6 +47,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         <span class="si-lbl">Code</span>
       </div>
+      <div class="si" data-panel="agent">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><polyline points="6 8 10 12 6 16"/><line x1="12" y1="16" x2="17" y2="16"/></svg>
+        <span class="si-lbl">Agent</span>
+      </div>
       <div class="si" data-panel="models">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
         <span class="si-lbl">Models</span>
@@ -193,6 +197,34 @@
       </div>
     </div>
 
+    <!-- AGENT PANEL -->
+    <div id="agent-panel" class="panel">
+      <div class="ag-wrap">
+        <div class="ag-head">
+          <div class="ag-title">
+            <span class="ag-dot" id="ag-status-dot"></span>
+            <span>Agent Sandbox</span>
+            <span id="ag-status" class="ag-status">offline</span>
+          </div>
+          <div class="ag-actions">
+            <button id="ag-start" class="code-btn run">Start sandbox</button>
+            <button id="ag-stop" class="code-btn" style="display:none;">Stop</button>
+            <button id="ag-clear" class="code-btn">Clear</button>
+          </div>
+        </div>
+        <div id="ag-term" class="ag-term" tabindex="0">
+          <div class="ag-welcome">
+            <div style="color:var(--text2);margin-bottom:8px;">Agent Sandbox — a real Linux VM you and the AI share.</div>
+            <div style="color:var(--text3);font-size:12px;">Add your e2b API key in Settings, then press <b>Start sandbox</b>. You can type commands, and the AI can too.</div>
+          </div>
+        </div>
+        <div class="ag-input-row">
+          <span class="ag-prompt">$</span>
+          <input id="ag-cmd" type="text" placeholder="Enter a shell command and press Enter" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+    </div>
+
     <!-- MODELS PANEL -->
     <div id="models-panel" class="panel">
       <div class="sp-wrap">
@@ -214,8 +246,18 @@
             <div style="display:flex;gap:8px;">
               <input id="rep-key" class="sp-input" type="password" placeholder="r8_...">
               <button id="save-rep-key" class="sp-btn">Save</button>
+              <button id="test-rep-key" class="sp-btn sec">Test</button>
             </div>
-            <div class="sub">This is the only key you need. Everything works with just this.</div>
+            <div class="sub">Get a key at replicate.com/account/api-tokens. Calls are proxied through your Cloudflare worker (CORS-safe).</div>
+          </div>
+
+          <div class="sp-row">
+            <label>e2b — Linux sandbox for Agent Mode</label>
+            <div style="display:flex;gap:8px;">
+              <input id="key-e2b" class="sp-input" type="password" placeholder="e2b_...">
+              <button id="save-key-e2b" class="sp-btn">Save</button>
+            </div>
+            <div class="sub">Sign up free at e2b.dev/dashboard. Gives the AI (and you) a real Linux VM with shell access.</div>
           </div>
 
           <div class="sp-row" style="margin-top:22px;">
@@ -377,6 +419,7 @@
 <script src="js/api.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/code.js"></script>
+<script src="js/agent.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/app.js"></script>
 </body>

@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v69 · desktop button is sub-button of agent (visible only in agent mode, can be active alongside agent); switch iframe to vnc.html; print debug url in chat';
+const KEMLLM_BUILD = 'v70 · flip nginx layout: noVNC at root, Flask under /api/* — eliminates subpath websocket bugs causing forever-loading desktop';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

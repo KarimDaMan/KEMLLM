@@ -1026,7 +1026,6 @@ async function probeDesktopSupport() {
   const btn = document.getElementById('chat-desktop-btn');
   if (!btn) return;
   const base = getHfBackendUrl();
-  const tok = getHfBackendToken();
   const hide = () => {
     btn.dataset.desktopReady = '0';
     btn.classList.remove('show');
@@ -1034,17 +1033,19 @@ async function probeDesktopSupport() {
   };
   if (!base) return hide();
   try {
-    const r = await fetch(base + '/desktop/?token=' + encodeURIComponent(tok), { method: 'GET' });
-    // 200 = noVNC running · 502 = stack present but not started yet · 401 = token mismatch
-    if (r.status === 200 || r.status === 502 || r.status === 401) {
-      btn.dataset.desktopReady = '1';
-      _desktopProbedOnce = true;
-      // Only reveal it while the user is in Agent mode — Desktop is a
-      // sub-button of Agent.
-      if (chatMode === 'agent') btn.classList.add('show');
-    } else {
-      hide();
+    // Hit /vnc.html — with the new nginx front door, root serves noVNC
+    // static files directly from websockify's --web dir.
+    const r = await fetch(base + '/vnc.html', { method: 'GET' });
+    if (r.ok) {
+      const body = await r.text().catch(() => '');
+      if (body.includes('noVNC') || body.includes('novnc') || body.includes('vnc_canvas')) {
+        btn.dataset.desktopReady = '1';
+        _desktopProbedOnce = true;
+        if (chatMode === 'agent') btn.classList.add('show');
+        return;
+      }
     }
+    hide();
   } catch { hide(); }
 }
 
@@ -1081,10 +1082,24 @@ async function waitForHFReady(base, tok, maxSeconds, progress) {
     const elapsed = Math.round((Date.now() - start) / 1000);
     if (progress) progress.update(`waking HF Space… ${elapsed}s`);
     try {
-      const r = await fetch(base + '/', { method: 'GET' });
+      // Try the Flask health endpoint at /api/ first (new nginx layout),
+      // then fall back to / (old slim Dockerfile with Flask at root).
+      const r = await fetch(base + '/api/', { method: 'GET' });
       if (r.ok) {
         const d = await r.json().catch(() => null);
         if (d && d.ok) return true;
+      }
+      const r2 = await fetch(base + '/', { method: 'GET' });
+      if (r2.ok) {
+        const ct = r2.headers.get('Content-Type') || '';
+        // Either the old Flask health JSON, OR noVNC HTML from the new
+        // layout — both mean the Space is up.
+        if (ct.includes('application/json')) {
+          const d = await r2.json().catch(() => null);
+          if (d && d.ok) return true;
+        } else if (ct.includes('text/html')) {
+          return true;
+        }
       }
     } catch {}
     await new Promise(res => setTimeout(res, 2000));
@@ -1093,32 +1108,25 @@ async function waitForHFReady(base, tok, maxSeconds, progress) {
 }
 
 async function showAgentDesktop() {
-  // Hide the home screen so the progress lines are actually visible
   const home = document.getElementById('home-screen');
   if (home) home.classList.add('hidden');
   if (typeof termBootStop === 'function') termBootStop();
 
-  if (agentBackend !== 'hf' && !getHfBackendUrl()) {
-    showToast('Desktop needs the HF Agent Backend configured in Settings');
-    return;
-  }
   const base = getHfBackendUrl();
-  const tok = getHfBackendToken();
   if (!base) { showToast('Set the HF backend URL in Settings first'); return; }
 
-  // Step 1: make sure the Space is awake. Quick check first — if it responds
-  // in under 2s we skip the polling loop entirely.
+  // Step 1: make sure the Space is awake.
   const p = renderProgressLine('checking HF Space…');
   let ready = false;
   try {
     const quick = await Promise.race([
-      fetch(base + '/').then(r => r.ok),
+      fetch(base + '/vnc.html').then(r => r.ok),
       new Promise(res => setTimeout(() => res(false), 2500)),
     ]);
     ready = quick === true;
-  } catch { ready = false; }
+  } catch {}
   if (!ready) {
-    ready = await waitForHFReady(base, tok, 90, p);
+    ready = await waitForHFReady(base, getHfBackendToken(), 90, p);
     if (!ready) {
       p.fail('HF Space did not come online after 90s. Check the Logs tab on your Space — it may still be rebuilding or the build may have failed.');
       return;
@@ -1126,99 +1134,31 @@ async function showAgentDesktop() {
   }
   p.done('HF Space is up', '✓');
 
-  // Step 2: hit /desktop directly. With the new Dockerfile.desktop the
-  // noVNC stack is auto-started at container boot, so this should return
-  // the noVNC HTML straight away — no session or agentRun needed.
-  const pc = renderProgressLine('checking /desktop endpoint…');
-  let needsManualBoot = false;
+  // Step 2: verify noVNC is reachable at the root. With the new
+  // nginx-based Dockerfile.desktop, /vnc.html is served directly from
+  // websockify's static files.
+  const pc = renderProgressLine('checking noVNC…');
   try {
-    const r = await fetch(base + '/desktop/?token=' + encodeURIComponent(tok));
-    if (r.status === 404) {
-      pc.fail('Your HF Space has the OLD app.py. Upload the current app.py to the Space, commit, wait for rebuild.');
+    const r = await fetch(base + '/vnc.html');
+    if (!r.ok) {
+      pc.fail('noVNC not reachable (HTTP ' + r.status + '). Your HF Space is either still rebuilding or running the SLIM Dockerfile — re-upload Dockerfile.desktop as Dockerfile and wait for rebuild.');
       return;
     }
-    if (r.status === 401) {
-      pc.fail('/desktop returned 401 — the token in Settings does not match AGENT_TOKEN on the Space.');
+    const body = await r.text();
+    if (!body.includes('noVNC') && !body.includes('novnc') && !body.includes('vnc_canvas')) {
+      pc.fail('/vnc.html returned something, but it is not the noVNC page. Response starts with: ' + body.slice(0, 120));
       return;
     }
-    if (r.status === 502) {
-      // Old slim Dockerfile, or desktop variant that didn't auto-start.
-      // Fall through to the manual-boot path.
-      needsManualBoot = true;
-      pc.done('/desktop endpoint present (noVNC not up yet)', '⋯');
-    } else if (r.ok) {
-      pc.done('/desktop endpoint present', '✓');
-    } else {
-      const txt = await r.text().catch(() => '');
-      if (txt.includes('requests')) {
-        pc.fail('Your HF Space has the OLD Dockerfile (missing python-requests). Update the Dockerfile, commit, wait for rebuild.');
-        return;
-      }
-      pc.fail('/desktop returned ' + r.status + ': ' + txt.slice(0, 180));
-      return;
-    }
+    pc.done('noVNC HTML served from root', '✓');
   } catch (e) {
-    pc.fail('Cannot reach /desktop: ' + e.message);
+    pc.fail('Cannot reach noVNC: ' + e.message);
     return;
   }
 
-  // Step 3 (only if noVNC isn't already running): create a session and
-  // spawn Xvfb/fluxbox/x11vnc/websockify via agentRun. This is the legacy
-  // path for the slim Dockerfile — the new Dockerfile.desktop skips it.
-  if (needsManualBoot) {
-    if (!agentSessionId) {
-      const ps = renderProgressLine('creating sandbox session…');
-      try { await agentStart(); }
-      catch (e) { ps.fail('agentStart threw: ' + (e.message || e)); return; }
-      if (!agentSessionId) {
-        ps.fail('agentStart finished but no session_id. agentBackend=' + agentBackend);
-        return;
-      }
-      ps.done('sandbox session ready', '✓');
-    }
-    const pn = renderProgressLine('starting Xvfb + fluxbox + x11vnc + noVNC…');
-    const bootCmd = `set -e
-command -v Xvfb >/dev/null || { echo MISSING_XVFB; exit 1; }
-command -v websockify >/dev/null || { echo MISSING_WEBSOCKIFY; exit 1; }
-pgrep -f "Xvfb :0" >/dev/null || (nohup Xvfb :0 -screen 0 1280x720x24 >/tmp/xvfb.log 2>&1 &)
-sleep 1
-pgrep -f fluxbox >/dev/null || (DISPLAY=:0 nohup fluxbox >/tmp/fluxbox.log 2>&1 &)
-sleep 1
-pgrep -f x11vnc >/dev/null || (nohup x11vnc -display :0 -forever -nopw -shared -rfbport 5900 -quiet >/tmp/x11vnc.log 2>&1 &)
-sleep 1
-pgrep -f websockify >/dev/null || (nohup websockify --web=/usr/share/novnc 6080 localhost:5900 >/tmp/websockify.log 2>&1 &)
-sleep 2
-ss -tlnp 2>/dev/null | grep -q 6080 && echo READY || echo NOT_LISTENING
-`;
-    let rr;
-    try {
-      rr = await agentRun(bootCmd, true, true);
-    } catch (e) {
-      // Most likely agentSessionId went stale (container restarted). Retry once
-      // with a fresh session before giving up.
-      agentSessionId = '';
-      try { await agentStart(); }
-      catch (e2) { pn.fail('session refresh failed: ' + (e2.message || e2)); return; }
-      try { rr = await agentRun(bootCmd, true, true); }
-      catch (e3) { pn.fail('agentRun failed even after session refresh: ' + (e3.message || e3)); return; }
-    }
-    const output = (rr.stdout || '') + (rr.stderr || '');
-    if (output.includes('MISSING_XVFB') || output.includes('MISSING_WEBSOCKIFY')) {
-      pn.fail('Desktop tools not installed — your Space is running the SLIM Dockerfile. Upload Dockerfile.desktop (renamed to Dockerfile) and rebuild.');
-      return;
-    }
-    if (!output.includes('READY')) {
-      pn.fail('noVNC did not start listening on port 6080. Output: ' + output.slice(0, 180));
-      return;
-    }
-    pn.done('noVNC listening on :6080', '✓');
-  }
-
-  // Step 4: load the preview. vnc.html ships with every noVNC version
-  // (vnc_lite.html does not on older Ubuntu builds). path=desktop/websockify
-  // tells noVNC to open its WebSocket against the nginx-proxied path so it
-  // doesn't try to hit the root /websockify.
-  const url = `${base}/desktop/vnc.html?path=desktop/websockify&autoconnect=1&resize=scale&token=${encodeURIComponent(tok)}`;
+  // Step 3: load the preview. noVNC at the root means `path=websockify`
+  // (the default) and the browser will open ws(s)://host/websockify which
+  // nginx proxies to websockify on :6080.
+  const url = `${base}/vnc.html?autoconnect=1&resize=scale&reconnect=1&show_dot=1`;
   chatPreviewShow(url, 'AI Desktop');
   renderSystemLine('🖥 desktop loaded — tap and drag in the preview to interact. If it stays blank, open the URL in a new tab to debug: ' + url);
 }

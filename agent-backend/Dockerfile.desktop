@@ -51,16 +51,22 @@ RUN useradd -m -s /bin/bash agent \
 RUN mkdir -p /var/lib/nginx /var/log/nginx /run \
  && chown -R agent:agent /var/lib/nginx /var/log/nginx /run /etc/nginx
 
-# nginx front door: Flask on :8000, noVNC on :6080, everything funnels
-# through :7860.
+# nginx front door. New architecture — noVNC at the ROOT of the space
+# (matches standard noVNC deployments) and Flask API moved under /api/*
+# which nginx strips before forwarding. This eliminates the fragile
+# subpath-based WebSocket path routing that was causing forever-loading.
+#
+#   /websockify    → websockify :6080     (WebSocket upgrade)
+#   /api/...       → Flask :8000          (prefix stripped)
+#   /              → websockify :6080     (serves /usr/share/novnc via --web)
 RUN cat > /etc/nginx/sites-available/kemllm.conf <<'NGINX'
 server {
   listen 7860 default_server;
   listen [::]:7860 default_server;
   client_max_body_size 50m;
 
-  # noVNC WebSocket upgrade — MUST come before the generic /desktop/ rule.
-  location /desktop/websockify {
+  # noVNC WebSocket — must come before location /
+  location /websockify {
     proxy_pass http://127.0.0.1:6080/websockify;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
@@ -70,22 +76,22 @@ server {
     proxy_send_timeout 3600s;
   }
 
-  # noVNC HTML / JS / CSS / fonts
-  location /desktop/ {
-    proxy_pass http://127.0.0.1:6080/;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-  }
-
-  # Everything else → Flask app on 8000
-  location / {
-    proxy_pass http://127.0.0.1:8000;
+  # Flask API under /api/*  (prefix stripped)
+  location /api/ {
+    proxy_pass http://127.0.0.1:8000/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_read_timeout 600s;
     proxy_send_timeout 600s;
+  }
+
+  # Everything else → noVNC static files via websockify
+  location / {
+    proxy_pass http://127.0.0.1:6080/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
   }
 }
 NGINX

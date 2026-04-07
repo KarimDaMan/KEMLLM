@@ -91,8 +91,29 @@ async function hfFetch(path, init) {
   init.headers['Content-Type'] = 'application/json';
   const tok = getHfBackendToken();
   if (tok) init.headers['Authorization'] = 'Bearer ' + tok;
-  const url = getHfBackendUrl() + path;
-  return fetch(url, init);
+  // Flask API now lives under /api/* on the new Dockerfile.desktop
+  // (nginx strips the prefix before forwarding). For backwards compat
+  // with the slim Dockerfile (no nginx, Flask at root), we also try the
+  // root path as a fallback.
+  const base = getHfBackendUrl();
+  const apiUrl = base + '/api' + path;
+  let res;
+  try {
+    res = await fetch(apiUrl, init);
+  } catch (e) {
+    // Network error on /api — fall back to root for old containers.
+    return fetch(base + path, init);
+  }
+  // If /api returns 404 (nginx routed to noVNC which doesn't know Flask
+  // routes), fall back to root — that container is a slim one without
+  // the nginx front door.
+  if (res.status === 404) {
+    const ct = res.headers.get('Content-Type') || '';
+    if (ct.includes('text/html') || ct.includes('application/xhtml')) {
+      return fetch(base + path, init);
+    }
+  }
+  return res;
 }
 
 // ===== Boot =====

@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v46 · HF Space sleep detection + auto-wake polling';
+const KEMLLM_BUILD = 'v47 · image edit via selected model + Replicate file upload + render on reload';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

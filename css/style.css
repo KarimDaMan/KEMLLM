@@ -821,3 +821,8 @@ input,textarea{font-family:inherit;color:inherit;}
 /* Models panel section headers */
 .mp-section-h{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:1.4px;text-transform:uppercase;padding:18px 0 10px;border-bottom:1px solid var(--border);margin-bottom:14px;}
 .mp-card-s{font-family:var(--mono);font-size:11px;color:var(--text3);margin-top:4px;word-break:break-all;}
+
+/* Clickable AI-generated images — clicking reuses as next attachment */
+.ai-img{max-width:420px;border-radius:10px;margin:8px 0;display:block;cursor:pointer;transition:transform .15s var(--ease),box-shadow .15s var(--ease);}
+.ai-img:hover{transform:scale(1.01);box-shadow:0 6px 24px rgba(0,0,0,.5);}
+.ai-img:active{transform:scale(.99);}

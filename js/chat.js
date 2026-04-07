@@ -84,6 +84,13 @@ function parseMarkdown(md) {
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
   html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+  // Images (must come before links — `![alt](url)` contains a `[...](...)`)
+  // Clicking/tapping a generated image reuses it as the next attachment
+  // so the user can chain edits ("make it white", "now add a boat", etc).
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (m, alt, url) => {
+    const safeUrl = String(url).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+    return `<img src="${safeUrl}" alt="${alt}" class="ai-img" onclick="reuseImageAsAttachment('${safeUrl}')" title="Click to reuse as the next input image">`;
+  });
   // Links
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
   // Blockquotes
@@ -459,6 +466,31 @@ async function runAnalysisBlock(aiEl, block) {
   }
 }
 
+// Called when the user taps a generated/edited image in a chat bubble.
+// Treats that image as the next pending attachment so the next message
+// can reference it (e.g. "now make it blue", "add a person"). If the
+// user's next message matches EDIT_REGEX, it routes to handleEditImageRequest
+// automatically — so tap, type, go.
+function reuseImageAsAttachment(url) {
+  if (!url) return;
+  // Strip HTML entity encoding that might have been added during render
+  url = url.replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+  pendingAttachments.push({
+    url,              // plain https URL (not a data URL)
+    name: 'image.png',
+    size: 0,
+    mime: 'image/png',
+    isImage: true,
+  });
+  renderAttachPreview();
+  const input = document.getElementById('input-text');
+  if (input) {
+    input.focus();
+    if (!input.value) input.placeholder = 'Describe the edit (e.g. "make it blue", "remove the background")';
+  }
+  if (typeof showToast === 'function') showToast('Image attached — describe the edit');
+}
+
 async function handleImageRequest(prompt) {
   const m = findModel(selectedImage, 'image');
   const fakeModel = { name: m?.name || 'Image', provider: 'google' };
@@ -466,8 +498,11 @@ async function handleImageRequest(prompt) {
   try {
     const url = await generateImage(prompt);
     typingEl.remove();
-    renderAIMessage(fakeModel, `<p>Generated with ${escapeHTML(m.name)}:</p><img src="${escapeHTML(url)}" alt="generated">`);
-    messages.push({ role: 'assistant', content: `[image: ${url}]` });
+    // Save as markdown so parseMarkdown renders the image on both the
+    // initial display AND when the chat is reloaded from history.
+    const md = `Generated with ${m.name}:\n\n![generated](${url})`;
+    renderAIMessage(fakeModel, parseMarkdown(md), md);
+    messages.push({ role: 'assistant', content: md });
     saveCurrentChat();
   } catch (e) {
     typingEl.remove();
@@ -478,12 +513,13 @@ async function handleEditImageRequest(prompt, imageAttachment) {
   const fakeModel = { name: 'Image Edit (FLUX Kontext)', provider: 'google' };
   const typingEl = renderTyping(fakeModel);
   try {
-    const url = await editImage(prompt, imageAttachment.dataUrl);
+    // editImage now accepts either a data URL or a plain https URL
+    const sourceUrl = imageAttachment.dataUrl || imageAttachment.url;
+    const url = await editImage(prompt, sourceUrl);
     typingEl.remove();
-    renderAIMessage(fakeModel,
-      `<p>Edited with FLUX Kontext:</p><img src="${escapeHTML(url)}" alt="edited">`,
-      prompt);
-    messages.push({ role: 'assistant', content: `[edited image: ${url}]` });
+    const md = `Edited with FLUX Kontext:\n\n![edited](${url})`;
+    renderAIMessage(fakeModel, parseMarkdown(md), md);
+    messages.push({ role: 'assistant', content: md });
     saveCurrentChat();
   } catch (e) {
     typingEl.remove();
@@ -498,8 +534,9 @@ async function handleVideoRequest(prompt) {
   try {
     const url = await generateVideo(prompt);
     typingEl.remove();
-    renderAIMessage(fakeModel, `<p>Generated with ${escapeHTML(m.name)}:</p><video controls loop src="${escapeHTML(url)}"></video>`);
-    messages.push({ role: 'assistant', content: `[video: ${url}]` });
+    const md = `Generated with ${m.name}:\n\n<video controls loop src="${url}" style="max-width:520px;border-radius:10px;"></video>`;
+    renderAIMessage(fakeModel, md, md);
+    messages.push({ role: 'assistant', content: md });
     saveCurrentChat();
   } catch (e) {
     typingEl.remove();
@@ -965,7 +1002,10 @@ function renderAttachPreview() {
   if (!el) return;
   el.innerHTML = pendingAttachments.map((a, i) => {
     if (a.isImage) {
-      return `<div class="attach-wrap"><img class="attach-thumb" src="${a.dataUrl}"><button class="attach-x" onclick="removeAttachment(${i})">×</button></div>`;
+      // Thumbnail source can be either a data: URL (fresh upload) or a
+      // plain https URL (reused from a previous generation)
+      const src = a.dataUrl || a.url;
+      return `<div class="attach-wrap"><img class="attach-thumb" src="${src}"><button class="attach-x" onclick="removeAttachment(${i})">×</button></div>`;
     }
     return `<div class="attach-wrap attach-file"><div class="attach-file-inner"><div class="attach-icon">${fileIcon(a.mime, a.name)}</div><div class="attach-meta"><div class="attach-name">${escapeHTML(a.name)}</div><div class="attach-size">${formatBytes(a.size)}</div></div></div><button class="attach-x" onclick="removeAttachment(${i})">×</button></div>`;
   }).join('');

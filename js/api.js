@@ -445,52 +445,95 @@ const IMAGE_FALLBACK_IDS = [
   'ideogram-ai/ideogram-v3-turbo',
 ];
 
-// Image-editing (img2img) models on Replicate — used when the user attaches
-// an image and asks to modify/edit/change it. Tried in order.
-const IMAGE_EDIT_IDS = [
-  'black-forest-labs/flux-kontext-pro',  // purpose-built for instruction-based edits
+// Image-editing fallback chain — only used if the user's currently-selected
+// image model fails or can't do img2img.
+const IMAGE_EDIT_FALLBACK_IDS = [
+  'black-forest-labs/flux-kontext-pro',
   'black-forest-labs/flux-kontext-dev',
-  'google/nano-banana',                  // Gemini image edit
-  'black-forest-labs/flux-dev',          // generic img2img fallback
+  'google/nano-banana',
+  'black-forest-labs/flux-dev',
 ];
 
-async function editImage(prompt, imageDataUrl) {
+// Upload a data URL (base64) to Replicate's file storage and return the
+// https URL that can be passed as input to any model. Some models reject
+// raw base64 data URLs but accept https URLs. This is the officially
+// documented way to pass user-uploaded images to Replicate models.
+async function replicateUploadFile(dataUrl, apiKey) {
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  const form = new FormData();
+  form.append('content', blob, 'upload.' + (blob.type.split('/')[1] || 'png'));
+  const upRes = await replicateFetch('/v1/files', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + apiKey },
+    body: form,
+  });
+  if (!upRes.ok) {
+    const t = await upRes.text();
+    throw new Error('Replicate file upload failed: ' + upRes.status + ' ' + t.slice(0, 200));
+  }
+  const data = await upRes.json();
+  // Replicate returns { urls: { get: 'https://...' }, ... }
+  return data?.urls?.get || data?.url;
+}
+
+async function editImage(prompt, sourceUrl) {
   const apiKey = getRepKey();
   if (!apiKey) throw new Error('Add your Replicate key in Settings to edit images');
-  if (!imageDataUrl) throw new Error('No input image');
+  if (!sourceUrl) throw new Error('No input image');
+
+  // Convert data URLs to https URLs via Replicate file upload. Plain
+  // http/https URLs (e.g. a previously-generated image) pass through unchanged.
+  let imageUrl = sourceUrl;
+  if (sourceUrl.startsWith('data:')) {
+    if (typeof showToast === 'function') showToast('Uploading image to Replicate…');
+    imageUrl = await replicateUploadFile(sourceUrl, apiKey);
+    if (!imageUrl) throw new Error('Replicate upload returned no URL');
+  }
+
+  // Try the user's CURRENTLY-SELECTED image model first. If it fails or
+  // doesn't accept img2img, walk the fallback list.
+  const selected = findModel(selectedImage, 'image');
+  const idsToTry = [];
+  if (selected?.replicateId) idsToTry.push(selected.replicateId);
+  for (const id of IMAGE_EDIT_FALLBACK_IDS) {
+    if (id !== selected?.replicateId) idsToTry.push(id);
+  }
+
   let lastErr = null;
-  for (const id of IMAGE_EDIT_IDS) {
+  for (const id of idsToTry) {
     try {
-      // Different models use different input keys; flux-kontext uses `input_image`,
-      // most img2img models use `image`. Send both so whichever is accepted wins.
+      // Different models use different input keys — flux-kontext wants
+      // `input_image`, most img2img uses `image`, nano-banana uses `image_input`.
+      // Send all three; the model picks the one it recognizes.
       const input = {
         prompt,
-        input_image: imageDataUrl,
-        image: imageDataUrl,
+        image: imageUrl,
+        input_image: imageUrl,
+        image_input: imageUrl,
       };
-      const res = await replicatePredict(id, input, apiKey);
+      const res = await replicatePredict(id, input, apiKey, selected?.version);
       if (res.status === 404) {
-        lastErr = new Error('Model "' + id + '" not found');
+        lastErr = new Error('Model "' + id + '" not found on Replicate');
         continue;
       }
       if (!res.ok) {
         const t = await res.text();
-        lastErr = new Error('Edit ' + res.status + ': ' + t.slice(0, 200));
+        lastErr = new Error('Edit ' + res.status + ' on ' + id + ': ' + t.slice(0, 200));
         if (res.status === 422) continue;
         throw lastErr;
       }
       const data = await res.json();
       let out = data.output;
       if (Array.isArray(out)) out = out[0];
-      if (!out) {
-        lastErr = new Error('Model "' + id + '" returned no output');
-        continue;
+      if (!out) { lastErr = new Error('Model "' + id + '" returned no output'); continue; }
+      if (id !== selected?.replicateId && typeof showToast === 'function') {
+        showToast('Edited with fallback ' + id);
       }
-      if (typeof showToast === 'function') showToast('Edited with ' + id);
       return out;
     } catch (e) {
       lastErr = e;
-      if (!String(e.message).match(/not found|422/)) throw e;
+      if (!String(e.message || '').match(/not found|422/)) throw e;
     }
   }
   throw lastErr || new Error('All image-edit models failed');

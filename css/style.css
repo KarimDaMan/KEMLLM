@@ -551,11 +551,10 @@ input,textarea{font-family:inherit;color:inherit;}
      (no chance of items rendered at unclickable positions). Just
      display:none → display:flex with an opacity transition. */
   #sb-icons{
-    display:none !important;
     position:fixed;
     top:0;
-    left:0;
-    right:0;
+    left:-100vw;            /* slide-in start: fully offscreen left */
+    right:auto;
     bottom:0;
     width:100vw;
     height:100vh;
@@ -564,17 +563,20 @@ input,textarea{font-family:inherit;color:inherit;}
     background:var(--bg);
     overflow-y:auto;
     -webkit-overflow-scrolling:touch;
-    transform:none !important;
+    transform:none !important;  /* no transforms — use left for slide */
     pointer-events:auto !important;
     padding:0;
-    box-shadow:none;
+    box-shadow:6px 0 40px rgba(0,0,0,.6);
+    display:flex;
     flex-direction:column;
-    opacity:0;
-    transition:opacity .2s var(--ease-out);
+    /* Smooth slide-in via the left property (real layout, no hit-test bugs).
+       We use will-change:left to hint compositor without triggering the
+       transform-related Safari hit-test bug. */
+    transition:left .28s cubic-bezier(.22,1,.36,1);
+    will-change:left;
   }
   #sb-icons.open{
-    display:flex !important;
-    opacity:1;
+    left:0;
   }
   /* Big mobile sidebar header with explicit close button */
   #sb-icons .si-logo{

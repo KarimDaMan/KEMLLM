@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v39 · mobile sidebar = FULL-SCREEN overlay (no transforms)';
+const KEMLLM_BUILD = 'v40 · slide animation back via left property (no transforms)';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

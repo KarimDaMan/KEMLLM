@@ -6,6 +6,19 @@ function getKey(provider) {
 }
 function getRepKey() { return profileGet('rep-key') || ''; }
 
+// Replicate is proxied through the Cloudflare worker to avoid CORS issues.
+// The worker accepts the same paths under /replicate and forwards them.
+const REPLICATE_BASE = 'https://kemllmx.karimghannam2014.workers.dev/replicate';
+// Direct fallback if the worker is unreachable
+const REPLICATE_DIRECT = 'https://api.replicate.com';
+async function replicateFetch(path, init) {
+  try {
+    const r = await fetch(REPLICATE_BASE + path, init);
+    if (r.ok || r.status < 500) return r;
+  } catch {}
+  return fetch(REPLICATE_DIRECT + path, init);
+}
+
 function loadAllSettings() {
   ['anthropic', 'openai', 'google', 'xai'].forEach(p => {
     const v = profileGet('key-' + p) || '';
@@ -105,7 +118,7 @@ function getSystemPrompt(model) {
   const name = model?.name || 'an AI assistant';
   let s = `You are ${name}, accessed through KEMLLM — a universal AI workspace. When asked what model you are, honestly say "${name}".`;
   s += ' Be direct, precise, and genuinely helpful. Do not be overly enthusiastic, do not use filler like "Great question!" or "Certainly!", and never end responses with a bullet-point summary unless explicitly asked. Match the length of your answer to what the question actually needs — short for short, detailed for detailed.';
-  s += ' You can execute code: when it helps, write a fenced code block in python, javascript, c, c++, rust, go, java, bash, or similar, and it will be automatically run. Use this for math, algorithms, data processing, and any task that benefits from running real code.';
+  s += ' You can execute code inside the browser. Python runs in a WebAssembly interpreter (Pyodide); JavaScript/TypeScript runs in a sandboxed iframe; other languages run in a remote sandbox. When code would help answer the question, write a fenced code block (```python, ```javascript, etc.) and it will be executed automatically and the output shown to you. Use this for math, algorithms, data processing, and anything that benefits from running real code. Do NOT speculate about unavailable libraries — just call the standard library.';
   if (window.webSearchOn) {
     s += ' The user has enabled web search context. Note your training cutoff if asked about recent events.';
   }
@@ -234,10 +247,10 @@ async function callGoogleDirect(model, messages, apiKey, onChunk) {
   return text;
 }
 
-// ===== Replicate (chat fallback + image/video) =====
+// ===== Replicate (chat fallback + image/video) — goes through worker proxy =====
 async function callReplicateChat(model, messages, apiKey, onChunk) {
-  const prompt = messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n') + '\n\nASSISTANT:';
-  const res = await fetch(`https://api.replicate.com/v1/models/${model.replicateId}/predictions`, {
+  const prompt = messages.map(m => `${m.role.toUpperCase()}: ${typeof m.content === 'string' ? m.content : ''}`).join('\n\n') + '\n\nASSISTANT:';
+  const res = await replicateFetch(`/v1/models/${model.replicateId}/predictions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -246,7 +259,10 @@ async function callReplicateChat(model, messages, apiKey, onChunk) {
     },
     body: JSON.stringify({ input: { prompt, max_tokens: parseInt(profileGet('max-tokens') || '4096') } })
   });
-  if (!res.ok) throw new Error('Replicate error: ' + res.status + ' ' + (await res.text()).slice(0, 200));
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error('Replicate ' + res.status + ': ' + t.slice(0, 200));
+  }
   const data = await res.json();
   let out = data.output;
   if (Array.isArray(out)) out = out.join('');
@@ -260,7 +276,7 @@ async function generateImage(prompt) {
   if (!apiKey) throw new Error('Add your Replicate key in Settings to generate images');
   const m = findModel(selectedImage, 'image');
   if (!m) throw new Error('No image model selected');
-  const res = await fetch(`https://api.replicate.com/v1/models/${m.replicateId}/predictions`, {
+  const res = await replicateFetch(`/v1/models/${m.replicateId}/predictions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -269,7 +285,7 @@ async function generateImage(prompt) {
     },
     body: JSON.stringify({ input: { prompt } })
   });
-  if (!res.ok) throw new Error('Image gen error: ' + (await res.text()).slice(0, 200));
+  if (!res.ok) throw new Error('Image gen ' + res.status + ': ' + (await res.text()).slice(0, 200));
   const data = await res.json();
   let out = data.output;
   if (Array.isArray(out)) out = out[0];
@@ -281,7 +297,7 @@ async function generateVideo(prompt) {
   if (!apiKey) throw new Error('Add your Replicate key in Settings to generate videos');
   const m = findModel(selectedVideo, 'video');
   if (!m) throw new Error('No video model selected');
-  let res = await fetch(`https://api.replicate.com/v1/models/${m.replicateId}/predictions`, {
+  let res = await replicateFetch(`/v1/models/${m.replicateId}/predictions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -289,9 +305,8 @@ async function generateVideo(prompt) {
     },
     body: JSON.stringify({ input: { prompt } })
   });
-  if (!res.ok) throw new Error('Video gen error: ' + (await res.text()).slice(0, 200));
+  if (!res.ok) throw new Error('Video gen ' + res.status + ': ' + (await res.text()).slice(0, 200));
   let data = await res.json();
-  // Poll
   for (let i = 0; i < 80; i++) {
     if (data.status === 'succeeded') {
       let out = data.output;
@@ -300,7 +315,9 @@ async function generateVideo(prompt) {
     }
     if (data.status === 'failed' || data.status === 'canceled') throw new Error('Video generation failed');
     await new Promise(r => setTimeout(r, 3000));
-    res = await fetch(data.urls.get, { headers: { 'Authorization': 'Bearer ' + apiKey } });
+    // Pass the direct URL through the worker proxy too when possible
+    const getUrl = data.urls.get.replace('https://api.replicate.com', '');
+    res = await replicateFetch(getUrl, { headers: { 'Authorization': 'Bearer ' + apiKey } });
     data = await res.json();
   }
   throw new Error('Video timed out');

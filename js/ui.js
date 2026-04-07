@@ -191,8 +191,8 @@ function toggleWebSearch() {
 
 // ===== MCP Connectors =====
 const MCP_SERVICES = [
-  { id: 'replicate', name: 'Replicate', desc: 'Run AI models', icon: 'R', url: null, always: true },
-  { id: 'piston', name: 'Piston', desc: 'Code execution', icon: 'P', url: null, always: true },
+  { id: 'replicate', name: 'Replicate', desc: 'Run AI models · mcp.replicate.com/sse', icon: 'R', url: null, always: true, mcp: 'https://mcp.replicate.com/sse' },
+  { id: 'pyodide', name: 'Code Sandbox', desc: 'Python in-browser (Pyodide) · JS iframe', icon: '▶', url: null, always: true },
   { id: 'github', name: 'GitHub', desc: 'Repos and gists', icon: 'G', url: 'https://github.com/settings/applications/new' },
   { id: 'gdrive', name: 'Google Drive', desc: 'File access', icon: 'D', url: 'https://accounts.google.com/o/oauth2/auth?scope=https://www.googleapis.com/auth/drive.readonly' },
   { id: 'gmail', name: 'Gmail', desc: 'Email access', icon: 'M', url: 'https://accounts.google.com/o/oauth2/auth?scope=https://www.googleapis.com/auth/gmail.readonly' },

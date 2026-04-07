@@ -1,30 +1,20 @@
 // ========== KEMLLM Agent Mode ==========
-// A terminal-styled chat with a real Linux sandbox (e2b).
-// Chat with the AI normally — it has shell access and can run commands.
-// User can run commands directly by prefixing with "!" or just typing them
-// as a question and letting the AI decide.
+// Backend: Pyodide (Python 3.12 in WebAssembly, runs in browser).
+// This gives a real persistent Python environment with a virtual filesystem.
+// Shell-like commands (ls, cat, pwd, echo, cd, mkdir, rm, touch, cp, mv,
+// whoami, uname, pip install, curl) are translated to Python equivalents.
+// Any other input is executed as Python in the persistent REPL.
+//
+// e2b was abandoned: their REST API has no command execution endpoint;
+// all commands go through gRPC-web streaming to envd which is not
+// callable from plain browser fetch().
 'use strict';
 
-const E2B_BASE = 'https://kemllmx.karimghannam2014.workers.dev/e2b';
-const E2B_DIRECT = 'https://api.e2b.dev';
-
-let agentSandboxId = null;
+let agentPyodide = null;
+let agentReady = false;
 let agentBusy = false;
-let agentMessages = []; // conversation with the AI
-
-function getE2BKey() { return profileGet('key-e2b') || ''; }
-
-async function e2bFetch(path, init) {
-  init = init || {};
-  init.headers = init.headers || {};
-  init.headers['X-API-Key'] = getE2BKey();
-  init.headers['Content-Type'] = init.headers['Content-Type'] || 'application/json';
-  try {
-    const r = await fetch(E2B_BASE + path, init);
-    if (r.ok || r.status < 500) return r;
-  } catch {}
-  return fetch(E2B_DIRECT + path, init);
-}
+let agentMessages = [];
+let agentTemplate = 'python-pyodide';
 
 function agentLog(text, cls) {
   const term = document.getElementById('ag-term');
@@ -72,98 +62,57 @@ function agentSetStatus(state) {
   }
 }
 
-let agentTemplate = 'base';
-
-function agentSandboxHost() {
-  // e2b sandboxes are reachable at https://<port>-<sandboxId>.e2b.dev/
-  return agentSandboxId ? agentSandboxId : null;
-}
-
+// ===== Pyodide boot =====
 async function agentStart() {
-  if (!getE2BKey()) {
-    agentLog('✗ Add your e2b API key in Settings first. Get one free at e2b.dev/dashboard.', 'err');
-    siNav('settings');
-    return;
-  }
   if (agentBusy) return;
   agentBusy = true;
-  const tplSel = document.getElementById('ag-template');
-  agentTemplate = (tplSel && tplSel.value) || 'base';
-  agentLog('› booting ' + agentTemplate + ' sandbox…', 'sys');
+  agentLog('› booting Python 3.12 sandbox (Pyodide WebAssembly)…', 'sys');
   try {
-    const res = await e2bFetch('/sandboxes', {
-      method: 'POST',
-      body: JSON.stringify({ templateID: agentTemplate })
-    });
-    if (!res.ok) throw new Error('e2b ' + res.status + ': ' + (await res.text()).slice(0, 200));
-    const data = await res.json();
-    agentSandboxId = data.sandboxID || data.id;
-    agentLog('✓ sandbox ready · id=' + agentSandboxId + ' · template=' + agentTemplate, 'sys');
-    agentLog('  hostname template: https://<port>-' + agentSandboxId + '.e2b.dev/', 'sys');
+    agentPyodide = await getPyodide();
+    // Pre-import common stdlib so the AI has them ready
+    agentPyodide.runPython(`
+import os, sys, json, io, shutil, pathlib, subprocess, datetime, math, random, re, urllib.request
+_cwd = '/home/agent'
+os.makedirs(_cwd, exist_ok=True)
+os.chdir(_cwd)
+`);
+    // Load micropip for package installs
+    await agentPyodide.loadPackage(['micropip']);
+    agentLog('✓ sandbox ready', 'sys');
+    agentLog('  Python 3.12 · persistent filesystem at /home/agent · micropip available', 'sys');
+    agentLog('  shell-like: ls, cat, pwd, cd, echo, mkdir, rm, touch, cp, mv, whoami, uname, pip', 'sys');
+    agentLog('  python: write any Python code directly, state persists', 'sys');
     agentLog('', 'sys');
+    agentReady = true;
     agentSetStatus('running');
-    // If desktop template, auto-load the preview
-    if (agentTemplate === 'desktop') {
-      agentPreviewSet(':6080');
-      agentPreviewShow(true);
-    }
   } catch (e) {
-    agentLog('✗ failed: ' + e.message, 'err');
+    agentLog('✗ failed: ' + (e.message || e), 'err');
     agentSetStatus('error');
   } finally {
     agentBusy = false;
   }
 }
 
-// ===== Preview pane =====
-function agentPreviewShow(show) {
-  const p = document.getElementById('ag-preview');
-  if (!p) return;
-  p.classList.toggle('show', show);
-}
-function agentPreviewSet(urlOrPort) {
-  const frame = document.getElementById('ag-preview-frame');
-  const empty = document.getElementById('ag-preview-empty');
-  if (!frame || !agentSandboxId) return;
-  let full;
-  const s = (urlOrPort || '').trim();
-  if (!s) return;
-  if (s.startsWith('http://') || s.startsWith('https://')) {
-    full = s;
-  } else if (s.startsWith(':')) {
-    const port = s.slice(1).split('/')[0];
-    const rest = s.slice(1 + port.length) || '/';
-    full = `https://${port}-${agentSandboxId}.e2b.dev${rest}`;
-  } else if (s.startsWith('/')) {
-    full = `https://3000-${agentSandboxId}.e2b.dev${s}`;
-  } else {
-    full = `https://${s}-${agentSandboxId}.e2b.dev/`;
+function agentStop() {
+  // Pyodide can't actually be "stopped" without reloading the page, but we
+  // wipe the persistent state by running clear() and reset the flag.
+  if (agentPyodide) {
+    try {
+      agentPyodide.runPython(`
+for _k in list(globals().keys()):
+    if not _k.startswith('_') and _k not in ('os','sys','json','io','shutil','pathlib','subprocess','datetime','math','random','re','urllib'):
+        del globals()[_k]
+import shutil as _sh, os as _o
+try:
+    _sh.rmtree('/home/agent', ignore_errors=True)
+    _o.makedirs('/home/agent', exist_ok=True)
+    _o.chdir('/home/agent')
+except Exception: pass
+`);
+    } catch {}
   }
-  frame.src = full;
-  if (empty) empty.style.display = 'none';
-  frame.style.display = 'block';
-  agentPreviewShow(true);
-}
-function agentPreviewReload() {
-  const frame = document.getElementById('ag-preview-frame');
-  if (frame && frame.src && frame.src !== 'about:blank') frame.src = frame.src;
-}
-function agentPreviewFullscreen() {
-  const p = document.getElementById('ag-preview');
-  if (!p) return;
-  p.classList.toggle('fullscreen');
-}
-
-async function agentStop() {
-  if (!agentSandboxId) { agentSetStatus('offline'); return; }
-  agentLog('› stopping sandbox…', 'sys');
-  try {
-    await e2bFetch('/sandboxes/' + agentSandboxId, { method: 'DELETE' });
-    agentLog('✓ stopped', 'sys');
-  } catch (e) {
-    agentLog('✗ ' + e.message, 'err');
-  }
-  agentSandboxId = null;
+  agentReady = false;
+  agentLog('› sandbox state cleared', 'sys');
   agentSetStatus('offline');
 }
 
@@ -173,90 +122,210 @@ function agentClear() {
   agentMessages = [];
 }
 
-// ========== Shell command execution ==========
-async function agentRun(cmd, fromAgent, silent) {
-  if (!cmd) return { stdout: '', stderr: '', exitCode: -1 };
-  if (!agentSandboxId) {
-    if (!silent) agentLog('✗ sandbox not running — press Start', 'err');
+// ===== Shell-command emulator =====
+// Returns {stdout, stderr, exitCode, runtime:'pyodide-shell'}
+async function agentRun(rawCmd, fromAgent, silent) {
+  if (!rawCmd) return { stdout: '', stderr: '', exitCode: 0 };
+  if (!agentReady || !agentPyodide) {
+    if (!silent) agentLog('✗ sandbox not started — press Start', 'err');
     return { stdout: '', stderr: 'sandbox offline', exitCode: -1 };
   }
   if (!silent) {
     const prefix = fromAgent ? '[agent]$ ' : '$ ';
-    agentLog(prefix + cmd, fromAgent ? 'agent-cmd' : 'cmd');
+    agentLog(prefix + rawCmd, fromAgent ? 'agent-cmd' : 'cmd');
   }
+  // Redirect stdout/stderr
+  let stdout = '', stderr = '';
+  agentPyodide.setStdout({ batched: (s) => { stdout += s + '\n'; } });
+  agentPyodide.setStderr({ batched: (s) => { stderr += s + '\n'; } });
+  let exitCode = 0;
   try {
-    const res = await e2bFetch('/sandboxes/' + agentSandboxId + '/processes', {
-      method: 'POST',
-      body: JSON.stringify({
-        cmd: 'bash',
-        args: ['-lc', cmd],
-        envs: {},
-        cwd: '/home/user'
-      })
-    });
-    if (!res.ok) throw new Error('e2b ' + res.status + ': ' + (await res.text()).slice(0, 300));
-    const data = await res.json();
-    if (!silent) {
-      if (data.stdout) data.stdout.trimEnd().split('\n').forEach(l => agentLog(l, 'out'));
-      if (data.stderr) data.stderr.trimEnd().split('\n').forEach(l => agentLog(l, 'err'));
-      if (data.exitCode && data.exitCode !== 0) agentLog('exit ' + data.exitCode, 'sys');
-    }
-    return { stdout: data.stdout || '', stderr: data.stderr || '', exitCode: data.exitCode || 0 };
+    const py = buildPythonFor(rawCmd);
+    await agentPyodide.runPythonAsync(py);
   } catch (e) {
-    if (!silent) agentLog('✗ ' + e.message, 'err');
-    return { stdout: '', stderr: e.message, exitCode: -1 };
+    stderr += (e.message || String(e)) + '\n';
+    exitCode = 1;
   }
+  // Restore default (no-op) stdout
+  agentPyodide.setStdout({ batched: () => {} });
+  agentPyodide.setStderr({ batched: () => {} });
+  if (!silent) {
+    if (stdout) stdout.trimEnd().split('\n').forEach(l => agentLog(l, 'out'));
+    if (stderr) stderr.trimEnd().split('\n').forEach(l => agentLog(l, 'err'));
+    if (exitCode !== 0) agentLog('exit ' + exitCode, 'sys');
+  }
+  return { stdout, stderr, exitCode };
 }
 
-// ========== Chat with the agent AI ==========
+// Translate a shell-looking command into Python that Pyodide can run
+function buildPythonFor(cmd) {
+  const c = cmd.trim();
+  // Multi-line or obvious Python → run as Python
+  if (c.includes('\n') || /^(import |from |print\(|def |class |for |while |if |try:|with |async |await )/.test(c)) {
+    return c;
+  }
+  // Parse first token
+  const m = c.match(/^(\S+)(?:\s+(.*))?$/);
+  if (!m) return c;
+  const [, cmdName, restRaw] = m;
+  const rest = (restRaw || '').trim();
+  const args = splitArgs(rest);
+
+  switch (cmdName) {
+    case 'ls': {
+      const path = args[args.length - 1] && !args[args.length - 1].startsWith('-') ? args[args.length - 1] : '.';
+      return `import os\nfor _n in sorted(os.listdir(${pyStr(path)})):\n    print(_n)`;
+    }
+    case 'pwd':
+      return `import os\nprint(os.getcwd())`;
+    case 'cd': {
+      const path = args[0] || '/home/agent';
+      return `import os\nos.chdir(${pyStr(path)})\nprint(os.getcwd())`;
+    }
+    case 'cat':
+      return args.map(f => `import sys\nsys.stdout.write(open(${pyStr(f)}).read())`).join('\n');
+    case 'echo':
+      return `print(${pyStr(rest)})`;
+    case 'mkdir': {
+      const paths = args.filter(a => !a.startsWith('-'));
+      return `import os\nfor _p in [${paths.map(pyStr).join(',')}]:\n    os.makedirs(_p, exist_ok=True)`;
+    }
+    case 'rm': {
+      const paths = args.filter(a => !a.startsWith('-'));
+      const recursive = args.some(a => a.includes('r'));
+      if (recursive) return `import shutil\nfor _p in [${paths.map(pyStr).join(',')}]:\n    shutil.rmtree(_p, ignore_errors=True)`;
+      return `import os\nfor _p in [${paths.map(pyStr).join(',')}]:\n    try: os.remove(_p)\n    except FileNotFoundError: print(f'rm: {_p}: no such file')`;
+    }
+    case 'touch':
+      return args.map(f => `open(${pyStr(f)}, 'a').close()`).join('\n');
+    case 'cp': {
+      const [src, dst] = args.filter(a => !a.startsWith('-'));
+      return `import shutil\nshutil.copy(${pyStr(src)}, ${pyStr(dst)})`;
+    }
+    case 'mv': {
+      const [src, dst] = args.filter(a => !a.startsWith('-'));
+      return `import shutil\nshutil.move(${pyStr(src)}, ${pyStr(dst)})`;
+    }
+    case 'whoami':
+      return `print('agent')`;
+    case 'uname':
+      return `print('Pyodide 0.26.2 · Python 3.12 · WebAssembly')`;
+    case 'date':
+      return `import datetime\nprint(datetime.datetime.now().isoformat())`;
+    case 'env':
+      return `import os\nfor k,v in os.environ.items(): print(f'{k}={v}')`;
+    case 'python':
+    case 'python3': {
+      // python -c "code" or python file.py
+      if (args[0] === '-c') return args.slice(1).join(' ').replace(/^["']|["']$/g, '');
+      if (args[0]) return `exec(open(${pyStr(args[0])}).read())`;
+      return `print('interactive python not available — type code directly')`;
+    }
+    case 'pip':
+    case 'pip3': {
+      if (args[0] === 'install') {
+        const pkgs = args.slice(1).filter(a => !a.startsWith('-'));
+        return `import micropip\nawait micropip.install([${pkgs.map(pyStr).join(',')}])\nprint('installed: ' + ', '.join([${pkgs.map(pyStr).join(',')}]))`;
+      }
+      if (args[0] === 'list') return `import micropip\nfor p in micropip.list(): print(p)`;
+      return `print('pip: only install/list supported')`;
+    }
+    case 'curl':
+    case 'wget': {
+      const url = args.filter(a => !a.startsWith('-'))[0];
+      return `from pyodide.http import pyfetch\n_r = await pyfetch(${pyStr(url)})\nprint(await _r.string())`;
+    }
+    case 'head': {
+      const f = args[args.length - 1];
+      const n = args.includes('-n') ? parseInt(args[args.indexOf('-n') + 1]) : 10;
+      return `print('\\n'.join(open(${pyStr(f)}).read().splitlines()[:${n}]))`;
+    }
+    case 'tail': {
+      const f = args[args.length - 1];
+      const n = args.includes('-n') ? parseInt(args[args.indexOf('-n') + 1]) : 10;
+      return `print('\\n'.join(open(${pyStr(f)}).read().splitlines()[-${n}:]))`;
+    }
+    case 'wc': {
+      const f = args[args.length - 1];
+      return `_t = open(${pyStr(f)}).read()\nprint(f'{len(_t.splitlines())} {len(_t.split())} {len(_t)} ${f}')`;
+    }
+    case 'grep': {
+      const pat = args[0];
+      const f = args[1];
+      return `import re\nfor _l in open(${pyStr(f)}):\n    if re.search(${pyStr(pat)}, _l): print(_l, end='')`;
+    }
+    case 'clear':
+      return `print('\\x1bc', end='')`;
+    case 'sudo':
+      return `print('sudo: no root in Pyodide sandbox — just run the command directly')`;
+    case 'apt':
+    case 'apt-get':
+    case 'dpkg':
+    case 'yum':
+      return `print('${cmdName}: Pyodide has no apt — use pip install instead')`;
+    default:
+      // Fallback: try as raw Python
+      return c;
+  }
+}
+function pyStr(s) { return '"' + String(s || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'; }
+function splitArgs(s) {
+  const out = [];
+  let cur = '', inQ = null;
+  for (const ch of s) {
+    if (inQ) {
+      if (ch === inQ) { inQ = null; continue; }
+      cur += ch;
+    } else if (ch === '"' || ch === "'") { inQ = ch; }
+    else if (ch === ' ') { if (cur) { out.push(cur); cur = ''; } }
+    else cur += ch;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+// ===== Chat with the agent AI =====
 function getAgentSystemPrompt() {
   const model = findModel(selectedChat, 'chat');
   const persona = (profileGet('persona') || '').trim();
   const name = model?.name || 'the KEMLLM Agent';
   let s = `You are ${name}, running inside KEMLLM Agent Mode.`;
-  s += ' IMPORTANT: You have direct access to a real Linux sandbox VM (Ubuntu, provided by e2b.dev). This is YOUR OWN COMPUTER. You can run ANY shell command in it to accomplish tasks: inspect the filesystem, install packages with apt or pip, write and execute scripts, fetch URLs with curl, edit files, compile code, anything a real Linux machine can do. The sandbox is already running and ready.';
-  s += '\n\nTo run a command, write a fenced bash code block:\n```bash\nyour command here\n```\nYou may include multiple bash blocks in a single response; they execute in order and the combined output is shown back to you as a follow-up message so you can continue.';
-  s += '\n\nYou share this machine with the user. The user can also type commands directly at the terminal. Treat it as a shared workspace.';
-  s += '\n\nStyle: Be terse. This is a terminal. No bullet-point summaries. No filler words like "Sure!", "Certainly!", or "Great question!". Short direct sentences. When a task is done, say so in one line. Do not ask permission before running non-destructive commands — just run them.';
-  s += '\n\nDo NOT pretend to run commands. Either actually run them via a bash block, or explicitly say you cannot.';
+  s += ' IMPORTANT: Your runtime is a Python 3.12 sandbox powered by Pyodide (WebAssembly, running in the user\'s browser). You have a PERSISTENT Python environment with a real virtual filesystem at /home/agent, full stdlib (os, pathlib, json, shutil, urllib, datetime, math, re, etc.), and you can install pure-Python packages via `micropip.install("pkg")`.';
+  s += '\n\nThis is NOT a full Linux VM. You do NOT have apt/sudo/systemctl, you CANNOT run binaries, you CANNOT install Linux Mint or any OS. Stop suggesting them. You CAN run arbitrary Python code and shell-like commands that emulate ls, cat, pwd, cd, echo, mkdir, rm, touch, cp, mv, head, tail, wc, grep, curl (via pyodide.http.pyfetch), pip, python, uname, date, env.';
+  s += '\n\nTo run a command, write a fenced bash code block with your command OR a python code block with Python code:\n```bash\nls /home/agent\n```\n```python\nimport json\nprint(json.dumps({"hello": "world"}))\n```\nBash blocks are translated to Python under the hood. Python blocks run directly. State (variables, files) persists between calls.';
+  s += '\n\nYou share this sandbox with the user. The user can also type commands at the > prompt.';
+  s += '\n\nStyle: Terse. Terminal. No bullet-point summaries. No "Sure!", "Certainly!", "Great question!". Short direct sentences. If the task is impossible in this sandbox, say so in one line and suggest what IS possible instead.';
+  s += ' Do NOT pretend to run commands. Either actually run them via a bash/python block, or say you cannot.';
   if (persona) s += '\n\nUser persona: ' + persona;
   return s;
 }
 
 async function agentChat(userMsg) {
-  if (!agentSandboxId) {
-    agentLog('✗ start the sandbox first', 'err');
-    return;
-  }
+  if (!agentReady) { agentLog('✗ start the sandbox first', 'err'); return; }
   const model = findModel(selectedChat, 'chat');
   if (!model) { agentLog('✗ no chat model selected', 'err'); return; }
 
-  // Log user message
   agentLog('> ' + userMsg, 'user');
   agentMessages.push({ role: 'user', content: userMsg });
-
-  // Show thinking indicator
   const thinkingEl = agentLog('…', 'sys');
-
   const agentSys = getAgentSystemPrompt();
+
   try {
     let full = '';
     await callChat(model, agentMessages, (chunk) => { full += chunk; }, agentSys);
     if (thinkingEl) thinkingEl.remove();
-
-    // Render AI text
     renderAgentAIText(full);
     agentMessages.push({ role: 'assistant', content: full });
 
-    // Auto-execute any bash code blocks
-    const blocks = extractBashBlocks(full);
+    const blocks = extractRunnableBlocks(full);
     if (blocks.length) {
       let combined = '';
       for (const b of blocks) {
-        const r = await agentRun(b, true, false);
-        combined += '\n$ ' + b + '\n' + (r.stdout || '') + (r.stderr ? '\n[stderr]\n' + r.stderr : '') + (r.exitCode ? `\n[exit ${r.exitCode}]` : '');
+        const r = await agentRun(b.content, true, false);
+        combined += '\n$ ' + b.content + '\n' + (r.stdout || '') +
+          (r.stderr ? '\n[stderr]\n' + r.stderr : '') +
+          (r.exitCode ? `\n[exit ${r.exitCode}]` : '');
       }
-      // Feed results back to AI for a follow-up response
       agentMessages.push({ role: 'user', content: '[execution results]\n' + combined.trim() });
       const typing2 = agentLog('…', 'sys');
       try {
@@ -265,8 +334,6 @@ async function agentChat(userMsg) {
         if (typing2) typing2.remove();
         renderAgentAIText(more);
         agentMessages.push({ role: 'assistant', content: more });
-        // Recursive: if that response also has bash blocks, run them (up to 3 rounds)
-        // Skipped for now to keep it single-pass per spec
       } catch (e) {
         if (typing2) typing2.remove();
         agentLog('✗ ai error: ' + e.message, 'err');
@@ -278,27 +345,51 @@ async function agentChat(userMsg) {
   }
 }
 
-function extractBashBlocks(md) {
+function extractRunnableBlocks(md) {
   const blocks = [];
-  const re = /```(?:bash|sh|shell)\n([\s\S]*?)```/g;
+  const re = /```(bash|sh|shell|python|py)\n([\s\S]*?)```/g;
   let m;
   while ((m = re.exec(md)) !== null) {
-    const cmd = m[1].trim();
-    if (cmd) blocks.push(cmd);
+    const content = m[2].trim();
+    if (content) blocks.push({ lang: m[1], content });
   }
   return blocks;
 }
 
 function renderAgentAIText(text) {
-  // Strip bash code blocks (they'll be run separately) and render the prose
-  // and any remaining text as terminal lines.
-  const parts = text.split(/```(?:bash|sh|shell)\n[\s\S]*?```/);
+  const parts = text.split(/```(?:bash|sh|shell|python|py)\n[\s\S]*?```/);
   const prose = parts.join('').trim();
   if (!prose) return;
   prose.split('\n').forEach(line => {
     if (line.trim()) agentLog(line, 'ai');
     else agentLog('', 'ai');
   });
+}
+
+// ===== Preview pane (unchanged) =====
+function agentPreviewShow(show) {
+  const p = document.getElementById('ag-preview');
+  if (p) p.classList.toggle('show', show);
+}
+function agentPreviewSet(urlOrPort) {
+  const frame = document.getElementById('ag-preview-frame');
+  const empty = document.getElementById('ag-preview-empty');
+  if (!frame) return;
+  let full = (urlOrPort || '').trim();
+  if (!full) return;
+  if (!full.startsWith('http')) return; // no sandbox host to route ports to
+  frame.src = full;
+  if (empty) empty.style.display = 'none';
+  frame.style.display = 'block';
+  agentPreviewShow(true);
+}
+function agentPreviewReload() {
+  const frame = document.getElementById('ag-preview-frame');
+  if (frame && frame.src && frame.src !== 'about:blank') frame.src = frame.src;
+}
+function agentPreviewFullscreen() {
+  const p = document.getElementById('ag-preview');
+  if (p) p.classList.toggle('fullscreen');
 }
 
 function setupAgentPanel() {
@@ -335,3 +426,5 @@ function setupAgentPanel() {
   previewFs?.addEventListener('click', agentPreviewFullscreen);
   agentSetStatus('offline');
 }
+
+

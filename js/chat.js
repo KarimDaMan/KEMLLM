@@ -6,6 +6,37 @@ let currentChatId = null;
 let pendingAttachments = []; // {dataUrl, name}
 let abortCtrl = null;
 window.webSearchOn = false;
+let chatMode = 'chat'; // 'chat' | 'code' | 'agent'
+let agentUnlocked = false;
+
+function setChatMode(mode) {
+  // Agent mode is gated: user must have a backend OR explicitly enable Pyodide
+  if (mode === 'agent' && !agentUnlocked) {
+    const hasBackend = (profileGet('hf-backend-url') || '').trim();
+    if (!hasBackend) {
+      showToast('Agent mode uses Pyodide (no Linux backend). Set one in Settings for the real thing.');
+    }
+    agentUnlocked = true;
+  }
+  chatMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  const lock = document.getElementById('mode-agent-lock');
+  if (lock) lock.style.display = agentUnlocked ? 'none' : '';
+  const input = document.getElementById('input-text');
+  if (input) {
+    input.placeholder = mode === 'agent'
+      ? 'Agent mode · ask the AI to run commands in a sandbox'
+      : mode === 'code'
+      ? 'Code mode · ask for code, auto-runs in browser'
+      : 'Ask anything, generate images, run code...';
+  }
+  // If switching to agent, make sure backend is primed
+  if (mode === 'agent' && !agentReady) {
+    agentStart();
+  }
+}
 
 const IMG_REGEX = /\b(generate|make|create|draw|render|paint|show|produce)\b.{0,30}\b(image|picture|photo|illustration|art|artwork|wallpaper|logo|portrait|landscape|painting)\b/i;
 const VID_REGEX = /\b(generate|make|create|render|animate|produce)\b.{0,30}\b(video|animation|clip|footage|movie|film)\b/i;
@@ -212,7 +243,15 @@ async function sendMessage() {
   pendingAttachments = [];
   renderAttachPreview();
 
-  // Store as multimodal content if images attached
+  // AGENT MODE: route through the agent flow instead
+  if (chatMode === 'agent') {
+    renderUserMessage(text, atts);
+    messages.push({ role: 'user', content: text });
+    await runAgentModeChat(text);
+    saveCurrentChat();
+    return;
+  }
+
   const userMsg = atts.length
     ? { role: 'user', content: text, attachments: atts }
     : { role: 'user', content: text };
@@ -342,6 +381,69 @@ async function handleVideoRequest(prompt) {
   } catch (e) {
     typingEl.remove();
     renderAIMessage(fakeModel, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+  }
+}
+
+// Agent mode inline in chat — uses the agent backend/pyodide for command execution,
+// renders output as an inline analysis block, then continues the AI response.
+async function runAgentModeChat(userText) {
+  if (!agentReady) {
+    // Try to boot it (HF backend if configured, otherwise Pyodide)
+    await agentStart();
+    if (!agentReady) {
+      const model = findModel(selectedChat, 'chat');
+      renderAIMessage(model || { name: 'Agent', provider: 'custom' },
+        '<p style="color:var(--red)">Could not start agent sandbox.</p>');
+      return;
+    }
+  }
+  const model = findModel(selectedChat, 'chat');
+  if (!model) { showToast('No model selected'); return; }
+
+  const agentSys = getAgentSystemPrompt();
+  const typingEl = renderTyping(model);
+  try {
+    let full = '';
+    await callChat(model, messages, (chunk) => { full += chunk; }, agentSys);
+    typingEl.remove();
+    renderAIMessage(model, parseMarkdown(full), full);
+    messages.push({ role: 'assistant', content: full });
+
+    // Execute any bash/python blocks the AI wrote, feed results back once
+    const blocks = extractRunnableBlocks(full);
+    if (blocks.length) {
+      let combined = '';
+      for (const b of blocks) {
+        const r = await agentRun(b.content, true, true); // silent=true, we render inline
+        const aiMsgEl = document.querySelector('#msgs .msg-a:last-child .ai-body');
+        if (aiMsgEl) {
+          const det = document.createElement('details');
+          det.className = 'think-block';
+          det.open = true;
+          const stdout = r.stdout || '';
+          const stderr = r.stderr || '';
+          det.innerHTML = `<summary>▶ Ran ${escapeHTML(b.lang)} · exit ${r.exitCode}</summary><div class="think-inner">${stdout ? '<div>' + escapeHTML(stdout) + '</div>' : ''}${stderr ? '<div style="color:var(--red);margin-top:6px;">' + escapeHTML(stderr) + '</div>' : ''}${!stdout && !stderr ? '<div style="color:var(--text3);">(no output)</div>' : ''}</div>`;
+          aiMsgEl.appendChild(det);
+          setTimeout(() => { det.open = false; }, 1500);
+        }
+        combined += '\n$ ' + b.content + '\n' + stdout + (stderr ? '\n[stderr]\n' + stderr : '') + (r.exitCode ? `\n[exit ${r.exitCode}]` : '');
+      }
+      messages.push({ role: 'user', content: '[execution results]\n' + combined.trim() });
+      const typing2 = renderTyping(model);
+      try {
+        let more = '';
+        await callChat(model, messages, (chunk) => { more += chunk; }, agentSys);
+        typing2.remove();
+        renderAIMessage(model, parseMarkdown(more), more);
+        messages.push({ role: 'assistant', content: more });
+      } catch (e) {
+        typing2.remove();
+        renderAIMessage(model, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+      }
+    }
+  } catch (e) {
+    typingEl.remove();
+    renderAIMessage(model, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
   }
 }
 

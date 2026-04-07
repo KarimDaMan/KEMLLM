@@ -4,6 +4,8 @@
 let currentPanel = 'chat';
 
 function siNav(panel) {
+  // Agent panel no longer exists — agent is now a mode inside chat
+  if (panel === 'agent') { panel = 'chat'; setChatMode('agent'); }
   currentPanel = panel;
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   const target = document.getElementById(panel + '-panel');
@@ -11,7 +13,6 @@ function siNav(panel) {
   document.querySelectorAll('.si').forEach(el => {
     el.classList.toggle('active', el.dataset.panel === panel);
   });
-  // Hide tabs on non-chat/code
   const tabs = document.getElementById('tb-tabs');
   if (tabs) tabs.classList.toggle('hidden', !(panel === 'chat' || panel === 'code'));
   closeDrawer();

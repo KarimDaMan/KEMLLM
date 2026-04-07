@@ -356,7 +356,11 @@ document.addEventListener('DOMContentLoaded', () => {
     el.addEventListener('click', () => loadFile(el.dataset.file));
   });
   setupCodeEditor();
-  setupAgentPanel();
+
+  // Mode pills under chat input
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    b.addEventListener('click', () => setChatMode(b.dataset.mode));
+  });
 
   // Agent backend (HF Space)
   document.getElementById('save-hf-url')?.addEventListener('click', () => {

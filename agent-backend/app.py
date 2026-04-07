@@ -38,7 +38,29 @@ SESSION_TIMEOUT = 60 * 30  # 30 minutes idle → kill session
 EXEC_TIMEOUT = 120         # per-command timeout
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}}, expose_headers=["*"])
+# CORS: be extremely permissive so static frontends on any origin work.
+# flask-cors' defaults sometimes don't include Authorization in the allowed
+# header list, which silently breaks POST requests with a Bearer token
+# (preflight fails, fetch shows 'Failed to fetch' in devtools).
+CORS(
+    app,
+    resources={r"/*": {"origins": "*"}},
+    allow_headers=["Content-Type", "Authorization", "X-API-Key", "Prefer", "Accept"],
+    methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    expose_headers=["*"],
+    supports_credentials=False,
+)
+
+# Belt-and-suspenders: stamp CORS headers on EVERY response so even if
+# flask-cors misbehaves on some edge case, the browser still sees a valid
+# preflight reply.
+@app.after_request
+def _force_cors(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-API-Key, Prefer, Accept"
+    response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS"
+    response.headers["Access-Control-Max-Age"] = "86400"
+    return response
 
 # session_id -> { cwd, env, created, last_used }
 SESSIONS: dict = {}

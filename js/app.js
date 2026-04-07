@@ -77,7 +77,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v27 · hash router + New Chat button';
+const KEMLLM_BUILD = 'v28 · bulletproof agent boot + CORS fix';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -349,9 +349,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('chat-desktop-btn');
     btn?.classList.add('loading');
     try {
-      // Make sure we're in agent mode and the sandbox is up
+      // If state is stuck (ready but wrong backend, or ready with no session),
+      // nuke it so agentStart starts fresh.
+      if (agentReady && (agentBackend !== 'hf' || !agentSessionId) && getHfBackendUrl()) {
+        agentReset();
+      }
       if (chatMode !== 'agent') setChatMode('agent');
-      if (!agentReady) await agentStart();
+      await agentStart();
       await showAgentDesktop();
     } finally {
       btn?.classList.remove('loading');

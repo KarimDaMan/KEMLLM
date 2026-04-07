@@ -87,9 +87,28 @@ async function hfFetch(path, init) {
 // was about to exist.
 function agentStart() {
   if (agentStartPromise) return agentStartPromise;
-  if (agentReady) return Promise.resolve();
+  // If fully ready on HF with a real session, we're good.
+  if (agentReady && agentBackend === 'hf' && agentSessionId) return Promise.resolve();
+  // If ready on pyodide BUT the user has an HF URL configured, retry HF.
+  // A previous boot may have hit a transient error and fallen back.
+  if (agentReady && agentBackend === 'pyodide' && getHfBackendUrl()) {
+    agentLog('› retrying HF backend (previous attempt fell back to Pyodide)', 'sys');
+    agentReady = false;
+    agentSessionId = null;
+  }
+  // If ready on pyodide and no HF URL, stay on pyodide.
+  if (agentReady && agentBackend === 'pyodide' && !getHfBackendUrl()) return Promise.resolve();
   agentStartPromise = _agentStartInner().finally(() => { agentStartPromise = null; });
   return agentStartPromise;
+}
+
+// Manual reset for the Desktop button — wipes all boot state so the next
+// call to agentStart forces a fresh attempt regardless of prior state.
+function agentReset() {
+  agentReady = false;
+  agentSessionId = null;
+  agentBackend = 'pyodide';
+  agentStartPromise = null;
 }
 async function _agentStartInner() {
   agentBusy = true;

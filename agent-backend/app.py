@@ -9,6 +9,7 @@ that can run a Docker container.
 Endpoints
 ---------
 GET    /                     → health/status
+GET    /healthz              → minimal liveness probe (always 200)
 POST   /sessions             → create a new persistent shell session
 POST   /sessions/<id>/exec   → run a command in that session (preserves cwd)
 POST   /sessions/<id>/write  → write a file
@@ -23,14 +24,37 @@ Set the AGENT_TOKEN secret in your HF Space. Every request must include
 CORS is enabled for all origins so you can call from a static web app.
 """
 import os
+import sys
 import subprocess
 import secrets
 import time
 import threading
 import signal
 import mimetypes
-from flask import Flask, request, jsonify, send_file, Response, abort
-from flask_cors import CORS
+import traceback
+
+# Print startup banner immediately so HF logs show progress even if
+# imports below fail. HF marks a Space unhealthy if it sees no output
+# during boot.
+print("[kemllm-agent] starting…", flush=True)
+print(f"[kemllm-agent] python={sys.version.split()[0]} pid={os.getpid()}", flush=True)
+
+try:
+    from flask import Flask, request, jsonify, send_file, Response, abort
+    print("[kemllm-agent] flask imported", flush=True)
+except Exception as e:
+    print(f"[kemllm-agent] FATAL: flask import failed: {e}", flush=True)
+    traceback.print_exc()
+    sys.exit(1)
+
+try:
+    from flask_cors import CORS
+    print("[kemllm-agent] flask_cors imported", flush=True)
+except Exception as e:
+    print(f"[kemllm-agent] WARN: flask_cors not available, falling back: {e}", flush=True)
+    # Provide a minimal CORS shim so the app still boots
+    def CORS(app, **kwargs):
+        return None
 
 AGENT_TOKEN = os.environ.get("AGENT_TOKEN", "").strip()
 PORT = int(os.environ.get("PORT", "7860"))
@@ -86,7 +110,7 @@ def cleanup_expired():
             del SESSIONS[sid]
 
 
-@app.route("/", methods=["GET"])
+@app.route("/", methods=["GET", "HEAD"])
 def health():
     return jsonify({
         "service": "kemllm-agent-backend",
@@ -94,6 +118,14 @@ def health():
         "auth_required": bool(AGENT_TOKEN),
         "active_sessions": len(SESSIONS),
     })
+
+
+@app.route("/healthz", methods=["GET", "HEAD"])
+def healthz():
+    """Minimal liveness probe — always returns 200 with no work.
+    HF Spaces and other orchestrators sometimes prefer a dedicated
+    /healthz path for readiness checks."""
+    return ("ok", 200, {"Content-Type": "text/plain"})
 
 
 @app.route("/sessions", methods=["POST", "OPTIONS"])
@@ -311,6 +343,16 @@ def shell_quote(s):
 
 
 if __name__ == "__main__":
-    print(f"KEMLLM Agent Backend listening on :{PORT}")
-    print(f"Auth: {'token required' if AGENT_TOKEN else 'OPEN MODE — set AGENT_TOKEN env var'}")
-    app.run(host="0.0.0.0", port=PORT, threaded=True)
+    print(f"[kemllm-agent] listening on 0.0.0.0:{PORT}", flush=True)
+    print(f"[kemllm-agent] auth: {'token required' if AGENT_TOKEN else 'OPEN MODE'}", flush=True)
+    print(f"[kemllm-agent] endpoints: / /healthz /sessions /sessions/<id>/{{exec,read,write,files/<path>}} /desktop", flush=True)
+    try:
+        # threaded=True is important — single-threaded Flask blocks new
+        # requests while a long /sessions/<id>/exec is running.
+        # use_reloader=False — the reloader spawns a child process which
+        # confuses HF Spaces' port detection.
+        app.run(host="0.0.0.0", port=PORT, threaded=True, use_reloader=False, debug=False)
+    except Exception as e:
+        print(f"[kemllm-agent] FATAL: app.run failed: {e}", flush=True)
+        traceback.print_exc()
+        sys.exit(1)

@@ -1,0 +1,51 @@
+# KEMLLM Agent Backend — HEAVYWEIGHT desktop build
+#
+# This adds Xvfb + fluxbox + x11vnc + websockify + noVNC + Chromium so the
+# AI can drive a real Linux desktop you can see in the preview iframe.
+#
+# CAUTION: ~250 MB more packages than the slim build. On HF Spaces free
+# tier this can OOM during build or first boot. If your Space crashes
+# after switching to this, switch back to ./Dockerfile (slim) and use
+# the agent without the desktop preview.
+#
+# To use this build, rename Dockerfile.desktop → Dockerfile in your HF
+# Space, commit, wait ~7 min for the rebuild.
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV DISPLAY=:0
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv \
+    curl wget git vim nano \
+    build-essential pkg-config \
+    jq tree ripgrep fd-find bat \
+    htop procps net-tools iputils-ping dnsutils \
+    ca-certificates gnupg lsb-release \
+    sudo unzip zip tar xz-utils \
+    nodejs npm \
+    sqlite3 \
+    xvfb fluxbox x11vnc websockify novnc \
+    xterm scrot imagemagick xdotool \
+    chromium-browser \
+    fonts-dejavu fonts-liberation \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html || true
+RUN pip3 install --no-cache-dir flask flask-cors gunicorn requests
+
+RUN useradd -m -s /bin/bash agent \
+ && echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent \
+ && chmod 0440 /etc/sudoers.d/agent
+
+WORKDIR /app
+COPY app.py /app/app.py
+RUN chown -R agent:agent /app /home/agent
+
+USER agent
+WORKDIR /home/agent
+
+EXPOSE 7860
+CMD ["python3", "/app/app.py"]

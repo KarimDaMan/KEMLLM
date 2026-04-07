@@ -85,11 +85,13 @@ function parseMarkdown(md) {
   html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
   html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
   // Images (must come before links — `![alt](url)` contains a `[...](...)`)
-  // Clicking/tapping a generated image reuses it as the next attachment
-  // so the user can chain edits ("make it white", "now add a boat", etc).
+  // Clicking/tapping a generated image opens a fullscreen viewer with
+  // download button + inline edit box (like ChatGPT). The viewer also
+  // has a "use in chat" button that falls back to the old behavior of
+  // attaching it to the regular chat input.
   html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (m, alt, url) => {
     const safeUrl = String(url).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
-    return `<img src="${safeUrl}" alt="${alt}" class="ai-img" onclick="reuseImageAsAttachment('${safeUrl}')" title="Click to reuse as the next input image">`;
+    return `<img src="${safeUrl}" alt="${alt}" class="ai-img" onclick="openImageViewer('${safeUrl}')" title="Tap to open · edit · download">`;
   });
   // Links
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
@@ -463,6 +465,102 @@ async function runAnalysisBlock(aiEl, block) {
     det.querySelector('summary').textContent = '▶ Execution error';
     det.querySelector('.think-inner').innerHTML = `<div style="color:var(--red);">${escapeHTML(e.message)}</div>`;
     return { stdout: '', stderr: e.message, exit: -1 };
+  }
+}
+
+// ===== Fullscreen image viewer =====
+// Opens on tap of any AI-generated image. Supports:
+//   - Close (X)
+//   - Download (saves to the user's device)
+//   - Use in chat (adds to pendingAttachments, closes viewer)
+//   - Inline edit box (types an edit prompt and calls editImage directly
+//     from inside the viewer so the user never has to leave)
+let _imgViewerUrl = '';
+
+function openImageViewer(url) {
+  if (!url) return;
+  url = String(url).replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+  _imgViewerUrl = url;
+  const viewer = document.getElementById('img-viewer');
+  const img = document.getElementById('img-viewer-img');
+  const title = document.getElementById('img-viewer-title');
+  if (!viewer || !img) return;
+  img.src = url;
+  if (title) {
+    // Show the filename/path part of the URL as the title
+    try {
+      const u = new URL(url);
+      title.textContent = u.pathname.split('/').pop() || url;
+    } catch { title.textContent = url; }
+  }
+  viewer.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  const input = document.getElementById('img-viewer-input');
+  if (input) { input.value = ''; setTimeout(() => input.focus(), 150); }
+}
+
+function closeImageViewer() {
+  const viewer = document.getElementById('img-viewer');
+  if (viewer) viewer.classList.remove('open');
+  document.body.style.overflow = '';
+  _imgViewerUrl = '';
+}
+
+async function downloadImageFromViewer() {
+  if (!_imgViewerUrl) return;
+  try {
+    showToast('Downloading…');
+    // Fetch as blob so the Save-As dialog works cross-origin
+    const res = await fetch(_imgViewerUrl);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    const ext = (blob.type.split('/')[1] || 'png').split(';')[0];
+    a.download = 'kemllm-' + Date.now() + '.' + ext;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+    }, 1000);
+  } catch (e) {
+    showToast('Download failed: ' + (e.message || e));
+  }
+}
+
+function useViewerImageInChat() {
+  if (!_imgViewerUrl) return;
+  reuseImageAsAttachment(_imgViewerUrl);
+  closeImageViewer();
+}
+
+async function editFromImageViewer(promptText) {
+  if (!_imgViewerUrl || !promptText) return;
+  const viewer = document.getElementById('img-viewer');
+  const edit = document.getElementById('img-viewer-form');
+  const img = document.getElementById('img-viewer-img');
+  if (edit) edit.classList.add('busy');
+  showToast('Editing…');
+  try {
+    const newUrl = await editImage(promptText, _imgViewerUrl);
+    if (!newUrl) throw new Error('No output');
+    // Swap the viewer's image to the new edit
+    _imgViewerUrl = newUrl;
+    if (img) img.src = newUrl;
+    // Also render the edit into the chat timeline so it's part of history
+    const fakeModel = { name: 'Image Edit', provider: 'google' };
+    const md = `Edited:\n\n![edited](${newUrl})`;
+    renderAIMessage(fakeModel, parseMarkdown(md), md);
+    messages.push({ role: 'assistant', content: md });
+    saveCurrentChat();
+    // Clear the input and let the user chain more edits
+    const input = document.getElementById('img-viewer-input');
+    if (input) { input.value = ''; input.focus(); }
+  } catch (e) {
+    showToast('Edit failed: ' + (e.message || e));
+  } finally {
+    if (edit) edit.classList.remove('busy');
   }
 }
 

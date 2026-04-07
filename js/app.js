@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v47 · image edit via selected model + Replicate file upload + render on reload';
+const KEMLLM_BUILD = 'v48 · fullscreen image viewer: edit, download, X, reuse';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -426,6 +426,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Chat preview pane controls
   document.getElementById('chat-preview-close')?.addEventListener('click', chatPreviewClose);
+
+  // Fullscreen image viewer
+  document.getElementById('img-viewer-close')?.addEventListener('click', closeImageViewer);
+  document.getElementById('img-viewer-download')?.addEventListener('click', downloadImageFromViewer);
+  document.getElementById('img-viewer-reuse')?.addEventListener('click', useViewerImageInChat);
+  document.getElementById('img-viewer-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = document.getElementById('img-viewer-input');
+    const txt = (input?.value || '').trim();
+    if (txt) editFromImageViewer(txt);
+  });
+  // Esc closes the viewer
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.getElementById('img-viewer')?.classList.contains('open')) {
+      closeImageViewer();
+    }
+  });
+  // Tap background (outside the stage) to close on mobile
+  document.getElementById('img-viewer')?.addEventListener('click', (e) => {
+    if (e.target.id === 'img-viewer' || e.target.id === 'img-viewer-stage') closeImageViewer();
+  });
   document.getElementById('chat-preview-reload')?.addEventListener('click', chatPreviewReload);
   document.getElementById('chat-preview-fs')?.addEventListener('click', chatPreviewFullscreen);
 

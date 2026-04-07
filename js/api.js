@@ -367,9 +367,13 @@ async function replicatePredict(modelId, input, apiKey, knownVersion) {
     return res;
   }
 
-  // 3. Legacy version-pinned: fetch latest version SHA, then POST with `version`
+  // 3. Legacy version-pinned: fetch the latest version SHA from two
+  //    possible sources and post with `version`. Needed for community
+  //    models (first source) AND for anthropic official-style models
+  //    that still require a version field (second source).
   let version = _replicateVersionCache[modelId];
   if (!version) {
+    // 3a. /v1/models/<id>/versions — works for community models
     try {
       const vRes = await replicateFetch(`/v1/models/${modelId}/versions`, {
         method: 'GET',
@@ -378,9 +382,23 @@ async function replicatePredict(modelId, input, apiKey, knownVersion) {
       if (vRes.ok) {
         const vData = await vRes.json();
         version = vData?.results?.[0]?.id;
-        if (version) _replicateVersionCache[modelId] = version;
       }
     } catch {}
+    // 3b. /v1/models/<id> → latest_version.id — works for official
+    //     and anthropic-style models that return an empty versions list
+    if (!version) {
+      try {
+        const mRes = await replicateFetch(`/v1/models/${modelId}`, {
+          method: 'GET',
+          headers: { 'Authorization': 'Bearer ' + apiKey },
+        });
+        if (mRes.ok) {
+          const mData = await mRes.json();
+          version = mData?.latest_version?.id;
+        }
+      } catch {}
+    }
+    if (version) _replicateVersionCache[modelId] = version;
   }
   if (version) {
     res = await replicateFetch('/v1/predictions', {

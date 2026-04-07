@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v66 · single-profile architecture (auto-migrates random ids to p_main); desktop button moved into mode row, agent-mode-only';
+const KEMLLM_BUILD = 'v67 · Dockerfile.desktop now uses nginx front door to proxy noVNC WebSocket; load vnc_lite.html with path=desktop/websockify';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

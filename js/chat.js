@@ -1029,7 +1029,7 @@ async function probeDesktopSupport() {
   };
   if (!base) return hide();
   try {
-    const r = await fetch(base + '/desktop?token=' + encodeURIComponent(tok), { method: 'GET' });
+    const r = await fetch(base + '/desktop/?token=' + encodeURIComponent(tok), { method: 'GET' });
     // 200 = noVNC running · 502 = stack present but not started yet · 401 = token mismatch
     if (r.status === 200 || r.status === 502 || r.status === 401) {
       btn.dataset.desktopReady = '1';
@@ -1126,7 +1126,7 @@ async function showAgentDesktop() {
   const pc = renderProgressLine('checking /desktop endpoint…');
   let needsManualBoot = false;
   try {
-    const r = await fetch(base + '/desktop?token=' + encodeURIComponent(tok));
+    const r = await fetch(base + '/desktop/?token=' + encodeURIComponent(tok));
     if (r.status === 404) {
       pc.fail('Your HF Space has the OLD app.py. Upload the current app.py to the Space, commit, wait for rebuild.');
       return;
@@ -1208,8 +1208,10 @@ ss -tlnp 2>/dev/null | grep -q 6080 && echo READY || echo NOT_LISTENING
     pn.done('noVNC listening on :6080', '✓');
   }
 
-  // Step 4: load the preview
-  const url = `${base}/desktop?token=${encodeURIComponent(tok)}`;
+  // Step 4: load the preview. Use vnc_lite.html (minimal UI, no side toolbar
+  // with the junk power buttons) and pass path=desktop/websockify so noVNC
+  // opens its WebSocket against the nginx-proxied path, not the root.
+  const url = `${base}/desktop/vnc_lite.html?path=desktop/websockify&autoconnect=1&resize=scale&token=${encodeURIComponent(tok)}`;
   chatPreviewShow(url, 'AI Desktop');
   renderSystemLine('🖥 desktop loaded — tap and drag in the preview to interact');
 }

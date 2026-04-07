@@ -1,12 +1,18 @@
 # KEMLLM Agent Backend — HEAVYWEIGHT desktop build
 #
-# This adds Xvfb + fluxbox + x11vnc + websockify + noVNC + Chromium so the
-# AI can drive a real Linux desktop you can see in the preview iframe.
+# Xvfb + fluxbox + x11vnc + websockify + noVNC + Chromium + nginx so the AI
+# can drive a real Linux desktop you can see in the preview iframe.
 #
-# CAUTION: ~250 MB more packages than the slim build. On HF Spaces free
-# tier this can OOM during build or first boot. If your Space crashes
-# after switching to this, switch back to ./Dockerfile (slim) and use
-# the agent without the desktop preview.
+# Architecture inside the container:
+#
+#   :7860   nginx            (front door HF Spaces sees)
+#    │
+#    ├──►  :8000   Flask app.py         (API: /sessions, /files, /exec, etc.)
+#    └──►  :6080   websockify+noVNC     (/desktop/* and /desktop/websockify WS)
+#
+# nginx is required because Flask cannot proxy WebSocket upgrades. noVNC
+# needs a WS upgrade on /websockify to actually stream the framebuffer —
+# without that the iframe loads the UI and spins forever.
 #
 # To use this build, rename Dockerfile.desktop → Dockerfile in your HF
 # Space, commit, wait ~7 min for the rebuild.
@@ -31,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xterm scrot imagemagick xdotool \
     chromium-browser \
     fonts-dejavu fonts-liberation \
+    nginx \
  && rm -rf /var/lib/apt/lists/*
 
 RUN ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html || true
@@ -40,17 +47,65 @@ RUN useradd -m -s /bin/bash agent \
  && echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent \
  && chmod 0440 /etc/sudoers.d/agent
 
+# nginx needs to write to a few places under a non-root user.
+RUN mkdir -p /var/lib/nginx /var/log/nginx /run \
+ && chown -R agent:agent /var/lib/nginx /var/log/nginx /run /etc/nginx
+
+# nginx front door: Flask on :8000, noVNC on :6080, everything funnels
+# through :7860.
+RUN cat > /etc/nginx/sites-available/kemllm.conf <<'NGINX'
+server {
+  listen 7860 default_server;
+  listen [::]:7860 default_server;
+  client_max_body_size 50m;
+
+  # noVNC WebSocket upgrade — MUST come before the generic /desktop/ rule.
+  location /desktop/websockify {
+    proxy_pass http://127.0.0.1:6080/websockify;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+  }
+
+  # noVNC HTML / JS / CSS / fonts
+  location /desktop/ {
+    proxy_pass http://127.0.0.1:6080/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+  }
+
+  # Everything else → Flask app on 8000
+  location / {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_read_timeout 600s;
+    proxy_send_timeout 600s;
+  }
+}
+NGINX
+
+RUN rm -f /etc/nginx/sites-enabled/default \
+ && ln -sf /etc/nginx/sites-available/kemllm.conf /etc/nginx/sites-enabled/kemllm.conf \
+ && sed -i 's|^user .*;|user agent;|' /etc/nginx/nginx.conf || true
+
 WORKDIR /app
 COPY app.py /app/app.py
 
-# Startup script is inlined so the HF Space only needs two files in the
-# build context: Dockerfile and app.py. No separate start-desktop.sh to
-# remember to upload.
+# Single-file startup: boots Xvfb, fluxbox, x11vnc, websockify (noVNC),
+# Flask (on 8000), then execs nginx in the foreground as PID 1 so HF
+# Spaces' health check against :7860 works.
 RUN cat > /app/start-desktop.sh <<'SH'
 #!/usr/bin/env bash
 set -u
 export DISPLAY=:0
 export HOME=/home/agent
+export PORT=8000
 cd "$HOME"
 log(){ echo "[start-desktop] $*" >&2; }
 
@@ -78,8 +133,19 @@ for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
   sleep 0.4
 done
 
-log "launching app.py on :7860"
-exec python3 /app/app.py
+log "starting Flask app.py on :8000"
+python3 /app/app.py >/tmp/flask.log 2>&1 &
+
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+  if (echo >/dev/tcp/127.0.0.1/8000) >/dev/null 2>&1; then
+    log "Flask listening on :8000"
+    break
+  fi
+  sleep 0.4
+done
+
+log "launching nginx on :7860 (front door)"
+exec nginx -g 'daemon off;'
 SH
 
 RUN chmod +x /app/start-desktop.sh \
@@ -89,5 +155,4 @@ USER agent
 WORKDIR /home/agent
 
 EXPOSE 7860
-# bash (not sh) so the /dev/tcp port probe in the startup script works.
 CMD ["/bin/bash", "/app/start-desktop.sh"]

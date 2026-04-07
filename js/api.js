@@ -590,6 +590,48 @@ async function replicateUploadFile(dataUrl, apiKey) {
   return data?.urls?.get || data?.url;
 }
 
+// Per-model input builders. Different Replicate image models require
+// different field names/types for the source image. Generic fallback at
+// the end uses the union of common keys — works for most off-brand models.
+function buildImageEditInput(modelId, prompt, imageUrl) {
+  const id = (modelId || '').toLowerCase();
+
+  // Google Nano Banana — takes `image_input` as an ARRAY of URLs
+  if (id.includes('nano-banana')) {
+    return { prompt, image_input: [imageUrl] };
+  }
+  // FLUX Kontext — takes `input_image` as a SINGLE URL
+  if (id.includes('flux-kontext')) {
+    return { prompt, input_image: imageUrl };
+  }
+  // FLUX Fill — takes `image` + `mask`
+  if (id.includes('flux-fill')) {
+    return { prompt, image: imageUrl };
+  }
+  // Generic FLUX Dev / Schnell img2img
+  if (id.includes('black-forest-labs/flux')) {
+    return { prompt, image: imageUrl };
+  }
+  // Ideogram V3 Edit variants
+  if (id.includes('ideogram') && id.includes('edit')) {
+    return { prompt, image: imageUrl };
+  }
+  // Stability img2img / inpainting
+  if (id.includes('stability-ai/stable-diffusion-img2img') ||
+      id.includes('stability-ai/stable-diffusion-inpainting')) {
+    return { prompt, image: imageUrl };
+  }
+  // Default: send the most common keys, the model will pick what it knows.
+  // NOTE: image_input is a STRING here (not array) because most non-nano
+  // models that accept it want a string.
+  return {
+    prompt,
+    image: imageUrl,
+    input_image: imageUrl,
+    source_image: imageUrl,
+  };
+}
+
 async function editImage(prompt, sourceUrl) {
   const apiKey = getRepKey();
   if (!apiKey) throw new Error('Add your Replicate key in Settings to edit images');
@@ -604,8 +646,9 @@ async function editImage(prompt, sourceUrl) {
     if (!imageUrl) throw new Error('Replicate upload returned no URL');
   }
 
-  // Try the user's CURRENTLY-SELECTED image model first. If it fails or
-  // doesn't accept img2img, walk the fallback list.
+  // Build the try-list. ALWAYS put the user's currently-selected image
+  // model first — even if it's not in the fallback list, we try it here.
+  // Fallbacks only run if the selected model genuinely can't do img2img.
   const selected = findModel(selectedImage, 'image');
   const idsToTry = [];
   if (selected?.replicateId) idsToTry.push(selected.replicateId);
@@ -616,15 +659,7 @@ async function editImage(prompt, sourceUrl) {
   let lastErr = null;
   for (const id of idsToTry) {
     try {
-      // Different models use different input keys — flux-kontext wants
-      // `input_image`, most img2img uses `image`, nano-banana uses `image_input`.
-      // Send all three; the model picks the one it recognizes.
-      const input = {
-        prompt,
-        image: imageUrl,
-        input_image: imageUrl,
-        image_input: imageUrl,
-      };
+      const input = buildImageEditInput(id, prompt, imageUrl);
       const res = await replicatePredict(id, input, apiKey, selected?.version);
       if (res.status === 404) {
         lastErr = new Error('Model "' + id + '" not found on Replicate');
@@ -633,7 +668,25 @@ async function editImage(prompt, sourceUrl) {
       if (!res.ok) {
         const t = await res.text();
         lastErr = new Error('Edit ' + res.status + ' on ' + id + ': ' + t.slice(0, 200));
-        if (res.status === 422) continue;
+        if (res.status === 422) {
+          // Schema mismatch — try once more with the generic union-of-keys
+          // body in case the per-model builder guessed wrong.
+          const genericInput = {
+            prompt,
+            image: imageUrl,
+            input_image: imageUrl,
+            image_input: [imageUrl],  // some models want an array
+            source_image: imageUrl,
+          };
+          const retry = await replicatePredict(id, genericInput, apiKey, selected?.version);
+          if (retry.ok) {
+            const d = await retry.json();
+            let o = d.output;
+            if (Array.isArray(o)) o = o[0];
+            if (o) return o;
+          }
+          continue;
+        }
         throw lastErr;
       }
       const data = await res.json();

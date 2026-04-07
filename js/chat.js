@@ -388,21 +388,12 @@ async function sendMessage() {
   messages.push(userMsg);
   renderUserMessage(text, atts);
 
-  // With attachments: if the user wants to EDIT the image, route to img2img.
-  // Otherwise attachments mean "vision chat with this file as context".
-  const hasImageAttachment = atts.some(a => a.isImage || (a.mime || '').startsWith('image/'));
-  if (hasImageAttachment && EDIT_REGEX.test(text)) {
-    return handleEditImageRequest(text, atts.find(a => a.isImage || (a.mime || '').startsWith('image/')));
-  }
-  // Without attachments: regex-detect generation requests
-  if (!atts.length) {
-    if (IMG_REGEX.test(text)) {
-      return handleImageRequest(text);
-    }
-    if (VID_REGEX.test(text)) {
-      return handleVideoRequest(text);
-    }
-  }
+  // NO MORE keyword routing. Every message goes to the AI chat model first.
+  // The AI decides whether image/video generation is needed and emits the
+  // appropriate marker ([GENERATE_IMAGE prompt="..."], etc) with a properly
+  // crafted prompt. The frontend's processAIMarkers then dispatches to
+  // handleImageRequest / handleVideoRequest / handleEditImageRequest with
+  // the GOOD prompt the AI wrote, not the user's raw request.
 
   const model = findModel(selectedChat, 'chat');
   if (!model) { showToast('No model selected'); return; }
@@ -418,12 +409,17 @@ async function sendMessage() {
     typingEl.remove();
     messages.push({ role: 'assistant', content: full });
 
+    // Strip generation markers from the visible text so the user doesn't
+    // see [GENERATE_IMAGE prompt="..."] as literal text. The AI's prose
+    // (if any) around the marker is preserved.
+    const visibleText = stripAIMarkers(full);
+
     // Claude.ai-style autonomous code execution: if the AI wrote a runnable
     // code block, auto-run it, show the analysis, then let the AI respond
     // once with the result in mind.
-    const runnable = extractFirstRunnableBlock(full);
+    const runnable = extractFirstRunnableBlock(visibleText);
     if (runnable) {
-      const aiEl = renderAIMessage(model, parseMarkdown(full));
+      const aiEl = renderAIMessage(model, parseMarkdown(visibleText));
       const analysisEl = await runAnalysisBlock(aiEl, runnable);
       if (analysisEl) {
         const typing2 = renderTyping(model);
@@ -435,15 +431,19 @@ async function sendMessage() {
           let more = '';
           await callChat(model, followup, (chunk) => { more += chunk; });
           typing2.remove();
-          renderAIMessage(model, parseMarkdown(more));
+          renderAIMessage(model, parseMarkdown(stripAIMarkers(more)));
           messages.push({ role: 'assistant', content: more });
         } catch (e) {
           typing2.remove();
         }
       }
     } else {
-      renderAIMessage(model, parseMarkdown(full));
+      renderAIMessage(model, parseMarkdown(visibleText));
     }
+
+    // Process any generation markers the AI emitted. This triggers
+    // image/video/edit generation with the AI's CRAFTED prompt.
+    processAIMarkers(full);
 
     saveCurrentChat();
   } catch (e) {
@@ -452,6 +452,21 @@ async function sendMessage() {
   } finally {
     setChatBusy(false);
   }
+}
+
+// Strip all AI generation markers from a text so the user doesn't see
+// them as literal text in the rendered response. Whitespace is cleaned
+// up so there's no awkward blank line where the marker was.
+function stripAIMarkers(text) {
+  if (!text) return '';
+  return text
+    .replace(/\[SHOW_PREVIEW\s+[^\]]+\]/gi, '')
+    .replace(/\[SHOW_DESKTOP\]/gi, '')
+    .replace(/\[GENERATE_IMAGE\s+prompt=(?:"[^"]+"|'[^']+'|[^\]]+)\]/gi, '')
+    .replace(/\[GENERATE_VIDEO\s+prompt=(?:"[^"]+"|'[^']+'|[^\]]+)\]/gi, '')
+    .replace(/\[EDIT_IMAGE\s+prompt=(?:"[^"]+"|'[^']+'|[^\]]+)\]/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function extractFirstRunnableBlock(md) {

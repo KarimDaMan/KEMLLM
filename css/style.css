@@ -662,6 +662,15 @@ input,textarea{font-family:inherit;color:inherit;}
   .hs-logo svg{width:32px;height:32px;}
   #home-screen{padding-bottom:22vh;}
   #term-boot{font-size:10px;padding:18px 16px;}
+  /* Mobile scroll fix: the parent layout uses overflow:hidden everywhere
+     to trap layout. On phones the home screen + settings panel are too
+     tall to fit the viewport, so they get clipped and the user can't see
+     the bottom. Allow each .panel to scroll its own contents on mobile. */
+  body{overflow-y:auto;}
+  #app{height:auto;min-height:100dvh;overflow:visible;}
+  #main{overflow:visible;}
+  .panel{overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:100dvh;}
+  #settings-panel,#code-panel{overflow-y:auto;-webkit-overflow-scrolling:touch;}
   #input-wrap{padding:10px 14px 18px;}
   #input-box{padding:6px 6px 6px 16px;}
   #input-text{font-size:16px;}

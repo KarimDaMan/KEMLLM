@@ -400,15 +400,17 @@ async function sendMessage() {
   // Persist IMMEDIATELY so the user message survives tab-close before
   // the AI response arrives. The pending=true flag is what tells the
   // background-resume logic on next load that this message needs an
-  // answer.
+  // answer. saveCurrentChat also assigns currentChatId if it was null.
   saveCurrentChat();
 
-  // NO MORE keyword routing. Every message goes to the AI chat model first.
-  // The AI decides whether image/video generation is needed and emits the
-  // appropriate marker ([GENERATE_IMAGE prompt="..."], etc) with a properly
-  // crafted prompt. The frontend's processAIMarkers then dispatches to
-  // handleImageRequest / handleVideoRequest / handleEditImageRequest with
-  // the GOOD prompt the AI wrote, not the user's raw request.
+  // CHAT SCOPING: capture the chat id this message belongs to BEFORE the
+  // fetch starts. If the user navigates to a different chat (or to the
+  // home screen) while we're waiting, the response gets saved to the
+  // originating chat's history but NOT rendered into the current view.
+  const originatingChatId = currentChatId;
+  // Snapshot of the conversation we send to the model — frozen at the
+  // moment of send, so chat switches don't poison the request payload.
+  const convoSnapshot = messages.slice();
 
   const model = findModel(selectedChat, 'chat');
   if (!model) { showToast('No model selected'); return; }
@@ -416,56 +418,101 @@ async function sendMessage() {
   const typingEl = renderTyping(model);
   setChatBusy(true);
 
+  // Helper: append assistant content to the originating chat's saved
+  // history. Returns true if it could find the chat. Independent of the
+  // global `messages` array (which may have been replaced by a chat
+  // switch in the meantime).
+  const appendAssistantToOriginatingChat = (content, modelName, modelProvider) => {
+    if (!originatingChatId) return false;
+    const list = loadHistory();
+    const idx = list.findIndex(c => c.id === originatingChatId);
+    if (idx < 0) return false;
+    const chat = list[idx];
+    // Clear pending flag on the matching user message
+    for (let i = chat.messages.length - 1; i >= 0; i--) {
+      if (chat.messages[i].role === 'user' && chat.messages[i].pending) {
+        delete chat.messages[i].pending;
+        break;
+      }
+    }
+    const msg = { role: 'assistant', content };
+    if (modelName) msg.modelName = modelName;
+    if (modelProvider) msg.modelProvider = modelProvider;
+    chat.messages.push(msg);
+    profileSetJSON('history', list);
+    return true;
+  };
+
   try {
     let full = '';
-    await callChat(model, messages, (chunk, done) => {
+    await callChat(model, convoSnapshot, (chunk, done) => {
       full += chunk;
     });
-    typingEl.remove();
-    // Clear the pending flag on the user message now that we have a reply
-    delete userMsg.pending;
-    messages.push({ role: 'assistant', content: full });
 
-    // Strip generation markers from the visible text so the user doesn't
-    // see [GENERATE_IMAGE prompt="..."] as literal text. The AI's prose
-    // (if any) around the marker is preserved.
-    const visibleText = stripAIMarkers(full);
+    // CHAT SCOPING: did the user navigate away during the fetch?
+    const stillHere = (currentChatId === originatingChatId);
 
-    // Claude.ai-style autonomous code execution: if the AI wrote a runnable
-    // code block, auto-run it, show the analysis, then let the AI respond
-    // once with the result in mind.
-    const runnable = extractFirstRunnableBlock(visibleText);
-    if (runnable) {
-      const aiEl = renderAIMessage(model, parseMarkdown(visibleText));
-      const analysisEl = await runAnalysisBlock(aiEl, runnable);
-      if (analysisEl) {
-        const typing2 = renderTyping(model);
-        try {
-          const followup = [...messages, {
-            role: 'user',
-            content: `[code execution result]\n\nStdout:\n${analysisEl.stdout || '(empty)'}${analysisEl.stderr ? `\n\nStderr:\n${analysisEl.stderr}` : ''}\n\nPlease use this result in your explanation. Do not rewrite the same code unless there was an error.`
-          }];
-          let more = '';
-          await callChat(model, followup, (chunk) => { more += chunk; });
-          typing2.remove();
-          renderAIMessage(model, parseMarkdown(stripAIMarkers(more)));
-          messages.push({ role: 'assistant', content: more });
-        } catch (e) {
-          typing2.remove();
+    if (stillHere) {
+      typingEl.remove();
+      delete userMsg.pending;
+      messages.push({ role: 'assistant', content: full });
+
+      const visibleText = stripAIMarkers(full);
+      const runnable = extractFirstRunnableBlock(visibleText);
+      if (runnable) {
+        const aiEl = renderAIMessage(model, parseMarkdown(visibleText));
+        const analysisEl = await runAnalysisBlock(aiEl, runnable);
+        if (analysisEl && currentChatId === originatingChatId) {
+          const typing2 = renderTyping(model);
+          try {
+            const followup = [...messages, {
+              role: 'user',
+              content: `[code execution result]\n\nStdout:\n${analysisEl.stdout || '(empty)'}${analysisEl.stderr ? `\n\nStderr:\n${analysisEl.stderr}` : ''}\n\nPlease use this result in your explanation. Do not rewrite the same code unless there was an error.`
+            }];
+            let more = '';
+            await callChat(model, followup, (chunk) => { more += chunk; });
+            typing2.remove();
+            if (currentChatId === originatingChatId) {
+              renderAIMessage(model, parseMarkdown(stripAIMarkers(more)));
+              messages.push({ role: 'assistant', content: more });
+            } else {
+              appendAssistantToOriginatingChat(more, model.name, model.provider);
+            }
+          } catch (e) {
+            typing2.remove();
+          }
         }
+      } else {
+        renderAIMessage(model, parseMarkdown(visibleText));
       }
+      processAIMarkers(full);
+      saveCurrentChat();
     } else {
-      renderAIMessage(model, parseMarkdown(visibleText));
+      // User navigated away mid-fetch. Save to the originating chat
+      // without touching the current DOM. Notify the user.
+      typingEl.remove();
+      appendAssistantToOriginatingChat(full, model.name, model.provider);
+      const list = loadHistory();
+      const origChat = list.find(c => c.id === originatingChatId);
+      const title = origChat?.title || 'a previous chat';
+      showToast(`Reply ready in "${title.slice(0, 40)}"`);
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try {
+          new Notification('KEMLLM · ' + (model.name || 'AI') + ' replied', {
+            body: stripAIMarkers(full).slice(0, 120),
+            tag: 'kemllm-bg-' + originatingChatId,
+          });
+        } catch {}
+      }
+      renderHistory();
     }
-
-    // Process any generation markers the AI emitted. This triggers
-    // image/video/edit generation with the AI's CRAFTED prompt.
-    processAIMarkers(full);
-
-    saveCurrentChat();
   } catch (e) {
     typingEl.remove();
-    renderAIMessage(model, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+    if (currentChatId === originatingChatId) {
+      renderAIMessage(model, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+    } else {
+      console.warn('[KEMLLM] background fetch error in chat', originatingChatId, e);
+    }
   } finally {
     setChatBusy(false);
   }
@@ -775,60 +822,90 @@ function reuseImageAsAttachment(url) {
   if (typeof showToast === 'function') showToast('Image attached — describe the edit');
 }
 
-async function handleImageRequest(prompt) {
+// Scoped append: same pattern as sendMessage. If the user is no longer
+// looking at the chat where the gen was started, save to history without
+// touching the DOM and notify.
+function _appendImageResultScoped(originatingChatId, fakeModel, md, modelName, errorIsHtml) {
+  if (currentChatId === originatingChatId) {
+    renderAIMessage(fakeModel, errorIsHtml ? md : parseMarkdown(md), errorIsHtml ? '' : md);
+    if (!errorIsHtml) {
+      messages.push({ role: 'assistant', content: md, modelName, modelProvider: 'google' });
+      saveCurrentChat();
+    }
+    return;
+  }
+  if (errorIsHtml) return; // don't save errors
+  const list = loadHistory();
+  const idx = list.findIndex(c => c.id === originatingChatId);
+  if (idx >= 0) {
+    list[idx].messages.push({ role: 'assistant', content: md, modelName, modelProvider: 'google' });
+    profileSetJSON('history', list);
+    const title = list[idx].title || 'a previous chat';
+    showToast(`Image ready in "${title.slice(0, 40)}"`);
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      try {
+        new Notification('KEMLLM · ' + modelName + ' result', { tag: 'kemllm-bg-' + originatingChatId });
+      } catch {}
+    }
+    if (typeof renderHistory === 'function') renderHistory();
+  }
+}
+
+async function handleImageRequest(prompt, aspectRatio) {
   const m = findModel(selectedImage, 'image');
   const modelName = m?.name || 'Image';
   const fakeModel = { name: modelName, provider: 'google' };
+  const originatingChatId = currentChatId;
   const typingEl = renderTyping(fakeModel);
   try {
-    const url = await generateImage(prompt);
+    const url = await generateImage(prompt, aspectRatio);
     typingEl.remove();
     const md = `Generated with ${modelName}:\n\n![generated](${url})`;
-    renderAIMessage(fakeModel, parseMarkdown(md), md);
-    // Tag the saved message with modelName so loadChat shows the right
-    // attribution after reload (instead of the active chat model).
-    messages.push({ role: 'assistant', content: md, modelName, modelProvider: 'google' });
-    saveCurrentChat();
+    _appendImageResultScoped(originatingChatId, fakeModel, md, modelName, false);
   } catch (e) {
     typingEl.remove();
-    renderAIMessage(fakeModel, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+    if (currentChatId === originatingChatId) {
+      renderAIMessage(fakeModel, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+    }
   }
 }
-async function handleEditImageRequest(prompt, imageAttachment) {
+async function handleEditImageRequest(prompt, imageAttachment, aspectRatio) {
   const sel = (typeof findModel === 'function') ? findModel(selectedImage, 'image') : null;
   const editorName = sel?.name || 'Nano Banana Pro';
   const displayName = 'Image Edit (' + editorName + ')';
   const fakeModel = { name: displayName, provider: 'google' };
+  const originatingChatId = currentChatId;
   const typingEl = renderTyping(fakeModel);
   try {
     const sourceUrl = imageAttachment.dataUrl || imageAttachment.url;
-    const url = await editImage(prompt, sourceUrl);
+    const url = await editImage(prompt, sourceUrl, aspectRatio);
     typingEl.remove();
     const md = `Edited with ${editorName}:\n\n![edited](${url})`;
-    renderAIMessage(fakeModel, parseMarkdown(md), md);
-    messages.push({ role: 'assistant', content: md, modelName: displayName, modelProvider: 'google' });
-    saveCurrentChat();
+    _appendImageResultScoped(originatingChatId, fakeModel, md, displayName, false);
   } catch (e) {
     typingEl.remove();
-    renderAIMessage(fakeModel, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+    if (currentChatId === originatingChatId) {
+      renderAIMessage(fakeModel, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+    }
   }
 }
 
-async function handleVideoRequest(prompt) {
+async function handleVideoRequest(prompt, aspectRatio) {
   const m = findModel(selectedVideo, 'video');
   const modelName = m?.name || 'Video';
   const fakeModel = { name: modelName, provider: 'google' };
+  const originatingChatId = currentChatId;
   const typingEl = renderTyping(fakeModel);
   try {
-    const url = await generateVideo(prompt);
+    const url = await generateVideo(prompt, aspectRatio);
     typingEl.remove();
     const md = `Generated with ${modelName}:\n\n<video controls loop src="${url}" style="max-width:520px;border-radius:10px;"></video>`;
-    renderAIMessage(fakeModel, md, md);
-    messages.push({ role: 'assistant', content: md, modelName, modelProvider: 'google' });
-    saveCurrentChat();
+    _appendImageResultScoped(originatingChatId, fakeModel, md, modelName, false);
   } catch (e) {
     typingEl.remove();
-    renderAIMessage(fakeModel, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+    if (currentChatId === originatingChatId) {
+      renderAIMessage(fakeModel, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
+    }
   }
 }
 
@@ -1035,30 +1112,50 @@ function processAIMarkers(text) {
   if (/\[SHOW_DESKTOP\]/i.test(text)) {
     showAgentDesktop();
   }
-  // [GENERATE_IMAGE prompt="..."] — AI-triggered image gen
-  const genImgRe = /\[GENERATE_IMAGE\s+prompt=(?:"([^"]+)"|'([^']+)'|([^\]]+))\]/i;
-  const gi = text.match(genImgRe);
+  // If the AI emitted BOTH a GENERATE_IMAGE and an EDIT_IMAGE marker in
+  // the same response, EDIT_IMAGE wins. The model is confused and we
+  // don't want to fire two image jobs (the GENERATE attempt almost always
+  // fails when there's an attached image to edit).
+  const hasEditMarker = /\[EDIT_IMAGE\s+/i.test(text);
+
+  // [GENERATE_IMAGE prompt="..." aspect_ratio="16:9"] — AI-triggered image gen.
+  // aspect_ratio is optional. Supported values: 1:1, 16:9, 9:16, 4:3, 3:4,
+  // 21:9, 3:2, 2:3 (and anything else the underlying model accepts).
+  const genImgRe = /\[GENERATE_IMAGE\s+([^\]]+)\]/i;
+  const gi = !hasEditMarker ? text.match(genImgRe) : null;
   if (gi) {
-    const prompt = (gi[1] || gi[2] || gi[3] || '').trim();
-    if (prompt) handleImageRequest(prompt);
+    const args = gi[1];
+    const promptMatch = args.match(/prompt=(?:"([^"]+)"|'([^']+)')/i);
+    const arMatch = args.match(/aspect_ratio=(?:"([^"]+)"|'([^']+)'|([^\s\]]+))/i);
+    const prompt = (promptMatch?.[1] || promptMatch?.[2] || '').trim();
+    const aspectRatio = (arMatch?.[1] || arMatch?.[2] || arMatch?.[3] || '').trim() || null;
+    if (prompt) handleImageRequest(prompt, aspectRatio);
   }
-  // [GENERATE_VIDEO prompt="..."]
-  const genVidRe = /\[GENERATE_VIDEO\s+prompt=(?:"([^"]+)"|'([^']+)'|([^\]]+))\]/i;
+  // [GENERATE_VIDEO prompt="..." aspect_ratio="16:9"]
+  const genVidRe = /\[GENERATE_VIDEO\s+([^\]]+)\]/i;
   const gv = text.match(genVidRe);
   if (gv) {
-    const prompt = (gv[1] || gv[2] || gv[3] || '').trim();
-    if (prompt) handleVideoRequest(prompt);
+    const args = gv[1];
+    const promptMatch = args.match(/prompt=(?:"([^"]+)"|'([^']+)')/i);
+    const arMatch = args.match(/aspect_ratio=(?:"([^"]+)"|'([^']+)'|([^\s\]]+))/i);
+    const prompt = (promptMatch?.[1] || promptMatch?.[2] || '').trim();
+    const aspectRatio = (arMatch?.[1] || arMatch?.[2] || arMatch?.[3] || '').trim() || null;
+    if (prompt) handleVideoRequest(prompt, aspectRatio);
   }
-  // [EDIT_IMAGE prompt="..."] — edit the most recent image. Looks in
-  // BOTH directions: (1) any image attachment on the most recent user
+  // [EDIT_IMAGE prompt="..." aspect_ratio="..."] — edit the most recent image.
+  // Looks in BOTH directions: (1) any image attachment on the most recent user
   // message (this is how "attach a photo, say 'make it blue'" works),
   // and (2) any generated/edited image embedded as markdown in the
   // chat history (how "now change the sky" on a previously-generated
   // image works). Attachments win — they're more recent.
-  const editImgRe = /\[EDIT_IMAGE\s+prompt=(?:"([^"]+)"|'([^']+)'|([^\]]+))\]/i;
+  const editImgRe = /\[EDIT_IMAGE\s+([^\]]+)\]/i;
   const ei = text.match(editImgRe);
   if (ei) {
-    const prompt = (ei[1] || ei[2] || ei[3] || '').trim();
+    const args = ei[1];
+    const promptMatch = args.match(/prompt=(?:"([^"]+)"|'([^']+)')/i);
+    const arMatch = args.match(/aspect_ratio=(?:"([^"]+)"|'([^']+)'|([^\s\]]+))/i);
+    const prompt = (promptMatch?.[1] || promptMatch?.[2] || '').trim();
+    const aspectRatio = (arMatch?.[1] || arMatch?.[2] || arMatch?.[3] || '').trim() || null;
     let source = null;
     // 1) Most recent attachment (data URL from a user upload)
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -1080,7 +1177,7 @@ function processAIMarkers(text) {
       }
     }
     if (prompt && source) {
-      handleEditImageRequest(prompt, source);
+      handleEditImageRequest(prompt, source, aspectRatio);
     } else if (prompt && !source) {
       showToast('Edit requested but no image in the conversation to edit');
     }

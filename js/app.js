@@ -223,7 +223,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v96 · fix broken image + HTML download bug — generateImage and editImage now POLL the prediction past Replicate Prefer:wait timeout (was returning null URL for slow models like Nano Banana Pro). New extractOutputUrl handles all output shapes (string, array, FileOutput object). downloadImageFromViewer refuses to save non-image content-types so it never writes HTML.';
+const KEMLLM_BUILD = 'v97 · MEGA: (1) chat scoping — responses only render in their originating chat, never bleed into home/other chats; (2) aspect_ratio support in GENERATE_IMAGE/VIDEO/EDIT markers + Replicate input; (3) generate-vs-edit marker conflict resolved (EDIT wins); (4) non-image attachments (HTML/code/text/json/yaml/etc) decoded and embedded in the prompt for Anthropic + OpenAI; (5) mobile scroll fix (panels scroll natively on small screens); (6) system prompt forbids GENERATE_IMAGE when user has attachment.';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

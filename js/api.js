@@ -247,9 +247,9 @@ function getSystemPrompt(model) {
   lines.push(`You are ${name}, a generative AI. You have the following tools:`);
   lines.push('');
   lines.push('- CODE EXECUTION. When a question needs computation, data processing, API calls, file operations, math you can\'t do in your head, or anything verifiable — WRITE A FENCED CODE BLOCK (```python, ```javascript, ```bash, ```c, ```rust, ```go, etc). It runs automatically in a sandbox and the output comes back to you as the next turn. Use this whenever it helps, not just when the user explicitly says "write code". Python runs in Pyodide (browser); JavaScript in a sandboxed iframe; bash/c/cpp/rust/go/java/lua run in a remote Linux sandbox. Do NOT ask permission to run code — just write the block. After execution, explain the result in plain prose.');
-  lines.push('- IMAGE GENERATION. Emit `[GENERATE_IMAGE prompt="..."]`. Write a rich visual description (subject, composition, lighting, style, colors). The image is generated and shown inline.');
-  lines.push('- VIDEO GENERATION. Emit `[GENERATE_VIDEO prompt="..."]`.');
-  lines.push('- IMAGE EDITING. If the user has ATTACHED an image to their message and asks you to modify, change, recolor, restyle, remove, add, replace, or transform something in it — emit `[EDIT_IMAGE prompt="rewritten detailed instruction for the image editor"]`. Do this even for short requests like "make it blue" or "remove the background" — rewrite the prompt to be descriptive. This also works on images you previously generated in the same conversation. Do NOT describe the edit in words and refuse to do it — emit the marker. You can still discuss the image in prose too, but ALWAYS emit the marker when an edit is requested.');
+  lines.push('- IMAGE GENERATION. Emit `[GENERATE_IMAGE prompt="..." aspect_ratio="16:9"]`. Write a rich visual description (subject, composition, lighting, style, colors). The aspect_ratio param is OPTIONAL — include it when the user asks for "wide", "tall", "portrait", "landscape", "16:9", "square", "1080p", "phone wallpaper", etc. Common values: "1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "3:2", "2:3". Default is square if you omit it. NEVER emit GENERATE_IMAGE if the user has attached an image to this message — use EDIT_IMAGE instead.');
+  lines.push('- VIDEO GENERATION. Emit `[GENERATE_VIDEO prompt="..." aspect_ratio="16:9"]`. Same aspect_ratio rules as image gen.');
+  lines.push('- IMAGE EDITING. If the user has ATTACHED an image to their message and asks you to modify, change, recolor, restyle, remove, add, replace, or transform something in it — emit `[EDIT_IMAGE prompt="rewritten detailed instruction for the image editor" aspect_ratio="..."]`. Do this even for short requests like "make it blue" or "remove the background" — rewrite the prompt to be descriptive. This ALSO works on images you previously generated in the same conversation. CRITICAL: when there is an attached image, NEVER emit GENERATE_IMAGE — only EDIT_IMAGE. Emit at most ONE marker per response. Do NOT describe the edit in prose and refuse to do it — emit the marker.');
   lines.push('- MATH. Use LaTeX inside `$...$` for inline and `$$...$$` for display. Rendered with KaTeX.');
   lines.push('- PERSISTENT MEMORY. When the user tells you something useful about themselves (name, preferences, projects, skills, goals, context, opinions, style, anything worth recalling later), emit `[REMEMBER fact="short declarative sentence"]`. One marker per fact. Emit as many markers as appropriate per reply — do not hold back. The user cannot see these markers in your reply (they are stripped).');
   // Computer Use — only when Claude 3.5+ is the model, HF backend is
@@ -347,19 +347,79 @@ function shouldEnableComputerUse(model) {
 }
 
 // Convert one of our messages[] entries into Claude's content-block form.
+// Decide whether an attachment's mime/name looks like text we can decode
+// inline (HTML, source code, JSON, plain text, markdown, CSV, etc).
+function isTextualAttachment(a) {
+  const mime = (a.mime || '').toLowerCase();
+  const name = (a.name || '').toLowerCase();
+  if (mime.startsWith('text/')) return true;
+  if (mime.includes('json') || mime.includes('xml') || mime.includes('yaml') ||
+      mime.includes('javascript') || mime.includes('typescript') ||
+      mime.includes('html') || mime.includes('css') || mime.includes('csv')) return true;
+  // Common code extensions even if mime is application/octet-stream
+  if (/\.(txt|md|json|jsonc|yml|yaml|toml|ini|cfg|conf|env|csv|tsv|log|html?|htm|xml|svg|css|scss|less|js|mjs|cjs|ts|tsx|jsx|vue|svelte|py|rb|go|rs|c|h|cpp|hpp|cs|java|kt|swift|php|sh|bash|zsh|fish|sql|graphql|gql|proto|dockerfile|makefile|cmake|gradle|gitignore|gitattributes|editorconfig|prettierrc|eslintrc|babelrc|lock|patch|diff)$/i.test(name)) return true;
+  return false;
+}
+
+// Decode an attachment data URL to UTF-8 text. Returns '' on failure.
+function decodeAttachmentText(a) {
+  if (!a || !a.dataUrl) return '';
+  const d = parseDataUrl(a.dataUrl);
+  if (!d) return '';
+  try {
+    // base64 → bytes → utf-8 string
+    const bin = atob(d.base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  } catch { return ''; }
+}
+
+// Build a text block describing one non-image attachment. Embeds the
+// content inline in a fenced code block when it's text-like; otherwise
+// just notes the filename + size + mime so the AI can reference it.
+function attachmentToTextBlock(a) {
+  const name = a.name || 'file';
+  const mime = a.mime || 'application/octet-stream';
+  const sizeKb = a.size ? ` · ${(a.size/1024).toFixed(1)} KB` : '';
+  if (isTextualAttachment(a)) {
+    const text = decodeAttachmentText(a);
+    if (text) {
+      // Cap at 200 KB of text per attachment to avoid blowing context window
+      const MAX = 200 * 1024;
+      const truncated = text.length > MAX ? text.slice(0, MAX) + `\n\n[... truncated, ${text.length - MAX} more chars ...]` : text;
+      const ext = (name.split('.').pop() || '').toLowerCase();
+      return `Attached file: \`${name}\` (${mime}${sizeKb})\n\n\`\`\`${ext}\n${truncated}\n\`\`\``;
+    }
+  }
+  return `Attached file: \`${name}\` (${mime}${sizeKb}) — binary, not inlined.`;
+}
+
 function anthropicMessageFrom(m) {
   const role = m.role === 'assistant' ? 'assistant' : 'user';
-  const images = (m.attachments || []).filter(a => a.isImage || (a.mime || '').startsWith('image/'));
-  if (images.length) {
-    const parts = images.map(a => {
-      const d = parseDataUrl(a.dataUrl);
-      if (!d) return null;
-      return { type: 'image', source: { type: 'base64', media_type: d.mediaType, data: d.base64 } };
-    }).filter(Boolean);
-    if (m.content) parts.push({ type: 'text', text: m.content });
-    return { role, content: parts };
+  const atts = m.attachments || [];
+  if (!atts.length) return { role, content: m.content };
+
+  const images = atts.filter(a => a.isImage || (a.mime || '').startsWith('image/'));
+  const nonImages = atts.filter(a => !(a.isImage || (a.mime || '').startsWith('image/')));
+
+  const parts = [];
+  // Image content blocks first
+  for (const a of images) {
+    const d = parseDataUrl(a.dataUrl);
+    if (!d) continue;
+    parts.push({ type: 'image', source: { type: 'base64', media_type: d.mediaType, data: d.base64 } });
   }
-  return { role, content: m.content };
+  // Non-image attachments: decode text content inline
+  const fileTexts = nonImages.map(attachmentToTextBlock).filter(Boolean);
+  // Combine the user text with file content blocks
+  const textChunks = [];
+  if (m.content) textChunks.push(m.content);
+  if (fileTexts.length) textChunks.push(fileTexts.join('\n\n'));
+  if (textChunks.length) {
+    parts.push({ type: 'text', text: textChunks.join('\n\n') });
+  }
+  return { role, content: parts.length ? parts : m.content };
 }
 
 // Execute a Claude computer_use tool call via the HF agent backend.
@@ -512,14 +572,19 @@ async function callAnthropicBuiltin(model, messages, onChunk) {
 // ===== OpenAI / xAI (compatible) =====
 async function callOpenAIStyle(url, modelId, messages, apiKey, onChunk) {
   const oaiMsgs = messages.map(m => {
-    const images = (m.attachments || []).filter(a => a.isImage || (a.mime || '').startsWith('image/'));
+    const atts = m.attachments || [];
+    if (!atts.length) return { role: m.role, content: m.content };
+    const images = atts.filter(a => a.isImage || (a.mime || '').startsWith('image/'));
+    const nonImages = atts.filter(a => !(a.isImage || (a.mime || '').startsWith('image/')));
+    const fileTexts = nonImages.map(attachmentToTextBlock).filter(Boolean);
+    const text = [m.content || '', fileTexts.join('\n\n')].filter(Boolean).join('\n\n');
     if (images.length) {
       const parts = [];
-      if (m.content) parts.push({ type: 'text', text: m.content });
+      if (text) parts.push({ type: 'text', text });
       images.forEach(a => parts.push({ type: 'image_url', image_url: { url: a.dataUrl } }));
       return { role: m.role, content: parts };
     }
-    return { role: m.role, content: m.content };
+    return { role: m.role, content: text || m.content };
   });
   // Only include max_tokens if the user set one in Settings → Advanced.
   // Otherwise let OpenAI/xAI pick the model's native cap.
@@ -803,7 +868,7 @@ function buildImageEditInput(modelId, prompt, imageUrl) {
   };
 }
 
-async function editImage(prompt, sourceUrl) {
+async function editImage(prompt, sourceUrl, aspectRatio) {
   const apiKey = getRepKey();
   if (!apiKey) throw new Error('Add your Replicate key in Settings to edit images');
   if (!sourceUrl) throw new Error('No input image');
@@ -823,7 +888,7 @@ async function editImage(prompt, sourceUrl) {
   // Also polls the prediction if Replicate's Prefer:wait timed out
   // server-side and returned status=processing.
   const tryOne = async (modelId, version) => {
-    const input = buildImageEditInput(modelId, prompt, imageUrl);
+    const input = addAspectRatioToInput(buildImageEditInput(modelId, prompt, imageUrl), aspectRatio);
     let res = await replicatePredict(modelId, input, apiKey, version);
     if (res.status === 422) {
       const genericInput = {
@@ -888,6 +953,40 @@ async function editImage(prompt, sourceUrl) {
   }
 }
 
+// Translate an aspect ratio string like "16:9" into pixel width/height for
+// models that need width/height instead of (or in addition to) aspect_ratio.
+// Returns null if the input doesn't parse.
+function aspectRatioToWH(ar) {
+  if (!ar || typeof ar !== 'string') return null;
+  const m = ar.match(/^(\d+)\s*[:x\/]\s*(\d+)$/);
+  if (!m) return null;
+  const w = parseInt(m[1], 10), h = parseInt(m[2], 10);
+  if (!w || !h) return null;
+  // Aim for ~1.0-1.3 megapixels (matches Flux/SDXL/Nano Banana defaults)
+  const targetMP = 1.15;
+  const scale = Math.sqrt(targetMP * 1_000_000 / (w * h));
+  let pw = Math.round(w * scale), ph = Math.round(h * scale);
+  // Round to nearest 8 (most diffusion models require it)
+  pw = Math.round(pw / 8) * 8;
+  ph = Math.round(ph / 8) * 8;
+  return { width: pw, height: ph };
+}
+
+// Add aspect_ratio + width/height to a Replicate input dict in-place if
+// the caller passed an aspectRatio. Most modern image models accept
+// `aspect_ratio` as a string ("16:9"); older diffusion models want
+// width/height. We send both so whichever the model uses, it picks up.
+function addAspectRatioToInput(input, aspectRatio) {
+  if (!aspectRatio) return input;
+  input.aspect_ratio = aspectRatio;
+  const wh = aspectRatioToWH(aspectRatio);
+  if (wh) {
+    input.width = wh.width;
+    input.height = wh.height;
+  }
+  return input;
+}
+
 // Drill into a Replicate prediction `output` field which can be:
 //   - a string (single URL)                  → return as-is
 //   - an array of strings                    → return first
@@ -945,7 +1044,7 @@ async function awaitPrediction(initialData, apiKey, maxSeconds) {
   throw new Error('Prediction timed out after ' + max + 's');
 }
 
-async function generateImage(prompt) {
+async function generateImage(prompt, aspectRatio) {
   const apiKey = getRepKey();
   if (!apiKey) throw new Error('Add your Replicate key in Settings to generate images');
   const m = findModel(selectedImage, 'image');
@@ -955,7 +1054,8 @@ async function generateImage(prompt) {
   let lastErr = null;
   for (const id of idsToTry) {
     try {
-      const res = await replicatePredict(id, { prompt }, apiKey);
+      const input = addAspectRatioToInput({ prompt }, aspectRatio);
+      const res = await replicatePredict(id, input, apiKey);
       if (res.status === 404) {
         lastErr = new Error('Model "' + id + '" not found on Replicate');
         continue;
@@ -987,18 +1087,19 @@ async function generateImage(prompt) {
   throw lastErr || new Error('All image models failed');
 }
 
-async function generateVideo(prompt) {
+async function generateVideo(prompt, aspectRatio) {
   const apiKey = getRepKey();
   if (!apiKey) throw new Error('Add your Replicate key in Settings to generate videos');
   const m = findModel(selectedVideo, 'video');
   if (!m) throw new Error('No video model selected');
+  const vidInput = addAspectRatioToInput({ prompt }, aspectRatio);
   let res = await replicateFetch(`/v1/models/${m.replicateId}/predictions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer ' + apiKey
     },
-    body: JSON.stringify({ input: { prompt } })
+    body: JSON.stringify({ input: vidInput })
   });
   if (!res.ok) throw new Error('Video gen ' + res.status + ': ' + (await res.text()).slice(0, 200));
   let data = await res.json();

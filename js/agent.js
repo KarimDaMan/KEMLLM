@@ -23,6 +23,13 @@ let agentStartPromise = null; // shared promise so concurrent callers all await 
 // system line so the user actually sees boot progress, error messages,
 // and the POST /sessions body diagnostic. Falls back to the old element
 // if it ever comes back.
+// The chat id that owns the currently-running agent session. Set when
+// agentStart is called from a specific chat, cleared when it finishes.
+// agentLog only writes to #msgs if the user is viewing THIS chat —
+// otherwise silently console.log. This prevents sandbox startup spam
+// (HF Space waking up…) from bleeding into chats the user never touched.
+let _agentLogOwnerChatId = null;
+
 function agentLog(text, cls) {
   const legacy = document.getElementById('ag-term');
   if (legacy) {
@@ -35,14 +42,19 @@ function agentLog(text, cls) {
     legacy.scrollTop = legacy.scrollHeight;
     return div;
   }
-  // Only render into #msgs when the user is actually viewing an agent-
-  // mode chat. Otherwise silently console.log — we don't want sandbox
-  // startup spam ("HF Space waking up… 25s") landing on the home screen
-  // when the user never asked for agent mode.
+  // Render to #msgs ONLY if all three hold:
+  //   (a) the user is not on the home screen
+  //   (b) there is a current chat id
+  //   (c) that chat id matches the one that launched the current agent
+  //       start / command (_agentLogOwnerChatId)
+  // Otherwise the log goes to console only — no visible spam in other
+  // chats, no spam on home screen.
   const homeEl = document.getElementById('home-screen');
   const homeVisible = homeEl && !homeEl.classList.contains('hidden');
-  const inAgentMode = (typeof chatMode !== 'undefined' && chatMode === 'agent');
-  if (homeVisible || !inAgentMode) {
+  const ownsThisChat = currentChatId != null &&
+    _agentLogOwnerChatId != null &&
+    currentChatId === _agentLogOwnerChatId;
+  if (homeVisible || !ownsThisChat) {
     try { console.log('[agent]', cls || '', text); } catch {}
     return null;
   }
@@ -147,7 +159,14 @@ function agentStart() {
   }
   // If ready on pyodide and no HF URL, stay on pyodide.
   if (agentReady && agentBackend === 'pyodide' && !getHfBackendUrl()) return Promise.resolve();
-  agentStartPromise = _agentStartInner().finally(() => { agentStartPromise = null; });
+  // Tag this boot as owned by whatever chat the user is currently in.
+  // agentLog will only render into #msgs while the user is still
+  // viewing this chat; otherwise it's console-only.
+  _agentLogOwnerChatId = (typeof currentChatId !== 'undefined') ? currentChatId : null;
+  agentStartPromise = _agentStartInner().finally(() => {
+    agentStartPromise = null;
+    _agentLogOwnerChatId = null;
+  });
   return agentStartPromise;
 }
 
@@ -330,6 +349,9 @@ async function agentRun(rawCmd, fromAgent, silent) {
     if (!silent) agentLog('✗ sandbox not started — press Start', 'err');
     return { stdout: '', stderr: 'sandbox offline', exitCode: -1 };
   }
+  // Re-tag log ownership to the current chat each time a command runs,
+  // so output goes into the right chat even if the session has drifted.
+  _agentLogOwnerChatId = (typeof currentChatId !== 'undefined') ? currentChatId : _agentLogOwnerChatId;
   if (!silent) {
     const prefix = fromAgent ? '[agent]$ ' : '$ ';
     agentLog(prefix + rawCmd, fromAgent ? 'agent-cmd' : 'cmd');

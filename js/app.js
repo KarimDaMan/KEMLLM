@@ -235,7 +235,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v105 · fix markdown tables with line-based parser + big labeled Download button on artifact cards + remove Code tab';
+const KEMLLM_BUILD = 'v106 · scope agentLog to originating chat id (was leaking into every chat once agent mode was used anywhere)';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

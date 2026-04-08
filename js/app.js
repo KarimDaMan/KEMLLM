@@ -235,7 +235,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v104 · Claude-style artifact cards in chat + preview pane View/Code toggle + copy/download';
+const KEMLLM_BUILD = 'v105 · fix markdown tables with line-based parser + big labeled Download button on artifact cards + remove Code tab';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

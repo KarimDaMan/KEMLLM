@@ -94,7 +94,8 @@ function escapeHTML(s) {
 
 function parseMarkdown(md) {
   if (!md) return '';
-  let html = md;
+  // Normalize line endings + fullwidth pipes (U+FF5C) that some models emit
+  let html = md.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\uff5c/g, '|');
   // Code blocks first
   const blocks = [];
   html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, (m, lang, code) => {
@@ -115,38 +116,65 @@ function parseMarkdown(md) {
   html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-  // GFM-style tables: | col | col |  with separator row | --- | --- |
-  // Match a header row, a separator row, and any number of body rows.
-  html = html.replace(
-    /(^|\n)(\|[^\n]+\|)\n(\|[ \-:|]+\|)\n((?:\|[^\n]+\|\n?)+)/g,
-    (m, lead, header, sep, body) => {
-      const splitRow = r => r.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
-      const heads = splitRow(header);
-      const aligns = splitRow(sep).map(s => {
-        if (/^:-+:$/.test(s)) return 'center';
-        if (/-+:$/.test(s)) return 'right';
-        if (/^:-+/.test(s)) return 'left';
-        return '';
-      });
-      const rows = body.trim().split('\n').map(splitRow);
-      let out = '<table class="md-table"><thead><tr>';
-      heads.forEach((h, i) => {
-        const a = aligns[i] ? ` style="text-align:${aligns[i]}"` : '';
-        out += `<th${a}>${h}</th>`;
-      });
-      out += '</tr></thead><tbody>';
-      rows.forEach(r => {
-        out += '<tr>';
-        r.forEach((c, i) => {
-          const a = aligns[i] ? ` style="text-align:${aligns[i]}"` : '';
-          out += `<td${a}>${c}</td>`;
+  // GFM tables — line-by-line scanner. Way more forgiving than the
+  // previous regex which missed tables with any kind of whitespace.
+  {
+    const isTableRow = (l) => {
+      const t = (l || '').trim();
+      return t.length >= 3 && t.startsWith('|') && t.endsWith('|');
+    };
+    const isSeparator = (l) => {
+      const t = (l || '').trim();
+      if (!isTableRow(t)) return false;
+      const inner = t.slice(1, -1);
+      // Every cell must be dashes/colons/spaces
+      return inner.split('|').every(c => /^\s*:?-{2,}:?\s*$/.test(c));
+    };
+    const parseRow = (l) => l.trim().slice(1, -1).split('|').map(c => c.trim());
+    const lines = html.split('\n');
+    const outLines = [];
+    let i = 0;
+    while (i < lines.length) {
+      if (isTableRow(lines[i]) && i + 1 < lines.length && isSeparator(lines[i + 1])) {
+        const heads = parseRow(lines[i]);
+        const aligns = parseRow(lines[i + 1]).map(s => {
+          const t = s.trim();
+          if (/^:-+:$/.test(t)) return 'center';
+          if (/-+:$/.test(t)) return 'right';
+          if (/^:-+/.test(t)) return 'left';
+          return '';
         });
-        out += '</tr>';
-      });
-      out += '</tbody></table>';
-      return lead + out;
+        let j = i + 2;
+        const rows = [];
+        while (j < lines.length && isTableRow(lines[j]) && !isSeparator(lines[j])) {
+          rows.push(parseRow(lines[j]));
+          j++;
+        }
+        let tbl = '<table class="md-table"><thead><tr>';
+        heads.forEach((h, k) => {
+          const a = aligns[k] ? ` style="text-align:${aligns[k]}"` : '';
+          tbl += `<th${a}>${h}</th>`;
+        });
+        tbl += '</tr></thead><tbody>';
+        rows.forEach(r => {
+          tbl += '<tr>';
+          // Pad short rows with empty cells, trim long ones
+          for (let k = 0; k < heads.length; k++) {
+            const a = aligns[k] ? ` style="text-align:${aligns[k]}"` : '';
+            tbl += `<td${a}>${r[k] || ''}</td>`;
+          }
+          tbl += '</tr>';
+        });
+        tbl += '</tbody></table>';
+        outLines.push(tbl);
+        i = j;
+      } else {
+        outLines.push(lines[i]);
+        i++;
+      }
     }
-  );
+    html = outLines.join('\n');
+  }
   // Bold/italic/strike
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
@@ -663,7 +691,10 @@ async function runAnalysisBlock(aiEl, block) {
         <div class="artifact-title">${escapeHTML(title)}</div>
         <div class="artifact-meta"><span class="artifact-filename">${escapeHTML(filename)}</span><span class="artifact-badge">HTML</span></div>
       </div>
-      <button class="artifact-dl" title="Download" type="button">↓</button>
+      <button class="artifact-dl" title="Download" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Download</span>
+      </button>
     `;
     card.addEventListener('click', (e) => {
       if (e.target.closest('.artifact-dl')) return;

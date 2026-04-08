@@ -11,7 +11,7 @@ let currentPanel = 'chat';
 //   #/chat/<chatId>     → a specific chat by id
 //   #/code, #/models, #/settings → other panels
 // Legacy (no hash) → defaults to chat.
-const VALID_PANELS = ['chat', 'code', 'media', 'settings'];
+const VALID_PANELS = ['chat', 'media', 'settings'];
 
 function parseHash() {
   const raw = (location.hash || '').replace(/^#\/?/, '');

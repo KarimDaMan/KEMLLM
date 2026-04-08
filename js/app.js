@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v71 · desktop probe auto-detects both nginx-new layout (/vnc.html at root) and flask-old layout (/desktop/vnc.html) so existing Spaces work without redeploying';
+const KEMLLM_BUILD = 'v72 · add allow-same-origin to chat-preview iframe sandbox so noVNC UI can read localStorage (desktop stack is actually working)';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

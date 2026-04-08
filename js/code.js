@@ -126,16 +126,18 @@ async function runViaRemote(lang, code) {
         body: JSON.stringify({ command: builder(code) })
       });
       let r = await tryExec();
-      // If the session went stale (container restarted, sleep-wake, etc.)
-      // the backend returns 404 { code: 'no_session' }. Create a fresh
-      // session and retry once — users shouldn't have to care.
+      // Stale-session auto-recovery. If the backend returns 404 { code:
+      // 'no_session' }, the container restarted and our cached session
+      // id is dead. Reset + retry once. Note: agentSessionId is declared
+      // with `let` in agent.js, so we assign DIRECTLY (window.x wouldn't
+      // work — let variables aren't on window even in script-tag mode).
       if (r.status === 404) {
         try {
           const txt = await r.clone().text();
           if (/no_session|session not found/i.test(txt)) {
-            if (typeof window !== 'undefined') window.agentSessionId = '';
+            agentSessionId = '';
             if (typeof agentStart === 'function') await agentStart();
-            if (typeof agentSessionId !== 'undefined' && agentSessionId) {
+            if (agentSessionId) {
               r = await tryExec();
             }
           }

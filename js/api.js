@@ -258,7 +258,7 @@ function getSystemPrompt(model) {
   // only injected into the API request when conditions are met.
   if (typeof chatMode !== 'undefined' && chatMode === 'agent' &&
       typeof getHfBackendUrl === 'function' && getHfBackendUrl()) {
-    lines.push('- DESKTOP CONTROL (computer use tool). You have a `computer` tool that can screenshot, click, type, press keys, and drag on a real Linux desktop running in a remote sandbox (1600×900). When the user asks you to do something visual — open an app, fill a form, navigate a webpage, click a button — USE THE TOOL. Always start with a screenshot to see the current state. Describe what you see before acting. After each action, take another screenshot to verify. Think step-by-step about coordinates. Do NOT ask permission to use the tool — just use it.');
+    lines.push('- DESKTOP CONTROL (computer use tool). You have a `computer` tool that can screenshot, click, type, press keys, and drag on a real Linux desktop running in a remote sandbox (1920×1080). When the user asks you to do something visual — open an app, fill a form, navigate a webpage, click a button — USE THE TOOL. ALWAYS start with `{action: "screenshot"}` to see the current state before doing anything else. Describe what you see, then act. After each action, take another screenshot to verify. Think step-by-step about coordinates. Do NOT ask permission to use the tool — just use it.');
   }
 
   // Sandbox web access — a real constraint the AI needs to know about.
@@ -392,9 +392,9 @@ async function callAnthropicDirect(model, messages, apiKey, onChunk) {
   const tools = useComputer ? [{
     type: 'computer_20241022',
     name: 'computer',
-    // Must match the Xvfb :0 resolution in start-desktop.sh
-    display_width_px: 1600,
-    display_height_px: 900,
+    // Must match the Xvfb :0 resolution in start-desktop.sh (1920x1080 since v88)
+    display_width_px: 1920,
+    display_height_px: 1080,
     display_number: 0,
   }] : undefined;
 

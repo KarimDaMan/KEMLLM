@@ -42,7 +42,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-panel xfce4-session xfce4-settings xfce4-appfinder \
     xfwm4 xfdesktop4 xfconf \
     yaru-theme-gtk yaru-theme-icon yaru-theme-sound \
-    ubuntu-wallpapers ubuntu-wallpapers-focal \
+    ubuntu-wallpapers \
     thunar gvfs gvfs-backends \
     thunderbird \
     rhythmbox \

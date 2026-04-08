@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v75 · desktop fixes: real Firefox from Mozilla tarball (not apt snap stub), xfce4-panel replaces plank for reliable left dock, drop broken gnome-software, ubuntu-wallpapers-focal + dynamic wallpaper picker, multi-threaded x11vnc (-threads -defer 30), noVNC quality=9 compression=2';
+const KEMLLM_BUILD = 'v76 · drop ubuntu-wallpapers-focal from apt list (package was dropped in Jammy repos and broke the build). Dynamic wallpaper picker still finds whatever ubuntu-wallpapers installs.';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

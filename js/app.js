@@ -54,14 +54,26 @@ function saveCurrentChat() {
   renderHistory();
 }
 function renderHistory() {
-  const list = loadHistory();
+  const all = loadHistory();
+  // Apply project filter if one is active
+  const list = currentProjectFilter
+    ? all.filter(c => c.projectId === currentProjectFilter)
+    : all;
+  const projs = loadProjects();
+  const projMap = {};
+  projs.forEach(p => { projMap[p.id] = p; });
+  const chatRow = (c, klass) => {
+    const proj = c.projectId && projMap[c.projectId];
+    const dot = proj ? `<span class="sb-chat-projdot" style="background:${proj.color}" title="${escapeHTML(proj.name)}"></span>` : '';
+    return `<div class="${klass}${c.id === currentChatId ? ' active' : ''}" onclick="loadChat('${c.id}')" oncontextmenu="event.preventDefault();openChatMenu('${c.id}',event);">${dot}<div class="sb-chat-txt">${escapeHTML(c.title)}</div><button class="sb-chat-del" onclick="event.stopPropagation();deleteChat('${c.id}')">×</button></div>`;
+  };
   // Sidebar: top 15 inline
   const sb = document.getElementById('sb-chats');
   if (sb) {
     if (!list.length) {
       sb.innerHTML = '<div class="sb-empty">No chats yet</div>';
     } else {
-      sb.innerHTML = list.slice(0, 15).map(c => `<div class="sb-chat${c.id === currentChatId ? ' active' : ''}" onclick="loadChat('${c.id}')"><div class="sb-chat-txt">${escapeHTML(c.title)}</div><button class="sb-chat-del" onclick="event.stopPropagation();deleteChat('${c.id}')">×</button></div>`).join('');
+      sb.innerHTML = list.slice(0, 15).map(c => chatRow(c, 'sb-chat')).join('');
     }
     const viewall = document.getElementById('sb-viewall');
     if (viewall) viewall.style.display = list.length > 15 ? 'block' : 'none';
@@ -72,9 +84,41 @@ function renderHistory() {
     if (!list.length) {
       el.innerHTML = '<div style="font-size:11px;color:var(--text3);text-align:center;padding:14px 8px;">No chats yet</div>';
     } else {
-      el.innerHTML = list.map(c => `<div class="hi${c.id === currentChatId ? ' active' : ''}" onclick="loadChat('${c.id}')"><div class="hi-txt">${escapeHTML(c.title)}</div><button class="hi-del" onclick="event.stopPropagation();deleteChat('${c.id}')">×</button></div>`).join('');
+      el.innerHTML = list.map(c => chatRow(c, 'hi')).join('');
     }
   }
+  renderProjects();
+}
+
+// Right-click menu on a chat — lets the user assign it to a project
+function openChatMenu(chatId, e) {
+  const menu = document.createElement('div');
+  menu.className = 'chat-ctx-menu';
+  const projs = loadProjects();
+  const history = loadHistory();
+  const chat = history.find(c => c.id === chatId);
+  const items = [
+    { label: 'No project', action: () => assignChatToProject(chatId, null) },
+    ...projs.map(p => ({
+      label: (chat?.projectId === p.id ? '✓ ' : '') + p.name,
+      action: () => assignChatToProject(chatId, p.id),
+      color: p.color,
+    })),
+  ];
+  menu.innerHTML = items.map((it, i) =>
+    `<div class="chat-ctx-item" data-idx="${i}">${it.color ? `<span class="sb-chat-projdot" style="background:${it.color}"></span>` : ''}${escapeHTML(it.label)}</div>`
+  ).join('');
+  menu.style.left = (e.clientX) + 'px';
+  menu.style.top = (e.clientY) + 'px';
+  document.body.appendChild(menu);
+  const close = () => { menu.remove(); document.removeEventListener('click', close); };
+  setTimeout(() => document.addEventListener('click', close), 0);
+  menu.addEventListener('click', (ev) => {
+    const it = ev.target.closest('.chat-ctx-item');
+    if (!it) return;
+    items[+it.dataset.idx].action();
+    close();
+  });
 }
 function loadChat(id, skipHash) {
   const list = loadHistory();
@@ -132,6 +176,71 @@ function deleteChat(id) {
   profileSetJSON('history', list);
   if (currentChatId === id) newChat();
   renderHistory();
+}
+
+// ===== Projects =====
+// Lightweight chat grouping. A project is { id, name, color }. Each chat
+// can have .projectId that references a project. The sidebar shows a
+// Projects section above Chats with a + button to create new ones.
+// Clicking a project filters the chat list.
+let currentProjectFilter = null; // null = all chats
+function loadProjects() {
+  try { return profileGetJSON('projects', []); } catch { return []; }
+}
+function saveProjects(list) { profileSetJSON('projects', list); }
+function createProject() {
+  const name = prompt('Project name:');
+  if (!name || !name.trim()) return;
+  const colors = ['#a78bfa', '#f472b6', '#4ade80', '#fb923c', '#f87171', '#60a5fa'];
+  const color = colors[Math.floor(Math.random() * colors.length)];
+  const list = loadProjects();
+  list.push({ id: 'proj_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: name.trim(), color });
+  saveProjects(list);
+  renderProjects();
+}
+function deleteProject(id) {
+  if (!confirm('Delete this project? (Chats inside will be unassigned but not deleted.)')) return;
+  let list = loadProjects();
+  list = list.filter(p => p.id !== id);
+  saveProjects(list);
+  // Clear projectId on any chats that were in it
+  const history = loadHistory();
+  history.forEach(c => { if (c.projectId === id) delete c.projectId; });
+  profileSetJSON('history', history);
+  if (currentProjectFilter === id) currentProjectFilter = null;
+  renderProjects();
+  renderHistory();
+}
+function selectProject(id) {
+  currentProjectFilter = currentProjectFilter === id ? null : id;
+  renderProjects();
+  renderHistory();
+}
+function assignChatToProject(chatId, projectId) {
+  const history = loadHistory();
+  const chat = history.find(c => c.id === chatId);
+  if (!chat) return;
+  if (projectId) chat.projectId = projectId;
+  else delete chat.projectId;
+  profileSetJSON('history', history);
+  renderHistory();
+}
+function renderProjects() {
+  const el = document.getElementById('sb-projects');
+  if (!el) return;
+  const list = loadProjects();
+  if (!list.length) {
+    el.innerHTML = '<div class="sb-proj-empty">No projects yet</div>';
+    return;
+  }
+  el.innerHTML = list.map(p => {
+    const active = currentProjectFilter === p.id;
+    return `<div class="sb-proj${active ? ' active' : ''}" onclick="selectProject('${p.id}')">
+      <span class="sb-proj-dot" style="background:${p.color}"></span>
+      <span class="sb-proj-name">${escapeHTML(p.name)}</span>
+      <button class="sb-proj-del" onclick="event.stopPropagation();deleteProject('${p.id}')" title="Delete project">×</button>
+    </div>`;
+  }).join('');
 }
 
 // ===== Background response auto-resume =====
@@ -239,7 +348,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v113 · add all Kling video models';
+const KEMLLM_BUILD = 'v114 · + menu with direct image/video gen, Projects, Kling v3, music stops on tab blur';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.
@@ -476,6 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('si-logo')?.addEventListener('click', () => siNav('chat'));
   document.getElementById('sb-viewall')?.addEventListener('click', toggleDrawer);
   document.getElementById('sb-new-chat')?.addEventListener('click', newChat);
+  document.getElementById('sb-new-project')?.addEventListener('click', createProject);
   document.getElementById('tb-new-chat')?.addEventListener('click', newChat);
   document.getElementById('dr-close')?.addEventListener('click', closeDrawer);
   document.getElementById('dr-new')?.addEventListener('click', newChat);
@@ -484,7 +594,56 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('sb-toggle')?.addEventListener('click', toggleSidebar);
   document.getElementById('sb-backdrop')?.addEventListener('click', closeSidebar);
 
-  // Attach button
+  // Plus button — opens a menu with Attach / Image / Video / Mode
+  document.getElementById('plus-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const menu = document.getElementById('plus-menu');
+    if (!menu) return;
+    // Mark the currently-active mode so the user sees their selection
+    menu.querySelectorAll('.plus-mode').forEach(el => {
+      el.classList.toggle('active', el.dataset.mode === chatMode);
+    });
+    menu.classList.toggle('open');
+  });
+  // Dismiss menu on outside click
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('plus-menu');
+    if (!menu || !menu.classList.contains('open')) return;
+    if (e.target.closest('#plus-menu') || e.target.closest('#plus-btn')) return;
+    menu.classList.remove('open');
+  });
+  // Menu item click dispatch
+  document.getElementById('plus-menu')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.plus-item');
+    if (!btn) return;
+    const act = btn.dataset.act;
+    document.getElementById('plus-menu').classList.remove('open');
+    if (act === 'attach') {
+      document.getElementById('attach-input').click();
+    } else if (act === 'image') {
+      openGenModal('image');
+    } else if (act === 'video') {
+      openGenModal('video');
+    } else if (act && act.startsWith('mode-')) {
+      setChatMode(btn.dataset.mode);
+    }
+  });
+  // Gen modal (direct image/video generation, no AI)
+  document.getElementById('gen-close')?.addEventListener('click', closeGenModal);
+  document.getElementById('gen-modal')?.querySelector('.gen-backdrop')?.addEventListener('click', closeGenModal);
+  document.getElementById('gen-go')?.addEventListener('click', runGenModal);
+  document.getElementById('gen-modal')?.addEventListener('click', (e) => {
+    const ratio = e.target.closest('.gen-ratio');
+    if (!ratio) return;
+    document.querySelectorAll('.gen-ratio').forEach(el => el.classList.remove('active'));
+    ratio.classList.add('active');
+  });
+  document.getElementById('gen-prompt')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runGenModal(); }
+  });
+
+  // Legacy fallback — the old attach button id still exists in some
+  // code paths; keep it firing the file input.
   document.getElementById('attach-btn')?.addEventListener('click', () => {
     document.getElementById('attach-input').click();
   });

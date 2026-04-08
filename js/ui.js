@@ -368,6 +368,19 @@ function _musicUnlockOnce() {
 document.addEventListener('click', _musicUnlockOnce, { once: false, capture: true });
 document.addEventListener('keydown', _musicUnlockOnce, { once: false, capture: true });
 
+// Tab-switch / window-blur: stop the music when the user switches to
+// another browser tab or minimizes. Resume when they come back and are
+// still on the home screen.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopHomeMusic();
+  } else {
+    syncHomeMusic();
+  }
+});
+window.addEventListener('blur', () => { stopHomeMusic(); });
+window.addEventListener('focus', () => { syncHomeMusic(); });
+
 function toggleDrawer() {
   const d = document.getElementById('drawer');
   if (d) d.classList.toggle('open');

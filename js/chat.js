@@ -1179,6 +1179,38 @@ function stopAgentLoop() {
 }
 
 // ===== Chat preview pane =====
+// Direct generate modal — lets the user generate an image or video
+// WITHOUT the AI. Calls handleImageRequest/handleVideoRequest with the
+// user's raw prompt. The AI path (via markers) still works unchanged.
+let _genModalType = 'image';
+function openGenModal(type) {
+  _genModalType = type || 'image';
+  const modal = document.getElementById('gen-modal');
+  const title = document.getElementById('gen-title');
+  const prompt = document.getElementById('gen-prompt');
+  if (!modal) return;
+  if (title) title.textContent = type === 'video' ? 'Generate video' : 'Generate image';
+  if (prompt) { prompt.value = ''; }
+  modal.querySelectorAll('.gen-ratio').forEach(el => el.classList.toggle('active', el.dataset.ar === '1:1'));
+  modal.classList.add('open');
+  setTimeout(() => prompt?.focus(), 80);
+}
+function closeGenModal() {
+  document.getElementById('gen-modal')?.classList.remove('open');
+}
+async function runGenModal() {
+  const prompt = document.getElementById('gen-prompt')?.value.trim();
+  if (!prompt) { showToast('Enter a prompt'); return; }
+  const activeRatio = document.querySelector('.gen-ratio.active');
+  const aspectRatio = activeRatio?.dataset.ar || '1:1';
+  closeGenModal();
+  if (_genModalType === 'video') {
+    if (typeof handleVideoRequest === 'function') handleVideoRequest(prompt, aspectRatio);
+  } else {
+    if (typeof handleImageRequest === 'function') handleImageRequest(prompt, aspectRatio);
+  }
+}
+
 function chatPreviewShow(url, title) {
   const pane = document.getElementById('chat-preview');
   const frame = document.getElementById('chat-preview-frame');

@@ -10,11 +10,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=113">
+<link rel="stylesheet" href="css/style.css?v=114">
 <!-- KaTeX for math rendering (lazy-loaded by chat.js when first math is detected) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" media="print" onload="this.media='all'">
 </head>
-<body data-kemllm-build="113">
+<body data-kemllm-build="114">
 
 <!-- ========== LOGIN SCREEN ========== -->
 <div id="login" class="show">
@@ -57,6 +57,12 @@
         <span class="si-lbl">Settings</span>
       </div>
     </div>
+
+    <div class="sb-section">
+      <span>Projects</span>
+      <button id="sb-new-project" class="sb-newchat" title="New project">+</button>
+    </div>
+    <div id="sb-projects" class="sb-projects"></div>
 
     <div class="sb-section">
       <span>Chats</span>
@@ -160,27 +166,46 @@
         <div id="msgs"></div>
       </div>
       <div id="input-wrap">
-        <div id="mode-row" class="mode-row">
-          <button class="mode-btn active" data-mode="chat" title="Normal chat">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            Chat
-          </button>
-          <button class="mode-btn" data-mode="agent" title="Agent mode — AI runs commands in a sandbox">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><polyline points="6 8 10 12 6 16"/><line x1="12" y1="16" x2="17" y2="16"/></svg>
-            Agent
-          </button>
-          <button id="chat-desktop-btn" class="mode-btn mode-btn-desktop" title="Show AI desktop (noVNC live view)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-            Desktop
-          </button>
-        </div>
         <div id="attach-preview" class="attach-preview"></div>
         <div id="input-box">
-          <button id="attach-btn" class="attach-btn" title="Attach image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+          <button id="plus-btn" class="attach-btn" title="Add — attach, generate, switch mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
           <input id="attach-input" type="file" multiple style="display:none">
           <textarea id="input-text" rows="1" placeholder="Ask anything, generate images, run code..."></textarea>
+          <button id="chat-desktop-btn" class="ib-icon desktop-icon" title="Show AI desktop (noVNC live view)" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></button>
           <button id="send-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
           <button id="stop-btn" title="Stop"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></button>
+        </div>
+      </div>
+
+      <!-- Plus button popover menu -->
+      <div id="plus-menu" class="plus-menu">
+        <button class="plus-item" data-act="attach"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg><span>Upload file</span></button>
+        <button class="plus-item" data-act="image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span>Generate image</span></button>
+        <button class="plus-item" data-act="video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg><span>Generate video</span></button>
+        <div class="plus-sep"></div>
+        <button class="plus-item plus-mode" data-act="mode-chat" data-mode="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Chat mode</span></button>
+        <button class="plus-item plus-mode" data-act="mode-agent" data-mode="agent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><polyline points="6 8 10 12 6 16"/><line x1="12" y1="16" x2="17" y2="16"/></svg><span>Agent mode</span></button>
+      </div>
+
+      <!-- Direct image / video generation modal -->
+      <div id="gen-modal" class="gen-modal">
+        <div class="gen-backdrop"></div>
+        <div class="gen-sheet">
+          <div class="gen-head">
+            <div id="gen-title" class="gen-title">Generate image</div>
+            <button id="gen-close" class="gen-close" type="button">×</button>
+          </div>
+          <textarea id="gen-prompt" class="gen-prompt" rows="3" placeholder="Describe what you want… e.g. 'a purple nebula with neon stars, cinematic'"></textarea>
+          <div class="gen-ratios">
+            <button class="gen-ratio active" data-ar="1:1">1:1 Square</button>
+            <button class="gen-ratio" data-ar="16:9">16:9 Wide</button>
+            <button class="gen-ratio" data-ar="9:16">9:16 Tall</button>
+            <button class="gen-ratio" data-ar="4:3">4:3</button>
+            <button class="gen-ratio" data-ar="21:9">21:9 Cinema</button>
+          </div>
+          <div class="gen-foot">
+            <button id="gen-go" class="gen-go" type="button">Generate</button>
+          </div>
         </div>
       </div>
     </div>
@@ -524,13 +549,13 @@
 
 <div id="toast"></div>
 
-<script src="js/state.js?v=113"></script>
-<script src="js/models.js?v=113"></script>
-<script src="js/api.js?v=113"></script>
-<script src="js/chat.js?v=113"></script>
-<script src="js/code.js?v=113"></script>
-<script src="js/agent.js?v=113"></script>
-<script src="js/ui.js?v=113"></script>
-<script src="js/app.js?v=113"></script>
+<script src="js/state.js?v=114"></script>
+<script src="js/models.js?v=114"></script>
+<script src="js/api.js?v=114"></script>
+<script src="js/chat.js?v=114"></script>
+<script src="js/code.js?v=114"></script>
+<script src="js/agent.js?v=114"></script>
+<script src="js/ui.js?v=114"></script>
+<script src="js/app.js?v=114"></script>
 </body>
 </html>

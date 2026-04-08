@@ -198,6 +198,7 @@ const VIDEO_MODELS = [
   // xAI Grok video
   { id: 'grok-imagine-video', name: 'Grok Imagine Video', replicateId: 'xai/grok-imagine-video' },
   // Kuaishou Kling — all known variants on Replicate (kwaivgi account)
+  { id: 'kling-v3',            name: 'Kling v3',            replicateId: 'kwaivgi/kling-v3' },
   { id: 'kling-v2.1-master',   name: 'Kling v2.1 Master',   replicateId: 'kwaivgi/kling-v2.1-master' },
   { id: 'kling-v2.1',          name: 'Kling v2.1',          replicateId: 'kwaivgi/kling-v2.1' },
   { id: 'kling-v2.1-pro',      name: 'Kling v2.1 Pro',      replicateId: 'kwaivgi/kling-v2.1-pro' },

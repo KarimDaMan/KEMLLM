@@ -632,27 +632,51 @@ function isInteractiveApp(block) {
 async function runAnalysisBlock(aiEl, block) {
   if (!aiEl || !aiEl.parentNode) return null;
 
-  // HTML artifact path — no Piston, just render a preview iframe
+  // HTML artifact path — no Piston, just render a Claude-style artifact
+  // card in the chat flow and open the preview pane.
   if (block.lang === 'html' || isInteractiveApp(block)) {
-    const strip = document.createElement('div');
-    strip.className = 'code-strip ok';
-    strip.innerHTML = `<button type="button" class="code-strip-bar"><span class="code-strip-dot"></span><span class="code-strip-label">HTML preview ready · click to open</span></button>`;
-    aiEl.parentNode.insertBefore(strip, aiEl.nextSibling);
-    scrollToBottom();
     const htmlCode = block.lang === 'html' ? block.code : `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Preview</title></head><body><script>${block.code}<\/script></body></html>`;
-    strip.querySelector('.code-strip-bar').addEventListener('click', () => {
-      // Open in the chat preview pane via a blob URL (srcdoc would also
-      // work but blob URLs survive reloads better for longer HTML).
-      const blob = new Blob([htmlCode], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      if (typeof chatPreviewShow === 'function') chatPreviewShow(url, 'HTML Preview');
+    // Extract title: prefer <title>, then first <h1>, then a default
+    let title = 'HTML Artifact';
+    const titleMatch = htmlCode.match(/<title[^>]*>([^<]+)<\/title>/i);
+    if (titleMatch) title = titleMatch[1].trim();
+    else {
+      const h1Match = htmlCode.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+      if (h1Match) title = h1Match[1].replace(/&[^;]+;/g, '').trim();
+    }
+    // Derive a filename from the title
+    const filename = title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) + '.html';
+    // Store the raw source on a hidden attribute so the card can reopen
+    // the preview without regenerating the blob every time.
+    const cardId = 'art_' + Math.random().toString(36).slice(2, 9);
+    window._kemllmArtifacts = window._kemllmArtifacts || {};
+    window._kemllmArtifacts[cardId] = { html: htmlCode, title, filename };
+
+    const card = document.createElement('div');
+    card.className = 'artifact-card';
+    card.dataset.artId = cardId;
+    card.innerHTML = `
+      <div class="artifact-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      </div>
+      <div class="artifact-body">
+        <div class="artifact-title">${escapeHTML(title)}</div>
+        <div class="artifact-meta"><span class="artifact-filename">${escapeHTML(filename)}</span><span class="artifact-badge">HTML</span></div>
+      </div>
+      <button class="artifact-dl" title="Download" type="button">↓</button>
+    `;
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.artifact-dl')) return;
+      openArtifactPreview(cardId);
     });
-    // Auto-open the preview the first time it's generated
-    setTimeout(() => {
-      const blob = new Blob([htmlCode], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      if (typeof chatPreviewShow === 'function') chatPreviewShow(url, 'HTML Preview');
-    }, 200);
+    card.querySelector('.artifact-dl').addEventListener('click', (e) => {
+      e.stopPropagation();
+      downloadArtifact(cardId);
+    });
+    aiEl.parentNode.insertBefore(card, aiEl.nextSibling);
+    scrollToBottom();
+    // Auto-open the preview the first time
+    setTimeout(() => openArtifactPreview(cardId), 200);
     return { stdout: '', stderr: '', exit: 0, isHtmlArtifact: true };
   }
 
@@ -1130,11 +1154,76 @@ function chatPreviewShow(url, title) {
   if (title && titleEl) titleEl.textContent = title;
   frame.src = url;
   pane.classList.add('show');
+  pane.classList.remove('mode-code');
+  // Hide the raw-code view by default when loading a new URL
+  const codeView = document.getElementById('chat-preview-code');
+  if (codeView) codeView.style.display = 'none';
   // Show the audio toggle for the AI Desktop preview. Detect by title
   // (exact match) or by URL containing 'vnc' — both mean noVNC is loaded.
   const audioBtn = document.getElementById('chat-preview-audio');
   const isDesktop = title === 'AI Desktop' || /vnc(\.html|_lite)/.test(url || '');
   if (audioBtn) audioBtn.style.display = isDesktop ? 'inline-block' : 'none';
+}
+
+// Open an HTML artifact card's preview in the chat-preview pane.
+// Uses the cached raw HTML so we can also switch to "Code" view.
+function openArtifactPreview(cardId) {
+  const art = (window._kemllmArtifacts || {})[cardId];
+  if (!art) return;
+  const blob = new Blob([art.html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  chatPreviewShow(url, art.title || 'HTML Preview');
+  const pane = document.getElementById('chat-preview');
+  if (pane) pane.dataset.artId = cardId;
+  // Populate the raw code view too (hidden until user toggles to Code)
+  const codeView = document.getElementById('chat-preview-code');
+  if (codeView) {
+    codeView.innerHTML = '';
+    const pre = document.createElement('pre');
+    pre.textContent = art.html;
+    codeView.appendChild(pre);
+  }
+}
+
+function downloadArtifact(cardId) {
+  const art = (window._kemllmArtifacts || {})[cardId];
+  if (!art) return;
+  const blob = new Blob([art.html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = art.filename || 'artifact.html';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 500);
+}
+
+// Toggle the chat-preview pane between View (iframe) and Code (<pre>)
+function chatPreviewToggleMode() {
+  const pane = document.getElementById('chat-preview');
+  const frame = document.getElementById('chat-preview-frame');
+  const codeView = document.getElementById('chat-preview-code');
+  const toggleBtn = document.getElementById('chat-preview-toggle');
+  if (!pane || !frame || !codeView) return;
+  const showCode = !pane.classList.contains('mode-code');
+  pane.classList.toggle('mode-code', showCode);
+  frame.style.display = showCode ? 'none' : '';
+  codeView.style.display = showCode ? 'block' : 'none';
+  if (toggleBtn) toggleBtn.textContent = showCode ? 'View' : 'Code';
+}
+
+function chatPreviewCopyArtifact() {
+  const pane = document.getElementById('chat-preview');
+  const cardId = pane?.dataset?.artId;
+  const art = cardId ? (window._kemllmArtifacts || {})[cardId] : null;
+  if (!art) { showToast('Nothing to copy'); return; }
+  navigator.clipboard.writeText(art.html).then(() => showToast('HTML copied'));
+}
+
+function chatPreviewDownloadArtifact() {
+  const pane = document.getElementById('chat-preview');
+  const cardId = pane?.dataset?.artId;
+  if (cardId) downloadArtifact(cardId);
 }
 function chatPreviewClose() {
   const pane = document.getElementById('chat-preview');

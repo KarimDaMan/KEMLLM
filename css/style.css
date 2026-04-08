@@ -1,3 +1,22 @@
+/* Claude-style HTML artifact card shown in the chat flow */
+.artifact-card{display:flex;align-items:center;gap:12px;margin:10px 34px 14px 34px;max-width:640px;padding:12px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;cursor:pointer;transition:background .15s,border-color .15s,transform .12s;}
+.artifact-card:hover{background:var(--bg3);border-color:var(--accent);transform:translateY(-1px);}
+.artifact-icon{width:40px;height:40px;border-radius:8px;background:rgba(124,90,224,.15);border:1px solid rgba(124,90,224,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#a78bfa;}
+.artifact-icon svg{width:20px;height:20px;}
+.artifact-body{flex:1;min-width:0;}
+.artifact-title{font-size:13.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.artifact-meta{display:flex;align-items:center;gap:8px;margin-top:3px;}
+.artifact-filename{font-size:11px;color:var(--text3);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:100%;}
+.artifact-badge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(124,90,224,.25);color:#c4b5fd;letter-spacing:.05em;flex-shrink:0;}
+.artifact-dl{background:var(--bg);border:1px solid var(--border2);color:var(--text2);width:32px;height:32px;border-radius:7px;cursor:pointer;font-size:15px;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s,color .15s;}
+.artifact-dl:hover{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+/* Chat preview pane code-view mode (raw HTML source) */
+.chat-preview-code{flex:1;overflow:auto;background:var(--bg);display:none;}
+.chat-preview-code pre{margin:0;padding:14px 16px;font-family:var(--mono);font-size:12px;color:#cbd5e1;white-space:pre-wrap;word-break:break-word;}
+.chat-preview.mode-code .chat-preview-frame{display:none;}
+.chat-preview.mode-code .chat-preview-code{display:block;}
+
 /* Markdown tables (GFM) */
 .md-table{border-collapse:collapse;margin:14px 0;font-size:13px;border:1px solid var(--border2);border-radius:8px;overflow:hidden;display:block;max-width:100%;overflow-x:auto;}
 .md-table thead{background:var(--bg3);}

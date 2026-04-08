@@ -235,7 +235,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v103 · media tab, HTML artifact preview, markdown tables, aggressive music stop off home, stronger HTML system prompt, agent log guard for home screen';
+const KEMLLM_BUILD = 'v104 · Claude-style artifact cards in chat + preview pane View/Code toggle + copy/download';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -567,6 +567,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Chat preview pane controls
   document.getElementById('chat-preview-close')?.addEventListener('click', chatPreviewClose);
   document.getElementById('chat-preview-audio')?.addEventListener('click', togglePreviewAudio);
+  document.getElementById('chat-preview-toggle')?.addEventListener('click', chatPreviewToggleMode);
+  document.getElementById('chat-preview-copy')?.addEventListener('click', chatPreviewCopyArtifact);
+  document.getElementById('chat-preview-dl')?.addEventListener('click', chatPreviewDownloadArtifact);
+  document.getElementById('chat-preview-reload')?.addEventListener('click', chatPreviewReload);
+  document.getElementById('chat-preview-fs')?.addEventListener('click', chatPreviewFullscreen);
 
   // Fullscreen image viewer
   document.getElementById('img-viewer-close')?.addEventListener('click', closeImageViewer);

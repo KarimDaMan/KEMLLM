@@ -456,9 +456,10 @@ async function sendMessage() {
   // IMAGE / VIDEO mode: route to the inline generator panel instead
   // of calling the chat model. The chip strip above the input box
   // already collected the params; we just need the prompt text from
-  // the textarea (already captured into `text` above).
+  // the textarea (already captured into `text` above) and any pending
+  // attachments (image-to-image source frame, etc.).
   if (chatMode === 'image' || chatMode === 'video') {
-    if (typeof runGenSend === 'function') runGenSend(text);
+    if (typeof runGenSend === 'function') runGenSend(text, atts);
     return;
   }
 
@@ -1286,14 +1287,34 @@ window._genState = window._genState || {
 
 // Decide which schema property goes into which chip "bucket".
 // Returns one of: 'aspect' | 'duration' | 'quality' | 'extras' | 'skip'
-// (skip = handled separately, e.g. the prompt field which is the textarea).
+// (skip = handled separately, e.g. the prompt field which is the textarea
+// and generic image inputs which come from chat attachments).
 function classifyGenField(name, prop) {
   const n = (name || '').toLowerCase();
-  if (n === 'prompt' || n === 'negative_prompt' || n === 'image' || n === 'image_input' || n === 'input_image' || n === 'source_image') return 'skip';
+  if (n === 'prompt' || n === 'negative_prompt') return 'skip';
+  // Generic image inputs (single source image) are filled from chat
+  // attachments — the user attaches via the + menu's "Upload file" item
+  // and it gets injected at send time. Don't render a chip for them.
+  if (n === 'image' || n === 'image_input' || n === 'input_image' || n === 'source_image' || n === 'reference_image' || n === 'subject_image' || n === 'image_url' || n === 'init_image') return 'skip';
   if (n.includes('aspect') || (n === 'width' || n === 'height')) return 'aspect';
   if (n.includes('duration') || n === 'seconds' || n === 'length' || n.includes('num_frames') || n === 'frame_count') return 'duration';
   if (n.includes('quality') || n.includes('inference_step') || n.includes('num_steps') || n === 'steps' || n.includes('guidance') || n.includes('cfg')) return 'quality';
   return 'extras';
+}
+
+// Detect a schema field that holds a file URL — first/last frame, mask,
+// reference image (if not already skipped above), control image, etc.
+// Replicate marks these with format: 'uri' or x-cog-type: 'File'. We
+// also fall back to a name heuristic for older models that omit the
+// format hint. File fields render as a "+" button in the Extras
+// popover that uploads through Replicate's file API.
+function isFileField(name, prop) {
+  if (!prop) return false;
+  if (prop.format === 'uri') return true;
+  if (prop['x-cog-type'] === 'File' || prop['x-cog-type'] === 'file') return true;
+  if (prop.type !== 'string') return false; // numeric fields are never files
+  return /(frame|mask|image|video|audio|file|reference)$/i.test(name) ||
+         /^(start|end|first|last)_/i.test(name);
 }
 
 // Build the chip definitions for a given resolved schema. Returns an
@@ -1464,9 +1485,63 @@ function openGenChipPopover(chipId, anchorEl, chipDef) {
   pop.addEventListener('input', (e) => handleChipInput(e, chipId, state));
   pop.addEventListener('change', (e) => handleChipInput(e, chipId, state));
   pop.addEventListener('click', (e) => {
+    // File picker — open a hidden file input, upload to Replicate, store
+    // the resulting URL in state.values[field]. Used for first/last frame,
+    // mask, control image, etc.
+    const fileBtn = e.target.closest('.gen-pop-fileBtn');
+    if (fileBtn && fileBtn.dataset.field) {
+      e.preventDefault();
+      const field = fileBtn.dataset.field;
+      const fi = document.createElement('input');
+      fi.type = 'file';
+      fi.accept = 'image/*,video/*';
+      fi.style.display = 'none';
+      document.body.appendChild(fi);
+      fi.addEventListener('change', async () => {
+        const f = fi.files && fi.files[0];
+        fi.remove();
+        if (!f) return;
+        try {
+          fileBtn.textContent = 'uploading…';
+          fileBtn.disabled = true;
+          // Read the file as a data URL, then upload to Replicate's
+          // /v1/files endpoint via the worker proxy. Returns a public
+          // https URL the prediction will accept as a string input.
+          const dataUrl = await new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(r.result);
+            r.onerror = () => reject(new Error('file read failed'));
+            r.readAsDataURL(f);
+          });
+          const apiKey = (typeof getRepKey === 'function') ? getRepKey() : null;
+          if (!apiKey) throw new Error('No Replicate API key set');
+          const url = await replicateUploadFile(dataUrl, apiKey);
+          state.values[field] = url;
+          renderGenChips();
+          // Re-render the popover so the button shows ✓ and a clear link
+          closeAllGenPopovers();
+        } catch (err) {
+          fileBtn.textContent = 'upload failed: ' + (err.message || String(err));
+          fileBtn.disabled = false;
+          showToast('Upload failed: ' + (err.message || String(err)));
+        }
+      });
+      fi.click();
+      return;
+    }
     const pill = e.target.closest('.gen-pop-pill');
     if (pill && pill.dataset.field) {
-      state.values[pill.dataset.field] = pill.dataset.value;
+      // Coerce to the schema type. Replicate is strict — `duration` on
+      // Kling is enum [5, 10] of INTEGERS, so storing the pill's
+      // string "5" makes the prediction reject with 422
+      // "Expected: integer, given: string". data-type comes from the
+      // schema prop.type set when the pill was rendered.
+      const t = pill.dataset.type;
+      let v = pill.dataset.value;
+      if (t === 'integer') v = parseInt(v, 10);
+      else if (t === 'number') v = parseFloat(v);
+      else if (t === 'boolean') v = (v === 'true' || v === '1');
+      state.values[pill.dataset.field] = v;
       // Update active visual on siblings of the same field
       pop.querySelectorAll(`.gen-pop-pill[data-field="${pill.dataset.field}"]`).forEach(p =>
         p.classList.toggle('active', p.dataset.value === pill.dataset.value));
@@ -1497,15 +1572,25 @@ function handleChipInput(e, chipId, state) {
   const t = e.target;
   if (!t || !t.dataset || !t.dataset.field) return;
   const field = t.dataset.field;
+  // Schema type stamped on the input/range when it was rendered.
+  // 'integer' must use parseInt so we don't send 5.5 to a field that
+  // wants whole numbers (Replicate validates types strictly).
+  const stype = t.dataset.type || '';
   let value;
   if (t.type === 'range' || t.type === 'number') {
-    value = parseFloat(t.value);
+    value = (stype === 'integer') ? parseInt(t.value, 10) : parseFloat(t.value);
     if (Number.isNaN(value)) value = null;
     // Update the live numeric label next to the slider
     const lbl = t.parentElement?.querySelector('.gen-pop-num');
-    if (lbl) lbl.textContent = String(value);
+    if (lbl && value != null) lbl.textContent = String(value);
   } else if (t.type === 'checkbox') {
     value = !!t.checked;
+  } else if (stype === 'integer') {
+    value = parseInt(t.value, 10);
+    if (Number.isNaN(value)) value = null;
+  } else if (stype === 'number') {
+    value = parseFloat(t.value);
+    if (Number.isNaN(value)) value = null;
   } else {
     value = t.value;
   }
@@ -1527,20 +1612,21 @@ function renderChipPopBody(chipId, chipDef, values) {
     const arField = chipDef.fields.find(f => /aspect/i.test(f.name));
     if (arField && Array.isArray(arField.prop?.enum)) {
       const enums = arField.prop.enum;
+      const t = arField.prop.type || 'string';
       lines.push('<div class="gen-pop-grid">');
       enums.forEach(v => {
-        const active = values[arField.name] === v ? ' active' : '';
-        lines.push(`<button type="button" class="gen-pop-pill${active}" data-field="${escapeHTML(arField.name)}" data-value="${escapeHTML(String(v))}">${escapeHTML(String(v))}</button>`);
+        const active = String(values[arField.name]) === String(v) ? ' active' : '';
+        lines.push(`<button type="button" class="gen-pop-pill${active}" data-field="${escapeHTML(arField.name)}" data-type="${escapeHTML(t)}" data-value="${escapeHTML(String(v))}">${escapeHTML(String(v))}</button>`);
       });
       lines.push('</div>');
     } else {
-      // Fallback to canonical aspect set
+      // Fallback to canonical aspect set (string ratios)
       const enums = ['1:1', '16:9', '9:16', '4:3', '3:4', '21:9', '3:2', '2:3'];
       const fname = arField?.name || 'aspect_ratio';
       lines.push('<div class="gen-pop-grid">');
       enums.forEach(v => {
         const active = values[fname] === v ? ' active' : '';
-        lines.push(`<button type="button" class="gen-pop-pill${active}" data-field="${escapeHTML(fname)}" data-value="${escapeHTML(v)}">${escapeHTML(v)}</button>`);
+        lines.push(`<button type="button" class="gen-pop-pill${active}" data-field="${escapeHTML(fname)}" data-type="string" data-value="${escapeHTML(v)}">${escapeHTML(v)}</button>`);
       });
       lines.push('</div>');
     }
@@ -1566,35 +1652,53 @@ function renderFieldControl(field, values) {
   const desc = prop.description || '';
   const lines = [`<div class="gen-pop-field">`];
   lines.push(`<label>${escapeHTML(label)}${desc ? ` <span style="color:var(--text3);font-weight:400;">— ${escapeHTML(desc.slice(0, 80))}</span>` : ''}</label>`);
-  // Enum → grid of pills
+  // File field → "+" button that uploads through Replicate. The
+  // resulting https URL goes into state.values[name]. Used for
+  // first_frame / last_frame / mask / control_image / etc.
+  if (isFileField(name, prop)) {
+    const has = !!val;
+    const text = has ? '✓ file uploaded' : '+ Add file';
+    lines.push(`<div class="gen-pop-row"><button type="button" class="gen-pop-fileBtn${has ? ' has' : ''}" data-field="${escapeHTML(name)}">${text}</button></div>`);
+    if (has) {
+      lines.push(`<button type="button" class="gen-pop-clear" data-field="${escapeHTML(name)}">remove</button>`);
+    }
+    lines.push(`</div>`);
+    return lines.join('');
+  }
+  // Enum → grid of pills. Stamp data-type so the click handler can
+  // coerce string-attribute values back to integer/number/boolean
+  // (Replicate's input validator is strict and rejects string "5"
+  // when the schema says integer 5).
   if (Array.isArray(prop.enum) && prop.enum.length) {
+    const t = prop.type || 'string';
     lines.push('<div class="gen-pop-grid">');
     prop.enum.forEach(v => {
       const active = String(val) === String(v) ? ' active' : '';
-      lines.push(`<button type="button" class="gen-pop-pill${active}" data-field="${escapeHTML(name)}" data-value="${escapeHTML(String(v))}">${escapeHTML(String(v))}</button>`);
+      lines.push(`<button type="button" class="gen-pop-pill${active}" data-field="${escapeHTML(name)}" data-type="${escapeHTML(t)}" data-value="${escapeHTML(String(v))}">${escapeHTML(String(v))}</button>`);
     });
     lines.push('</div>');
   } else if ((prop.type === 'integer' || prop.type === 'number') && prop.minimum != null && prop.maximum != null) {
-    // Numeric with bounds → slider + live label
+    // Numeric with bounds → slider + live label. data-type so the
+    // input handler coerces with parseInt vs parseFloat correctly.
     const min = prop.minimum;
     const max = prop.maximum;
     const step = prop.type === 'integer' ? 1 : (max - min) / 100;
     const cur = (val != null) ? val : (prop.default != null ? prop.default : min);
     lines.push(`<div class="gen-pop-row">`);
-    lines.push(`<input type="range" min="${min}" max="${max}" step="${step}" value="${cur}" data-field="${escapeHTML(name)}">`);
+    lines.push(`<input type="range" min="${min}" max="${max}" step="${step}" value="${cur}" data-field="${escapeHTML(name)}" data-type="${escapeHTML(prop.type)}">`);
     lines.push(`<span class="gen-pop-num">${cur}</span>`);
     lines.push(`</div>`);
   } else if (prop.type === 'integer' || prop.type === 'number') {
     // Numeric, no bounds → number input
     const cur = (val != null) ? val : (prop.default != null ? prop.default : '');
-    lines.push(`<div class="gen-pop-row"><input type="number" value="${cur}" data-field="${escapeHTML(name)}"></div>`);
+    lines.push(`<div class="gen-pop-row"><input type="number" value="${cur}" data-field="${escapeHTML(name)}" data-type="${escapeHTML(prop.type)}"></div>`);
   } else if (prop.type === 'boolean') {
     const checked = val ? ' checked' : '';
-    lines.push(`<div class="gen-pop-row"><label style="display:flex;align-items:center;gap:6px;color:var(--text);font-size:12px;"><input type="checkbox" data-field="${escapeHTML(name)}"${checked}> on</label></div>`);
+    lines.push(`<div class="gen-pop-row"><label style="display:flex;align-items:center;gap:6px;color:var(--text);font-size:12px;"><input type="checkbox" data-field="${escapeHTML(name)}" data-type="boolean"${checked}> on</label></div>`);
   } else {
     // String / unknown → text input
     const cur = (val != null) ? val : (prop.default != null ? prop.default : '');
-    lines.push(`<div class="gen-pop-row"><input type="text" value="${escapeHTML(String(cur))}" data-field="${escapeHTML(name)}" placeholder="${escapeHTML(String(prop.default || ''))}"></div>`);
+    lines.push(`<div class="gen-pop-row"><input type="text" value="${escapeHTML(String(cur))}" data-field="${escapeHTML(name)}" data-type="string" placeholder="${escapeHTML(String(prop.default || ''))}"></div>`);
   }
   if (val != null && val !== '') {
     lines.push(`<button type="button" class="gen-pop-clear" data-field="${escapeHTML(name)}">clear</button>`);
@@ -1604,10 +1708,17 @@ function renderFieldControl(field, values) {
 }
 
 // Called from sendMessage when chatMode is image/video. Receives the
-// prompt text (already captured before the textarea was cleared) and
-// merges in all chip values as `extras`, then dispatches to the right
+// prompt text and any pending attachments (already captured by
+// sendMessage before the textarea + attach tray were cleared), merges
+// in all chip values as `extras`, and dispatches to the right
 // generator.
-async function runGenSend(promptText) {
+//
+// Attachment handling:
+//   image mode  + image attachment → handleEditImageRequest (image-to-image)
+//   video mode  + image attachment → upload to Replicate, inject as
+//                                    extras.image for image-to-video
+//                                    models that take a source frame
+async function runGenSend(promptText, atts) {
   const prompt = (promptText || '').trim();
   if (!prompt) { showToast('Type a prompt first'); return; }
   const mode = chatMode === 'video' ? 'video' : 'image';
@@ -1617,11 +1728,39 @@ async function runGenSend(promptText) {
   // path (which also sets width/height/orientation hints downstream).
   const aspectRatio = extras.aspect_ratio || null;
   delete extras.aspect_ratio;
-  if (mode === 'video') {
-    if (typeof handleVideoRequest === 'function') handleVideoRequest(prompt, aspectRatio, extras);
-  } else {
+
+  const imgAtt = (atts || []).find(a => a && (a.isImage || (a.mime || '').startsWith('image/'))) || null;
+
+  if (mode === 'image') {
+    if (imgAtt && typeof handleEditImageRequest === 'function') {
+      // Image-to-image edit. Pass the source attachment through;
+      // editImage will pick the right field name per model.
+      handleEditImageRequest(prompt, imgAtt, aspectRatio);
+      return;
+    }
     if (typeof handleImageRequest === 'function') handleImageRequest(prompt, aspectRatio, extras);
+    return;
   }
+
+  // VIDEO MODE
+  if (imgAtt) {
+    // Upload the source image to Replicate so the prediction input can
+    // reference it as a https URL. Then put it into extras under all
+    // the common field names (image / input_image / start_image) so
+    // whichever the selected video model expects, it picks one up.
+    try {
+      const apiKey = (typeof getRepKey === 'function') ? getRepKey() : null;
+      if (apiKey && typeof replicateUploadFile === 'function') {
+        const url = await replicateUploadFile(imgAtt.dataUrl, apiKey);
+        extras.image = url;
+        extras.input_image = url;
+        extras.start_image = url;
+      }
+    } catch (e) {
+      showToast('Source image upload failed: ' + (e.message || String(e)));
+    }
+  }
+  if (typeof handleVideoRequest === 'function') handleVideoRequest(prompt, aspectRatio, extras);
 }
 
 function chatPreviewShow(url, title) {

@@ -348,7 +348,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v118 · inline generator panel — Generate image/video buttons flip mode and show dynamic chip strip (Aspect/Quality/Duration/Extras) built from each model\'s Replicate openapi_schema, send button routes prompt+chip values to the model. Desktop sub-action moved into the + menu (agent-mode only). Mobile notch / Dynamic Island safe-area padding on topbar and input.';
+const KEMLLM_BUILD = 'v119 · gen chips coerce schema types (fixes Replicate 422 "Expected integer, given string"), file fields render as + upload buttons (first/last frame), generic image inputs come from chat attachments, image-mode + attachment routes to image-edit, video-mode + attachment uploads as start frame. New Kling: v3 Omni / v3 Video / v3 Motion Control / v2.6 / v2.6 Motion Control / v2.5 Turbo Pro / O1 / Avatar v2.';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.

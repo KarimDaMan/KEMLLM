@@ -63,6 +63,10 @@
 .gen-pop-pill.active{background:var(--accent);border-color:var(--accent);color:#fff;}
 .gen-pop-clear{background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;font-family:inherit;padding:4px 0;margin-top:4px;text-decoration:underline;}
 .gen-pop-clear:hover{color:var(--text);}
+.gen-pop-fileBtn{background:var(--bg3);border:1px dashed var(--border2);color:var(--text2);padding:10px 14px;border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer;width:100%;text-align:center;transition:all .15s;}
+.gen-pop-fileBtn:hover{background:var(--bg4);color:var(--text);border-color:var(--text3);}
+.gen-pop-fileBtn.has{background:rgba(124,90,224,.15);border-style:solid;border-color:var(--accent);color:var(--text);}
+.gen-pop-fileBtn:disabled{opacity:.6;cursor:wait;}
 /* Extras popover (full schema form) is taller and scrollable */
 .gen-pop.extras{min-width:320px;max-width:380px;max-height:60vh;overflow-y:auto;}
 .gen-pop.extras .gen-pop-field{margin-bottom:12px;}

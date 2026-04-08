@@ -1,0 +1,817 @@
+# KEMLLM Agent Backend — ULTRA build
+#
+# The "everything" build. Ubuntu 26.04 LTS base, full XFCE4 desktop with
+# GNOME session as a fallback, every major language runtime, every cloud
+# CLI, all the ML/data tooling, full LibreOffice, Firefox + Chromium,
+# VS Code in the browser via code-server, Jupyter Lab, every media and
+# networking tool, rclone + s3fs-fuse + gcsfuse + blobfuse2 for cloud
+# storage bucket mounting, and an entrypoint that auto-mounts whatever
+# buckets are configured via environment variables.
+#
+# Build is huge (~6-10 GB image). Needs a beefy host. Intended for the
+# upgraded HF Spaces tiers (CPU-upgrade 8 vCPU / 32 GB RAM or better) or
+# self-hosted on a dedicated box. Will OOM the free tier.
+#
+# Architecture inside the container (unchanged from Dockerfile.desktop):
+#
+#   :7860   nginx            (front door HF Spaces sees)
+#    │
+#    ├──►  :8000   Flask app.py         (API: /sessions, /files, /exec, etc.)
+#    └──►  :6080   websockify+noVNC     (/ and /websockify WS)
+#
+# Environment variables for storage bucket mounting (all optional):
+#
+#   HF Persistent Storage — automatic if mounted at /data. No env needed.
+#
+#   RCLONE_CONFIG_B64    — base64 of a full rclone.conf. If set, /mnt/rclone
+#                          symlinks every remote into ~/Buckets/<remote>/.
+#   S3_BUCKET            — name of an AWS S3 bucket. Requires AWS_ACCESS_KEY_ID
+#                          and AWS_SECRET_ACCESS_KEY. Mounted at /mnt/s3 via
+#                          s3fs-fuse and symlinked to ~/Buckets/s3.
+#   GCS_BUCKET           — name of a Google Cloud Storage bucket. Requires
+#                          GCS_SERVICE_ACCOUNT_KEY_B64 (base64 of the service
+#                          account JSON key). Mounted at /mnt/gcs via gcsfuse
+#                          and symlinked to ~/Buckets/gcs.
+#   AZURE_CONTAINER      — name of an Azure Blob Storage container. Requires
+#                          AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_KEY (or
+#                          connection string via AZURE_STORAGE_CONNECTION).
+#                          Mounted at /mnt/azure via blobfuse2 and symlinked
+#                          to ~/Buckets/azure.
+#
+# FUSE mounts require /dev/fuse and SYS_ADMIN cap. HF Spaces gives neither
+# on free tier — but rclone can still do bucket ops via CLI (no mount).
+# The entrypoint handles both cases gracefully: tries to mount, falls back
+# to CLI-only access if the mount fails.
+#
+# To deploy on Hugging Face Spaces: rename Dockerfile.ultra → Dockerfile,
+# commit, wait ~15-20 min for the first build (subsequent builds use cache
+# and are fast). Set any of the env vars above as Space secrets.
+
+FROM ubuntu:26.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV DISPLAY=:0
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# Fallback: if ubuntu:26.04 isn't published yet on Docker Hub at build time
+# (it ships late April), change this line to FROM ubuntu:24.04 or
+# FROM ubuntu:rolling. Everything else in the file is release-agnostic.
+
+# ========== Layer 1: core system + locales + build tools ==========
+# Split into focused layers so a single failing group names itself in
+# the build log instead of hiding in a 200-package wall of text.
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    ca-certificates curl wget gnupg lsb-release software-properties-common apt-transport-https \
+    locales tzdata sudo unzip zip tar xz-utils bzip2 p7zip-full \
+    build-essential pkg-config cmake make automake autoconf libtool \
+    gcc g++ clang llvm lld \
+    gdb lldb strace ltrace valgrind \
+    git git-lfs mercurial subversion \
+    man-db less manpages manpages-dev \
+ && locale-gen en_US.UTF-8 \
+ && rm -rf /var/lib/apt/lists/*
+
+# ========== Layer 2: command-line productivity + networking ==========
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    vim neovim nano emacs-nox micro \
+    tmux screen \
+    htop btop ncdu tree \
+    jq yq ripgrep fd-find bat \
+    rsync \
+    net-tools iputils-ping dnsutils whois traceroute \
+    nmap tcpdump netcat-openbsd socat \
+    openssh-client openssh-server \
+    httpie \
+    iproute2 mtr-tiny iftop \
+    file \
+ && rm -rf /var/lib/apt/lists/*
+
+# ========== Layer 3: language runtimes (part 1) ==========
+# Python + Node + Ruby + Perl + PHP + Lua + Java + Go (apt versions)
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    python3 python3-pip python3-venv python3-dev \
+    python-is-python3 \
+    nodejs npm \
+    ruby ruby-dev \
+    perl libperl-dev \
+    php php-cli php-mbstring php-xml php-curl php-sqlite3 \
+    lua5.4 luarocks \
+    default-jdk openjdk-21-jdk-headless \
+    golang-go \
+    sqlite3 \
+ && rm -rf /var/lib/apt/lists/*
+
+# ========== Layer 4: database clients ==========
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    postgresql-client \
+    mariadb-client \
+    redis-tools \
+ && rm -rf /var/lib/apt/lists/*
+
+# ========== Layer 5: X server + VNC stack + nginx + audio ==========
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    xvfb x11vnc websockify novnc \
+    xterm scrot imagemagick xdotool x11-utils x11-xserver-utils \
+    fonts-dejavu fonts-liberation fonts-ubuntu fonts-noto fonts-noto-cjk fonts-noto-color-emoji \
+    libgtk-3-0 libdbus-glib-1-2 libxt6 libasound2 libx11-xcb1 \
+    nginx \
+    dbus-x11 \
+    pulseaudio pulseaudio-utils \
+    ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
+
+# ========== Layer 6: XFCE4 desktop environment ==========
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    xfce4 xfce4-panel xfce4-session xfce4-settings xfce4-appfinder xfce4-terminal \
+    xfwm4 xfdesktop4 xfconf \
+    xfce4-power-manager xfce4-notifyd xfce4-statusnotifier-plugin \
+    xfce4-taskmanager xfce4-screenshooter xfce4-clipman-plugin xfce4-notes-plugin xfce4-dict \
+    yaru-theme-gtk yaru-theme-icon yaru-theme-sound \
+    ubuntu-wallpapers \
+    thunar gvfs gvfs-backends \
+    dconf-cli dconf-editor \
+ && rm -rf /var/lib/apt/lists/*
+
+# ========== Layer 7: GNOME fallback session ==========
+# Installs the minimum pieces so "gnome-session" works as an alternative
+# to XFCE. Pick via the login screen (if gdm3 is installed) or by setting
+# XSESSION=gnome before the entrypoint runs. Default stays XFCE for speed.
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    gnome-session gnome-shell gnome-control-center \
+    gnome-terminal nautilus \
+    gnome-tweaks \
+ && rm -rf /var/lib/apt/lists/*
+
+# ========== Layer 8: full LibreOffice + common desktop apps ==========
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    libreoffice libreoffice-impress libreoffice-writer libreoffice-calc \
+    libreoffice-draw libreoffice-math libreoffice-base libreoffice-gtk3 \
+    thunderbird \
+    rhythmbox \
+    vlc \
+    audacity \
+    gimp inkscape krita \
+    evince \
+    ristretto \
+    file-roller \
+    gnome-calculator galculator \
+    gnome-system-monitor \
+    simple-scan \
+    pavucontrol \
+    mousepad gedit \
+    yelp \
+ && rm -rf /var/lib/apt/lists/*
+
+# ========== Layer 9: Chromium browser (apt) ==========
+# Ubuntu's chromium is a snap stub; install chromium-browser from the
+# snap-compatible .deb shipped in universe, or the Chromium PPA. Firefox
+# is installed below from the official Mozilla tarball.
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    chromium-browser \
+ && rm -rf /var/lib/apt/lists/* \
+ || echo "chromium-browser not found in this ubuntu release, will use Firefox"
+
+# ========== Layer 10: media, OCR, data science CLI tools ==========
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    graphicsmagick \
+    sox libsox-fmt-all \
+    ghostscript poppler-utils \
+    tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra tesseract-ocr-deu tesseract-ocr-spa \
+    exiftool mediainfo \
+    webp \
+ && rm -rf /var/lib/apt/lists/*
+
+# ========== Layer 11: FUSE + cloud bucket mount clients ==========
+# The storage-bucket story. FUSE mounts need /dev/fuse + SYS_ADMIN at
+# run time — the entrypoint tries them and falls back gracefully if the
+# host doesn't allow it. rclone works in either case (mount OR CLI).
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    fuse3 libfuse2 libfuse3-3 \
+    rclone \
+    s3fs \
+ && rm -rf /var/lib/apt/lists/*
+
+# gcsfuse from Google's official apt repo. Falls back to "not installed"
+# if the release pocket isn't available yet for 26.04.
+RUN set -e; \
+    if curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/gcsfuse-archive-keyring.gpg 2>/dev/null; then \
+      echo "deb [signed-by=/usr/share/keyrings/gcsfuse-archive-keyring.gpg] https://packages.cloud.google.com/apt gcsfuse-$(lsb_release -cs) main" > /etc/apt/sources.list.d/gcsfuse.list; \
+      apt-get update && apt-get install -y --no-install-recommends gcsfuse || \
+        echo "gcsfuse unavailable for this release — falling back to rclone"; \
+      rm -rf /var/lib/apt/lists/*; \
+    fi
+
+# blobfuse2 from Microsoft's apt repo (Azure Blob Storage).
+RUN set -e; \
+    if curl -fsSL https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -o /tmp/msprod.deb; then \
+      dpkg -i /tmp/msprod.deb || true; rm -f /tmp/msprod.deb; \
+      apt-get update && apt-get install -y --no-install-recommends blobfuse2 || \
+        echo "blobfuse2 unavailable — Azure mounts will use rclone"; \
+      rm -rf /var/lib/apt/lists/*; \
+    fi
+
+# ========== Layer 12: cloud CLIs ==========
+# AWS CLI v2 (preferred over apt which lags), Google Cloud SDK, Azure CLI,
+# GitHub CLI, DigitalOcean CLI.
+RUN set -e; \
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip; \
+    unzip -q /tmp/awscliv2.zip -d /tmp; \
+    /tmp/aws/install; \
+    rm -rf /tmp/awscliv2.zip /tmp/aws
+
+# Google Cloud SDK (gcloud)
+RUN set -e; \
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" > /etc/apt/sources.list.d/google-cloud-sdk.list; \
+    curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg; \
+    apt-get update && apt-get install -y --no-install-recommends google-cloud-cli || \
+      echo "gcloud unavailable — falling back to pip install google-cloud-sdk"; \
+    rm -rf /var/lib/apt/lists/*
+
+# Azure CLI (from Microsoft apt repo — reuses the keyring from blobfuse2 step)
+RUN set -e; \
+    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg 2>/dev/null || true; \
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/azure-cli.list; \
+    apt-get update && apt-get install -y --no-install-recommends azure-cli || \
+      echo "azure-cli apt package unavailable — use 'pip install azure-cli' if needed"; \
+    rm -rf /var/lib/apt/lists/*
+
+# GitHub CLI + git-extras
+RUN set -e; \
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 2>/dev/null; \
+    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list; \
+    apt-get update && apt-get install -y --no-install-recommends gh || \
+      echo "gh CLI apt install failed"; \
+    rm -rf /var/lib/apt/lists/*
+
+# ========== Layer 13: container / orchestration / IaC CLIs ==========
+# Docker CLI (no daemon — DinD is separate), kubectl, helm, terraform.
+# All pulled from official sources to stay current.
+RUN set -e; \
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list; \
+    apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin || \
+      echo "docker apt install failed"; \
+    rm -rf /var/lib/apt/lists/*
+
+RUN set -e; \
+    KVER=$(curl -fsSL https://dl.k8s.io/release/stable.txt); \
+    curl -fsSL "https://dl.k8s.io/release/${KVER}/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl; \
+    chmod +x /usr/local/bin/kubectl; \
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash || \
+      echo "helm install failed"
+
+# HashiCorp apt repo → terraform + packer + vault + consul
+RUN set -e; \
+    curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" > /etc/apt/sources.list.d/hashicorp.list; \
+    apt-get update && apt-get install -y --no-install-recommends terraform || \
+      echo "terraform apt install failed"; \
+    rm -rf /var/lib/apt/lists/*
+
+# ansible via apt
+RUN apt-get update && apt-get install -y --no-install-recommends ansible || \
+      echo "ansible apt install failed"; \
+    rm -rf /var/lib/apt/lists/*
+
+# ========== Layer 14: extra language runtimes via upstream installers ==========
+# Rust (rustup) — owned by root, available to all users
+ENV RUSTUP_HOME=/opt/rust/rustup CARGO_HOME=/opt/rust/cargo
+ENV PATH="/opt/rust/cargo/bin:$PATH"
+RUN set -e; \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain stable; \
+    chmod -R a+rX /opt/rust
+
+# Deno (one-liner binary release)
+RUN set -e; \
+    curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/opt/deno sh -s -- -y || \
+      (mkdir -p /opt/deno/bin && curl -fsSL "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip && unzip -q /tmp/deno.zip -d /opt/deno/bin && rm /tmp/deno.zip); \
+    chmod +x /opt/deno/bin/deno || true
+ENV PATH="/opt/deno/bin:$PATH"
+
+# Bun — modern JS runtime
+RUN set -e; \
+    curl -fsSL https://bun.sh/install | BUN_INSTALL=/opt/bun bash || \
+      echo "bun install failed"; \
+    chmod -R a+rX /opt/bun || true
+ENV PATH="/opt/bun/bin:$PATH"
+
+# .NET 8 SDK via Microsoft apt repo (reuses the keyring from blobfuse2 step)
+RUN set -e; \
+    apt-get update && apt-get install -y --no-install-recommends dotnet-sdk-8.0 || \
+      echo ".NET 8 SDK apt install failed"; \
+    rm -rf /var/lib/apt/lists/*
+
+# Julia (official binary tarball)
+RUN set -e; \
+    curl -fsSL https://install.julialang.org | sh -s -- -y --default-channel release --path /opt/julia || \
+      echo "julia install failed"
+ENV PATH="/opt/julia/bin:$PATH"
+
+# R (apt)
+RUN apt-get update && apt-get install -y --no-install-recommends r-base r-base-dev || \
+      echo "R install failed"; \
+    rm -rf /var/lib/apt/lists/*
+
+# Haskell / Stack / Cabal
+RUN apt-get update && apt-get install -y --no-install-recommends ghc cabal-install haskell-stack || \
+      echo "Haskell stack apt install failed"; \
+    rm -rf /var/lib/apt/lists/*
+
+# Elixir + Erlang
+RUN apt-get update && apt-get install -y --no-install-recommends elixir erlang || \
+      echo "Elixir/Erlang apt install failed"; \
+    rm -rf /var/lib/apt/lists/*
+
+# Zig (upstream tarball)
+RUN set -e; \
+    ZIG_VER=0.13.0; \
+    curl -fsSL "https://ziglang.org/download/${ZIG_VER}/zig-linux-$(uname -m)-${ZIG_VER}.tar.xz" -o /tmp/zig.tar.xz; \
+    mkdir -p /opt/zig; \
+    tar -xJf /tmp/zig.tar.xz -C /opt/zig --strip-components=1; \
+    rm /tmp/zig.tar.xz; \
+    ln -sf /opt/zig/zig /usr/local/bin/zig || true
+
+# ========== Layer 15: Firefox (real, from Mozilla) ==========
+# Ubuntu's apt firefox is a snap stub — install the real binary.
+RUN set -e \
+ && mkdir -p /opt \
+ && wget -qO /tmp/firefox.tar \
+       "https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US" \
+ && test -s /tmp/firefox.tar \
+ && tar -xaf /tmp/firefox.tar -C /opt/ \
+ && rm /tmp/firefox.tar \
+ && ln -sf /opt/firefox/firefox /usr/local/bin/firefox \
+ && test -x /opt/firefox/firefox \
+ && echo "firefox installed to /opt/firefox"
+
+RUN cat > /usr/share/applications/firefox.desktop <<'DESKTOP'
+[Desktop Entry]
+Version=1.0
+Name=Firefox Web Browser
+Comment=Browse the World Wide Web
+GenericName=Web Browser
+Exec=/opt/firefox/firefox %u
+Terminal=false
+Type=Application
+Icon=/opt/firefox/browser/chrome/icons/default/default128.png
+Categories=Network;WebBrowser;
+MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
+DESKTOP
+
+# ========== Layer 16: code-server (VS Code in the browser) ==========
+# Starts on :8443 by default. Entry point starts it automatically and
+# nginx proxies /code/ to it.
+RUN set -e; \
+    curl -fsSL https://code-server.dev/install.sh | sh -s -- --method standalone --prefix /usr/local || \
+      echo "code-server install failed"
+
+# ========== Layer 17: Python ML / data / web stack ==========
+# Big pip install. Uses --break-system-packages because Ubuntu 24+ ships
+# an externally-managed Python env; we deliberately want these available
+# system-wide for the agent user. pip will complain otherwise.
+RUN pip3 install --no-cache-dir --break-system-packages \
+      flask flask-cors gunicorn requests \
+      fastapi uvicorn pydantic \
+      numpy pandas scipy \
+      scikit-learn \
+      matplotlib seaborn plotly \
+      pillow opencv-python-headless \
+      beautifulsoup4 lxml \
+      httpx aiohttp \
+      jupyterlab notebook ipywidgets \
+      rich tqdm click typer \
+      sqlalchemy \
+      python-dotenv pyyaml toml \
+      boto3 google-cloud-storage azure-storage-blob \
+      huggingface_hub transformers \
+      openai anthropic \
+      pyodide-py \
+ || echo "some pip packages failed — rerun pip install for specifics"
+
+# Lighter torch (CPU only) — torch+torchvision are huge (~800 MB). We
+# install CPU-only wheels to keep the image reasonable on the CPU tier.
+RUN pip3 install --no-cache-dir --break-system-packages \
+      --index-url https://download.pytorch.org/whl/cpu \
+      torch torchvision torchaudio \
+ || echo "torch CPU wheel install failed"
+
+# ========== Layer 18: user account + sudoers + nginx permissions ==========
+RUN useradd -m -s /bin/bash agent \
+ && echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent \
+ && chmod 0440 /etc/sudoers.d/agent \
+ && mkdir -p /var/lib/nginx /var/log/nginx /run \
+ && chown -R agent:agent /var/lib/nginx /var/log/nginx /run /etc/nginx
+
+# Link novnc /index.html for easier access
+RUN ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html || true
+
+# ========== Layer 19: nginx front door ==========
+# Same routing as Dockerfile.desktop, plus a /code/ route for code-server.
+RUN cat > /etc/nginx/sites-available/kemllm.conf <<'NGINX'
+server {
+  listen 7860 default_server;
+  listen [::]:7860 default_server;
+  client_max_body_size 500m;
+
+  # noVNC WebSocket
+  location /websockify {
+    proxy_pass http://127.0.0.1:6080/websockify;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+  }
+
+  # Flask API under /api/*
+  location /api/ {
+    proxy_pass http://127.0.0.1:8000/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_read_timeout 600s;
+    proxy_send_timeout 600s;
+  }
+
+  # code-server at /code/
+  location /code/ {
+    proxy_pass http://127.0.0.1:8443/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection upgrade;
+    proxy_set_header Host $host;
+    proxy_read_timeout 3600s;
+  }
+
+  # Jupyter Lab at /jupyter/
+  location /jupyter/ {
+    proxy_pass http://127.0.0.1:8888/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection upgrade;
+    proxy_set_header Host $host;
+    proxy_read_timeout 3600s;
+  }
+
+  # Everything else → noVNC
+  location / {
+    proxy_pass http://127.0.0.1:6080/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+  }
+}
+NGINX
+
+RUN rm -f /etc/nginx/sites-enabled/default \
+ && ln -sf /etc/nginx/sites-available/kemllm.conf /etc/nginx/sites-enabled/kemllm.conf \
+ && sed -i 's|^user .*;|user agent;|' /etc/nginx/nginx.conf || true
+
+# ========== Layer 20: XFCE pre-baked config (Yaru-dark + left dock) ==========
+# Same layout as Dockerfile.desktop — top bar + left vertical dock.
+RUN mkdir -p /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml \
+ && mkdir -p /home/agent/.config/autostart \
+ && mkdir -p /home/agent/Buckets
+
+RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xsettings" version="1.0">
+  <property name="Net" type="empty">
+    <property name="ThemeName" type="string" value="Yaru-dark"/>
+    <property name="IconThemeName" type="string" value="Yaru-dark"/>
+  </property>
+  <property name="Gtk" type="empty">
+    <property name="CursorThemeName" type="string" value="Yaru"/>
+    <property name="FontName" type="string" value="Ubuntu 11"/>
+    <property name="MonospaceFontName" type="string" value="Ubuntu Mono 12"/>
+  </property>
+</channel>
+XML
+
+RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfwm4" version="1.0">
+  <property name="general" type="empty">
+    <property name="theme" type="string" value="Yaru-dark"/>
+    <property name="title_font" type="string" value="Ubuntu Bold 11"/>
+    <property name="use_compositing" type="bool" value="false"/>
+    <property name="workspace_count" type="int" value="1"/>
+  </property>
+</channel>
+XML
+
+WORKDIR /app
+COPY app.py /app/app.py
+
+# ========== Layer 21: entrypoint — starts everything + mounts buckets ==========
+# Boots Xvfb, XFCE, x11vnc, websockify, code-server, jupyter, Flask, then
+# execs nginx in the foreground as PID 1. Before anything else, it sets up
+# persistent storage + any configured cloud bucket mounts.
+RUN cat > /app/start-ultra.sh <<'SH'
+#!/usr/bin/env bash
+set -u
+export DISPLAY=:0
+export HOME=/home/agent
+export PORT=8000
+export XDG_RUNTIME_DIR=/tmp/runtime-agent
+export XDG_CONFIG_HOME=/home/agent/.config
+mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+cd "$HOME"
+log(){ echo "[ultra] $*" >&2; }
+
+############################################################
+# Storage: HF Persistent Storage (/data) + cloud buckets
+############################################################
+
+# 1) HF Persistent Storage — same scheme as Dockerfile.desktop. If /data
+#    is mounted and writable, link the entire user home onto it so every
+#    app state, history, document, and cached file survives restarts.
+setup_persistent_storage() {
+  local DATA=/data
+  if [ ! -d "$DATA" ] || ! touch "$DATA/.kemllm_write_test" 2>/dev/null; then
+    log "persistent storage: /data not available — mount an HF Storage Bucket at /data for permanence"
+    return 0
+  fi
+  rm -f "$DATA/.kemllm_write_test"
+  log "persistent storage: /data writable — linking user home onto /data/agent-home"
+  local ROOT="$DATA/agent-home"
+  mkdir -p "$ROOT"
+  link_item() {
+    local rel="$1"
+    local src="$HOME/$rel"
+    local dst="$ROOT/$rel"
+    mkdir -p "$(dirname "$dst")"
+    if [ -L "$src" ]; then return 0; fi
+    if [ -e "$src" ]; then
+      if [ -d "$src" ]; then
+        mkdir -p "$dst"
+        cp -a "$src/." "$dst/" 2>/dev/null || true
+      else
+        cp -a "$src" "$dst" 2>/dev/null || true
+      fi
+      rm -rf "$src"
+    else
+      [ -d "$dst" ] || mkdir -p "$dst"
+    fi
+    ln -sf "$dst" "$src"
+  }
+  link_item Documents
+  link_item Downloads
+  link_item Desktop
+  link_item Pictures
+  link_item Videos
+  link_item Music
+  link_item Projects
+  link_item Templates
+  link_item Public
+  link_item .mozilla
+  link_item .thunderbird
+  link_item .config
+  link_item .local/share
+  link_item .local/bin
+  link_item .ssh
+  link_item .gnupg
+  link_item .bash_history
+  link_item .bashrc
+  link_item .gitconfig
+  link_item .npmrc
+  link_item .vimrc
+  link_item .cargo
+  link_item .rustup
+  link_item .aws
+  link_item .azure
+  link_item .config/gcloud
+  link_item .kube
+  log "persistent storage: home linked to $ROOT"
+}
+setup_persistent_storage
+
+# 2) Cloud bucket mounts. Each is best-effort: tries FUSE mount, falls
+#    back to "CLI only" if FUSE isn't available. All mounted buckets also
+#    get symlinked into ~/Buckets/<name> for easy access from the file
+#    manager.
+mkdir -p "$HOME/Buckets"
+
+have_fuse() {
+  [ -c /dev/fuse ] && [ -w /dev/fuse ]
+}
+
+if ! have_fuse; then
+  log "storage buckets: /dev/fuse not available — bucket mounts will be skipped."
+  log "  You can still use the cloud bucket CLIs directly:"
+  log "    aws s3 cp/sync ...         (AWS S3)"
+  log "    gsutil cp/mv ...           (Google Cloud Storage)"
+  log "    az storage blob ...        (Azure Blob Storage)"
+  log "    rclone copy/sync/mount ... (any remote; rclone copy/sync works without FUSE)"
+fi
+
+# 2a) rclone — if RCLONE_CONFIG_B64 is set, drop it at ~/.config/rclone/rclone.conf.
+#     Then, for each configured remote, mkdir ~/Buckets/<remote> and try to
+#     rclone mount. If FUSE isn't available, just leave the symlink as a
+#     reminder that the remote is configured and usable via `rclone copy`.
+if [ -n "${RCLONE_CONFIG_B64:-}" ]; then
+  log "rclone: importing config from RCLONE_CONFIG_B64"
+  mkdir -p "$HOME/.config/rclone"
+  echo "$RCLONE_CONFIG_B64" | base64 -d > "$HOME/.config/rclone/rclone.conf" 2>/dev/null || log "rclone: base64 decode failed"
+  chmod 600 "$HOME/.config/rclone/rclone.conf"
+  if have_fuse; then
+    for remote in $(rclone listremotes 2>/dev/null | tr -d ':'); do
+      mp="$HOME/Buckets/$remote"
+      mkdir -p "$mp"
+      log "rclone: mounting $remote: → $mp"
+      rclone mount "$remote:" "$mp" --daemon --vfs-cache-mode writes --allow-other 2>/tmp/rclone-$remote.log || \
+        log "rclone: mount $remote failed (see /tmp/rclone-$remote.log) — use 'rclone copy $remote:' directly instead"
+    done
+  else
+    log "rclone: FUSE unavailable — use 'rclone copy/sync <remote>:' directly. Config at ~/.config/rclone/rclone.conf"
+  fi
+fi
+
+# 2b) AWS S3 via s3fs
+if [ -n "${S3_BUCKET:-}" ] && [ -n "${AWS_ACCESS_KEY_ID:-}" ] && [ -n "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+  # s3fs wants the creds in ~/.passwd-s3fs as "KEY:SECRET" 0600
+  echo "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" > "$HOME/.passwd-s3fs"
+  chmod 600 "$HOME/.passwd-s3fs"
+  # Also seed ~/.aws/credentials so `aws s3` works even without the mount
+  mkdir -p "$HOME/.aws"
+  cat > "$HOME/.aws/credentials" <<CRED
+[default]
+aws_access_key_id=${AWS_ACCESS_KEY_ID}
+aws_secret_access_key=${AWS_SECRET_ACCESS_KEY}
+CRED
+  if [ -n "${AWS_REGION:-}" ]; then
+    cat > "$HOME/.aws/config" <<REG
+[default]
+region=${AWS_REGION}
+REG
+  fi
+  mkdir -p /mnt/s3
+  ln -sfn /mnt/s3 "$HOME/Buckets/s3"
+  if have_fuse && command -v s3fs >/dev/null 2>&1; then
+    log "s3fs: mounting s3://$S3_BUCKET → /mnt/s3"
+    s3fs "$S3_BUCKET" /mnt/s3 -o passwd_file="$HOME/.passwd-s3fs",allow_other,umask=0022,uid=$(id -u agent),gid=$(id -g agent) 2>/tmp/s3fs.log || \
+      log "s3fs: mount failed (see /tmp/s3fs.log) — use 'aws s3 cp/sync s3://$S3_BUCKET' instead"
+  else
+    log "s3fs: FUSE unavailable. Use 'aws s3 cp/sync s3://$S3_BUCKET' directly — credentials are configured."
+  fi
+fi
+
+# 2c) Google Cloud Storage via gcsfuse
+if [ -n "${GCS_BUCKET:-}" ] && [ -n "${GCS_SERVICE_ACCOUNT_KEY_B64:-}" ]; then
+  mkdir -p "$HOME/.config/gcloud"
+  echo "$GCS_SERVICE_ACCOUNT_KEY_B64" | base64 -d > "$HOME/.config/gcloud/sa-key.json" 2>/dev/null || log "gcs: base64 decode failed"
+  chmod 600 "$HOME/.config/gcloud/sa-key.json"
+  export GOOGLE_APPLICATION_CREDENTIALS="$HOME/.config/gcloud/sa-key.json"
+  # Authenticate gcloud CLI so `gcloud storage cp` works without the mount
+  if command -v gcloud >/dev/null 2>&1; then
+    gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS" 2>/dev/null || true
+  fi
+  mkdir -p /mnt/gcs
+  ln -sfn /mnt/gcs "$HOME/Buckets/gcs"
+  if have_fuse && command -v gcsfuse >/dev/null 2>&1; then
+    log "gcsfuse: mounting gs://$GCS_BUCKET → /mnt/gcs"
+    gcsfuse --foreground=false --key-file "$GOOGLE_APPLICATION_CREDENTIALS" "$GCS_BUCKET" /mnt/gcs 2>/tmp/gcsfuse.log || \
+      log "gcsfuse: mount failed (see /tmp/gcsfuse.log) — use 'gcloud storage cp gs://$GCS_BUCKET/...' instead"
+  else
+    log "gcsfuse: FUSE unavailable. Use 'gcloud storage cp gs://$GCS_BUCKET/...' or 'gsutil cp' directly."
+  fi
+fi
+
+# 2d) Azure Blob Storage via blobfuse2
+if [ -n "${AZURE_CONTAINER:-}" ] && [ -n "${AZURE_STORAGE_ACCOUNT:-}" ] && [ -n "${AZURE_STORAGE_KEY:-}" ]; then
+  mkdir -p "$HOME/.config/blobfuse2"
+  cat > "$HOME/.config/blobfuse2/config.yaml" <<AZCFG
+version: 2
+logging:
+  type: syslog
+  level: log_warning
+components:
+  - libfuse
+  - file_cache
+  - attr_cache
+  - azstorage
+libfuse:
+  attribute-expiration-sec: 120
+  entry-expiration-sec: 120
+file_cache:
+  path: /tmp/blobfuse-cache
+  timeout-sec: 120
+  max-size-mb: 4096
+azstorage:
+  type: block
+  account-name: ${AZURE_STORAGE_ACCOUNT}
+  account-key: ${AZURE_STORAGE_KEY}
+  mode: key
+  container: ${AZURE_CONTAINER}
+AZCFG
+  chmod 600 "$HOME/.config/blobfuse2/config.yaml"
+  mkdir -p /mnt/azure /tmp/blobfuse-cache
+  ln -sfn /mnt/azure "$HOME/Buckets/azure"
+  if have_fuse && command -v blobfuse2 >/dev/null 2>&1; then
+    log "blobfuse2: mounting ${AZURE_STORAGE_ACCOUNT}/${AZURE_CONTAINER} → /mnt/azure"
+    blobfuse2 mount /mnt/azure --config-file="$HOME/.config/blobfuse2/config.yaml" --tmp-path=/tmp/blobfuse-cache 2>/tmp/blobfuse.log || \
+      log "blobfuse2: mount failed (see /tmp/blobfuse.log) — use 'az storage blob ...' instead"
+  else
+    log "blobfuse2: FUSE unavailable. Use 'az storage blob download/upload' directly."
+  fi
+fi
+
+log "storage setup complete. Mounted buckets are under ~/Buckets/"
+
+############################################################
+# Desktop / services startup
+############################################################
+
+log "starting Xvfb :0 1920x1080x24"
+Xvfb :0 -screen 0 1920x1080x24 -dpi 96 -ac +extension GLX +render -noreset >/tmp/xvfb.log 2>&1 &
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  xdpyinfo -display :0 >/dev/null 2>&1 && break
+  sleep 0.3
+done
+
+log "starting dbus session"
+eval "$(dbus-launch --sh-syntax)"
+export DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID
+
+log "starting pulseaudio"
+mkdir -p /tmp/pulse
+pulseaudio -k 2>/dev/null || true
+rm -f /tmp/pulse/native 2>/dev/null || true
+export PULSE_SERVER=unix:/tmp/pulse/native
+export PULSE_RUNTIME_PATH=/tmp/pulse
+pulseaudio -D --exit-idle-time=-1 --log-target=file:/tmp/pulseaudio.log 2>/tmp/pulse-startup.log || log "pulseaudio daemonize failed"
+
+# Default to XFCE. User can override with XSESSION=gnome before start.
+SESSION="${XSESSION:-xfce}"
+if [ "$SESSION" = "gnome" ] && command -v gnome-session >/dev/null 2>&1; then
+  log "starting gnome-session"
+  gnome-session >/tmp/gnome.log 2>&1 &
+else
+  log "starting xfce4-session"
+  startxfce4 >/tmp/xfce.log 2>&1 &
+fi
+sleep 2
+
+log "starting x11vnc on :5900"
+x11vnc -display :0 -forever -nopw -shared -rfbport 5900 \
+       -threads -ncache 0 -defer 2 -wait 2 \
+       -permitfiletransfer -quiet >/tmp/x11vnc.log 2>&1 &
+
+log "starting websockify 6080 -> 5900 (noVNC)"
+websockify --web=/usr/share/novnc 6080 localhost:5900 >/tmp/websockify.log 2>&1 &
+
+# code-server (VS Code in the browser) on :8443 — auth disabled inside
+# the container; nginx proxies it at /code/ and relies on the Space-level
+# auth (AGENT_TOKEN) for outside protection.
+if command -v code-server >/dev/null 2>&1; then
+  log "starting code-server on :8443"
+  mkdir -p "$HOME/.config/code-server"
+  cat > "$HOME/.config/code-server/config.yaml" <<CSCFG
+bind-addr: 127.0.0.1:8443
+auth: none
+cert: false
+CSCFG
+  code-server --disable-telemetry >/tmp/code-server.log 2>&1 &
+fi
+
+# Jupyter Lab on :8888
+if command -v jupyter >/dev/null 2>&1; then
+  log "starting jupyter lab on :8888"
+  (cd "$HOME" && jupyter lab \
+      --no-browser \
+      --ip=127.0.0.1 --port=8888 \
+      --ServerApp.base_url=/jupyter/ \
+      --ServerApp.token='' --ServerApp.password='' \
+      --ServerApp.allow_origin='*' \
+      --ServerApp.disable_check_xsrf=True \
+      >/tmp/jupyter.log 2>&1 &)
+fi
+
+log "starting Flask app.py on :8000"
+python3 /app/app.py >/tmp/flask.log 2>&1 &
+
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+  if (echo >/dev/tcp/127.0.0.1/8000) >/dev/null 2>&1; then
+    log "Flask listening on :8000"
+    break
+  fi
+  sleep 0.4
+done
+
+log "launching nginx on :7860 (front door)"
+exec nginx -g 'daemon off;'
+SH
+
+RUN chmod +x /app/start-ultra.sh \
+ && chown -R agent:agent /app /home/agent
+
+USER agent
+WORKDIR /home/agent
+
+EXPOSE 7860
+CMD ["/bin/bash", "/app/start-ultra.sh"]

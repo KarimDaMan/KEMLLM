@@ -628,8 +628,18 @@ function updateTopbarLabels() {
 
 // ===== Web search toggle =====
 function toggleWebSearch() {
-  window.webSearchOn = !window.webSearchOn;
-  document.getElementById('tb-web')?.classList.toggle('on', window.webSearchOn);
+  // Real setting: sandbox-web (also controls whether code execution
+  // can hit the network). Mirrored into the Settings toggle.
+  const isOn = profileGet('sandbox-web') !== '0';
+  const next = !isOn;
+  profileSet('sandbox-web', next ? '1' : '0');
+  window.webSearchOn = next;
+  const btn = document.getElementById('tb-web');
+  if (btn) btn.classList.toggle('on', next);
+  const sandboxEl = document.getElementById('sp-sandbox-web');
+  if (sandboxEl) sandboxEl.checked = next;
+  showToast('Web access ' + (next ? 'enabled' : 'disabled'));
+  return;
 }
 
 // ===== MCP Connectors =====

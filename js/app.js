@@ -239,7 +239,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v110 · clean user modal (no Code/Models/Switch), refresh on /chat/<id> actually restores the chat, terminal cards removed, preview pane position-relative fix';
+const KEMLLM_BUILD = 'v111 · remove Chat/Code topbar tabs, Web button actually toggles sandbox-web now and mirrors Settings';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -496,8 +496,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tb-settings')?.addEventListener('click', () => siNav('settings'));
 
   // Topbar tabs
-  document.getElementById('tab-chat')?.addEventListener('click', () => siNav('chat'));
-  document.getElementById('tab-code')?.addEventListener('click', () => siNav('code'));
 
   // Avatar row
   document.getElementById('si-ava-row')?.addEventListener('click', openUserModal);

@@ -757,16 +757,17 @@ function reuseImageAsAttachment(url) {
 
 async function handleImageRequest(prompt) {
   const m = findModel(selectedImage, 'image');
-  const fakeModel = { name: m?.name || 'Image', provider: 'google' };
+  const modelName = m?.name || 'Image';
+  const fakeModel = { name: modelName, provider: 'google' };
   const typingEl = renderTyping(fakeModel);
   try {
     const url = await generateImage(prompt);
     typingEl.remove();
-    // Save as markdown so parseMarkdown renders the image on both the
-    // initial display AND when the chat is reloaded from history.
-    const md = `Generated with ${m.name}:\n\n![generated](${url})`;
+    const md = `Generated with ${modelName}:\n\n![generated](${url})`;
     renderAIMessage(fakeModel, parseMarkdown(md), md);
-    messages.push({ role: 'assistant', content: md });
+    // Tag the saved message with modelName so loadChat shows the right
+    // attribution after reload (instead of the active chat model).
+    messages.push({ role: 'assistant', content: md, modelName, modelProvider: 'google' });
     saveCurrentChat();
   } catch (e) {
     typingEl.remove();
@@ -776,16 +777,16 @@ async function handleImageRequest(prompt) {
 async function handleEditImageRequest(prompt, imageAttachment) {
   const sel = (typeof findModel === 'function') ? findModel(selectedImage, 'image') : null;
   const editorName = sel?.name || 'Nano Banana Pro';
-  const fakeModel = { name: 'Image Edit (' + editorName + ')', provider: 'google' };
+  const displayName = 'Image Edit (' + editorName + ')';
+  const fakeModel = { name: displayName, provider: 'google' };
   const typingEl = renderTyping(fakeModel);
   try {
-    // editImage now accepts either a data URL or a plain https URL
     const sourceUrl = imageAttachment.dataUrl || imageAttachment.url;
     const url = await editImage(prompt, sourceUrl);
     typingEl.remove();
     const md = `Edited with ${editorName}:\n\n![edited](${url})`;
     renderAIMessage(fakeModel, parseMarkdown(md), md);
-    messages.push({ role: 'assistant', content: md });
+    messages.push({ role: 'assistant', content: md, modelName: displayName, modelProvider: 'google' });
     saveCurrentChat();
   } catch (e) {
     typingEl.remove();
@@ -795,14 +796,15 @@ async function handleEditImageRequest(prompt, imageAttachment) {
 
 async function handleVideoRequest(prompt) {
   const m = findModel(selectedVideo, 'video');
-  const fakeModel = { name: m?.name || 'Video', provider: 'google' };
+  const modelName = m?.name || 'Video';
+  const fakeModel = { name: modelName, provider: 'google' };
   const typingEl = renderTyping(fakeModel);
   try {
     const url = await generateVideo(prompt);
     typingEl.remove();
-    const md = `Generated with ${m.name}:\n\n<video controls loop src="${url}" style="max-width:520px;border-radius:10px;"></video>`;
+    const md = `Generated with ${modelName}:\n\n<video controls loop src="${url}" style="max-width:520px;border-radius:10px;"></video>`;
     renderAIMessage(fakeModel, md, md);
-    messages.push({ role: 'assistant', content: md });
+    messages.push({ role: 'assistant', content: md, modelName, modelProvider: 'google' });
     saveCurrentChat();
   } catch (e) {
     typingEl.remove();

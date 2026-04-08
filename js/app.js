@@ -88,11 +88,22 @@ function loadChat(id) {
   if (window.termBootStop) window.termBootStop();
   messages.forEach(m => {
     if (m.role === 'user') {
-      // Pass attachments (stripped payloads but metadata intact) so chips render
       renderUserMessage(typeof m.content === 'string' ? m.content : '', m.attachments);
     } else {
-      const model = findModel(selectedChat, 'chat') || { name: 'AI', provider: 'custom' };
-      renderAIMessage(model, parseMarkdown(typeof m.content === 'string' ? m.content : ''), m.content);
+      // Use the message's saved modelName if it has one (image/video/edit
+      // results carry the actual generator name), otherwise fall back to
+      // the current chat model.
+      const fallbackChatModel = findModel(selectedChat, 'chat') || { name: 'AI', provider: 'custom' };
+      const model = m.modelName
+        ? { name: m.modelName, provider: m.modelProvider || fallbackChatModel.provider }
+        : fallbackChatModel;
+      // Strip generation markers (GENERATE_IMAGE / EDIT_IMAGE / etc) so
+      // they don't show as raw text on reload. saveCurrentChat persists
+      // the full marker-containing text for replay purposes, but the
+      // rendered view should match what the user originally saw.
+      const raw = typeof m.content === 'string' ? m.content : '';
+      const visible = (typeof stripAIMarkers === 'function') ? stripAIMarkers(raw) : raw;
+      renderAIMessage(model, parseMarkdown(visible), raw);
     }
   });
   renderHistory();
@@ -112,7 +123,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v93 · editImage rewritten — exactly two-step now: (1) try whatever model is selected in the topbar, including custom models, ANY model with a replicateId. (2) if that model fails with 404/422/400 (cant edit), fall back to ONLY Nano Banana Pro. No other models. Network/auth/rate-limit errors propagate instead of silently switching models.';
+const KEMLLM_BUILD = 'v94 · loadChat now strips AI markers (no more raw [GENERATE_IMAGE prompt=...] on reload) and reads each message modelName so image/edit/video results show the actual generator (Nano Banana Pro etc) instead of the chat model name';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

@@ -1022,6 +1022,34 @@ function processAIMarkers(text) {
 // (with Xvfb + noVNC) has been deployed. If so, reveal the floating
 // Desktop button in the chat panel.
 let _desktopProbedOnce = false;
+// Two-layout desktop detection:
+//   NEW layout  = nginx front door, noVNC at /vnc.html, Flask at /api/*
+//   OLD layout  = Flask at root, noVNC (if any) proxied via /desktop/*
+// Returns { path, layout } where path is the iframe URL to load.
+async function detectDesktopLayout(base) {
+  // Try NEW layout first — noVNC at the root.
+  try {
+    const r = await fetch(base + '/vnc.html', { method: 'GET' });
+    if (r.ok) {
+      const body = await r.text().catch(() => '');
+      if (body.includes('noVNC') || body.includes('novnc') || body.includes('vnc_canvas')) {
+        return { layout: 'new', path: '/vnc.html?autoconnect=1&resize=scale&reconnect=1' };
+      }
+    }
+  } catch {}
+  // Fall back to OLD layout — Flask proxy at /desktop/.
+  try {
+    const r = await fetch(base + '/desktop/vnc.html', { method: 'GET' });
+    if (r.ok) {
+      const body = await r.text().catch(() => '');
+      if (body.includes('noVNC') || body.includes('novnc') || body.includes('vnc_canvas')) {
+        return { layout: 'old', path: '/desktop/vnc.html?path=desktop/websockify&autoconnect=1&resize=scale' };
+      }
+    }
+  } catch {}
+  return null;
+}
+
 async function probeDesktopSupport() {
   const btn = document.getElementById('chat-desktop-btn');
   if (!btn) return;
@@ -1032,21 +1060,16 @@ async function probeDesktopSupport() {
     btn.classList.remove('active');
   };
   if (!base) return hide();
-  try {
-    // Hit /vnc.html — with the new nginx front door, root serves noVNC
-    // static files directly from websockify's --web dir.
-    const r = await fetch(base + '/vnc.html', { method: 'GET' });
-    if (r.ok) {
-      const body = await r.text().catch(() => '');
-      if (body.includes('noVNC') || body.includes('novnc') || body.includes('vnc_canvas')) {
-        btn.dataset.desktopReady = '1';
-        _desktopProbedOnce = true;
-        if (chatMode === 'agent') btn.classList.add('show');
-        return;
-      }
-    }
+  const detected = await detectDesktopLayout(base);
+  if (detected) {
+    btn.dataset.desktopReady = '1';
+    btn.dataset.desktopLayout = detected.layout;
+    btn.dataset.desktopPath = detected.path;
+    _desktopProbedOnce = true;
+    if (chatMode === 'agent') btn.classList.add('show');
+  } else {
     hide();
-  } catch { hide(); }
+  }
 }
 
 // Start or restart a noVNC desktop inside the sandbox and show it in the preview
@@ -1134,31 +1157,17 @@ async function showAgentDesktop() {
   }
   p.done('HF Space is up', '✓');
 
-  // Step 2: verify noVNC is reachable at the root. With the new
-  // nginx-based Dockerfile.desktop, /vnc.html is served directly from
-  // websockify's static files.
-  const pc = renderProgressLine('checking noVNC…');
-  try {
-    const r = await fetch(base + '/vnc.html');
-    if (!r.ok) {
-      pc.fail('noVNC not reachable (HTTP ' + r.status + '). Your HF Space is either still rebuilding or running the SLIM Dockerfile — re-upload Dockerfile.desktop as Dockerfile and wait for rebuild.');
-      return;
-    }
-    const body = await r.text();
-    if (!body.includes('noVNC') && !body.includes('novnc') && !body.includes('vnc_canvas')) {
-      pc.fail('/vnc.html returned something, but it is not the noVNC page. Response starts with: ' + body.slice(0, 120));
-      return;
-    }
-    pc.done('noVNC HTML served from root', '✓');
-  } catch (e) {
-    pc.fail('Cannot reach noVNC: ' + e.message);
+  // Step 2: auto-detect which container layout we're talking to.
+  const pc = renderProgressLine('detecting noVNC layout…');
+  const detected = await detectDesktopLayout(base);
+  if (!detected) {
+    pc.fail('noVNC not reachable at / or /desktop/. Your HF Space is either still rebuilding, running the SLIM Dockerfile (no desktop), or the build failed — check the Logs tab on the Space.');
     return;
   }
+  pc.done(`noVNC layout: ${detected.layout}`, '✓');
 
-  // Step 3: load the preview. noVNC at the root means `path=websockify`
-  // (the default) and the browser will open ws(s)://host/websockify which
-  // nginx proxies to websockify on :6080.
-  const url = `${base}/vnc.html?autoconnect=1&resize=scale&reconnect=1&show_dot=1`;
+  // Step 3: load the iframe with whichever path the detection found.
+  const url = base + detected.path;
   chatPreviewShow(url, 'AI Desktop');
   renderSystemLine('🖥 desktop loaded — tap and drag in the preview to interact. If it stays blank, open the URL in a new tab to debug: ' + url);
 }

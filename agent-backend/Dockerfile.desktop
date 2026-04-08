@@ -35,17 +35,34 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sqlite3 \
     xvfb x11vnc websockify novnc \
     xterm scrot imagemagick xdotool \
-    chromium-browser \
     fonts-dejavu fonts-liberation fonts-ubuntu \
     nginx \
     dbus-x11 \
-    xfce4 xfce4-panel xfce4-session xfce4-settings \
+    xfce4 xfce4-panel xfce4-session xfce4-settings xfce4-appfinder \
     xfwm4 xfdesktop4 xfconf \
     yaru-theme-gtk yaru-theme-icon yaru-theme-sound \
     ubuntu-wallpapers \
     plank \
-    thunar \
+    thunar gvfs gvfs-backends \
+    firefox \
+    thunderbird \
+    rhythmbox \
+    libreoffice-impress libreoffice-gtk3 \
+    gnome-software \
+    yelp \
  && rm -rf /var/lib/apt/lists/*
+
+# Fetch the Focal Fossa "What a Beauty" cougar wallpaper (red/purple
+# gradient with the cougar outline) since ubuntu-wallpapers-focal isn't
+# always available on Ubuntu 22.04 base images. Fall back gracefully
+# if the fetch fails — xfdesktop will use whatever's in /usr/share/backgrounds.
+RUN mkdir -p /usr/share/backgrounds/kemllm \
+ && (wget -q -O /usr/share/backgrounds/kemllm/focal-cougar.png \
+     'https://people.canonical.com/~dx-team/wallpapers/focal/ubuntu-Background-2.png' \
+     || wget -q -O /usr/share/backgrounds/kemllm/focal-cougar.png \
+     'https://www.gnome-look.org/CONTENT/content-pre3/1380236-3.jpg' \
+     || echo "wallpaper fetch failed, xfdesktop will pick a default") \
+ || true
 
 RUN ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html || true
 RUN pip3 install --no-cache-dir flask flask-cors gunicorn requests
@@ -161,7 +178,7 @@ RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml <<'XML'
 </channel>
 XML
 
-# xfdesktop = wallpaper (Ubuntu jellyfish)
+# xfdesktop = wallpaper (Focal Fossa cougar) + desktop icons (home + trash)
 RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfce4-desktop" version="1.0">
@@ -171,39 +188,73 @@ RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
         <property name="workspace0" type="empty">
           <property name="color-style" type="int" value="0"/>
           <property name="image-style" type="int" value="5"/>
-          <property name="last-image" type="string" value="/usr/share/backgrounds/warty-final-ubuntu.png"/>
+          <property name="last-image" type="string" value="/usr/share/backgrounds/kemllm/focal-cougar.png"/>
         </property>
       </property>
     </property>
   </property>
+  <property name="desktop-icons" type="empty">
+    <property name="style" type="int" value="2"/>
+    <property name="icon-size" type="uint" value="48"/>
+    <property name="font-size" type="double" value="10.0"/>
+    <property name="tooltip-size" type="double" value="128.0"/>
+    <property name="use-custom-font-size" type="bool" value="false"/>
+    <property name="show-thumbnails" type="bool" value="true"/>
+    <property name="primary" type="bool" value="false"/>
+    <property name="single-click" type="bool" value="false"/>
+    <property name="show-tooltips" type="bool" value="true"/>
+    <property name="gravity" type="int" value="0"/>
+    <property name="file-icons" type="empty">
+      <property name="show-home" type="bool" value="true"/>
+      <property name="show-filesystem" type="bool" value="false"/>
+      <property name="show-removable" type="bool" value="false"/>
+      <property name="show-trash" type="bool" value="true"/>
+    </property>
+  </property>
+  <property name="desktop-menu" type="empty">
+    <property name="show" type="bool" value="true"/>
+  </property>
+  <property name="windowlist-menu" type="empty">
+    <property name="show" type="bool" value="true"/>
+  </property>
 </channel>
 XML
 
-# xfce4-panel = top bar (like GNOME's) - single horizontal strip
+# xfce4-panel = single dark top bar, GNOME-style (Activities left, clock
+# center, system tray + power indicator right). Thin, transparent, Ubuntu font.
 RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfce4-panel" version="1.0">
   <property name="configver" type="int" value="2"/>
   <property name="panels" type="array">
     <value type="int" value="1"/>
+    <property name="dark-mode" type="bool" value="true"/>
     <property name="panel-1" type="empty">
       <property name="position" type="string" value="p=6;x=0;y=0"/>
       <property name="length" type="uint" value="100"/>
+      <property name="length-adjust" type="bool" value="true"/>
       <property name="position-locked" type="bool" value="true"/>
-      <property name="size" type="uint" value="28"/>
+      <property name="icon-size" type="uint" value="16"/>
+      <property name="size" type="uint" value="26"/>
+      <property name="nrows" type="uint" value="1"/>
       <property name="plugin-ids" type="array">
         <value type="int" value="1"/>
         <value type="int" value="2"/>
         <value type="int" value="3"/>
         <value type="int" value="4"/>
+        <value type="int" value="5"/>
+        <value type="int" value="6"/>
+        <value type="int" value="7"/>
       </property>
       <property name="background-style" type="uint" value="1"/>
       <property name="background-rgba" type="array">
-        <value type="double" value="0.1"/>
-        <value type="double" value="0.1"/>
-        <value type="double" value="0.1"/>
-        <value type="double" value="0.95"/>
+        <value type="double" value="0.153"/>
+        <value type="double" value="0.137"/>
+        <value type="double" value="0.137"/>
+        <value type="double" value="1.0"/>
       </property>
+      <property name="enter-opacity" type="uint" value="100"/>
+      <property name="leave-opacity" type="uint" value="100"/>
     </property>
   </property>
   <property name="plugins" type="empty">
@@ -211,6 +262,9 @@ RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml <
       <property name="button-title" type="string" value="Activities"/>
       <property name="show-button-title" type="bool" value="true"/>
       <property name="show-button-icon" type="bool" value="false"/>
+      <property name="show-menu-icons" type="bool" value="true"/>
+      <property name="show-generic-names" type="bool" value="false"/>
+      <property name="show-tooltips" type="bool" value="false"/>
     </property>
     <property name="plugin-2" type="string" value="separator">
       <property name="expand" type="bool" value="true"/>
@@ -219,26 +273,46 @@ RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml <
     <property name="plugin-3" type="string" value="clock">
       <property name="mode" type="uint" value="2"/>
       <property name="digital-format" type="string" value="%d %b  %H:%M"/>
+      <property name="show-frame" type="bool" value="false"/>
+      <property name="tooltip-format" type="string" value="%A %d %B %Y"/>
     </property>
-    <property name="plugin-4" type="string" value="systray"/>
+    <property name="plugin-4" type="string" value="separator">
+      <property name="expand" type="bool" value="true"/>
+      <property name="style" type="uint" value="0"/>
+    </property>
+    <property name="plugin-5" type="string" value="systray">
+      <property name="size-max" type="uint" value="22"/>
+      <property name="square-icons" type="bool" value="true"/>
+    </property>
+    <property name="plugin-6" type="string" value="pulseaudio">
+      <property name="enable-keyboard-shortcuts" type="bool" value="true"/>
+      <property name="show-notifications" type="bool" value="true"/>
+    </property>
+    <property name="plugin-7" type="string" value="actions">
+      <property name="appearance" type="uint" value="0"/>
+      <property name="items" type="array">
+        <value type="string" value="+logout-dialog"/>
+      </property>
+    </property>
   </property>
 </channel>
 XML
 
-# plank dock — vertical, left side, like Ubuntu's dock
-RUN cat > /home/agent/.config/plank/dock1/settings <<'INI'
+# plank dock — vertical, left side, 48px Ubuntu-Dock layout
+RUN mkdir -p /home/agent/.config/plank/dock1/launchers \
+ && cat > /home/agent/.config/plank/dock1/settings <<'INI'
 [PlankDockPreferences]
-Alignment=CENTER
-AutoPinLaunchers=true
+Alignment=START
+AutoPinLaunchers=false
 CurrentWorkspaceOnly=false
-DockItems=
+DockItems=firefox.dockitem;;thunderbird.dockitem;;files.dockitem;;rhythmbox.dockitem;;libreoffice-impress.dockitem;;ubuntu-software.dockitem;;yelp.dockitem;;appgrid.dockitem
 HideMode=0
-IconSize=40
-ItemsAlignment=CENTER
-LockItems=false
+IconSize=48
+ItemsAlignment=START
+LockItems=true
 Monitor=
 Offset=0
-PinnedOnly=false
+PinnedOnly=true
 Position=LEFT
 PressureReveal=false
 ShowDockItem=false
@@ -248,6 +322,62 @@ UnhideDelay=0
 ZoomEnabled=false
 ZoomPercent=150
 INI
+
+# Dockitem files. Each one points at an existing /usr/share/applications
+# .desktop entry. plank reads these at startup.
+RUN cat > /home/agent/.config/plank/dock1/launchers/firefox.dockitem <<'ITEM'
+[PlankDockItemPreferences]
+Launcher=file:///usr/share/applications/firefox.desktop
+ITEM
+
+RUN cat > /home/agent/.config/plank/dock1/launchers/thunderbird.dockitem <<'ITEM'
+[PlankDockItemPreferences]
+Launcher=file:///usr/share/applications/thunderbird.desktop
+ITEM
+
+RUN cat > /home/agent/.config/plank/dock1/launchers/files.dockitem <<'ITEM'
+[PlankDockItemPreferences]
+Launcher=file:///usr/share/applications/thunar.desktop
+ITEM
+
+RUN cat > /home/agent/.config/plank/dock1/launchers/rhythmbox.dockitem <<'ITEM'
+[PlankDockItemPreferences]
+Launcher=file:///usr/share/applications/org.gnome.Rhythmbox3.desktop
+ITEM
+
+RUN cat > /home/agent/.config/plank/dock1/launchers/libreoffice-impress.dockitem <<'ITEM'
+[PlankDockItemPreferences]
+Launcher=file:///usr/share/applications/libreoffice-impress.desktop
+ITEM
+
+RUN cat > /home/agent/.config/plank/dock1/launchers/ubuntu-software.dockitem <<'ITEM'
+[PlankDockItemPreferences]
+Launcher=file:///usr/share/applications/org.gnome.Software.desktop
+ITEM
+
+RUN cat > /home/agent/.config/plank/dock1/launchers/yelp.dockitem <<'ITEM'
+[PlankDockItemPreferences]
+Launcher=file:///usr/share/applications/yelp.desktop
+ITEM
+
+# App grid launcher — there's no "Show Applications" entry like GNOME's,
+# so we create a custom .desktop that opens xfce4-appfinder (which is
+# XFCE's equivalent of the GNOME app overview).
+RUN cat > /usr/share/applications/kemllm-appgrid.desktop <<'DESKTOP'
+[Desktop Entry]
+Type=Application
+Name=Show Applications
+Comment=Browse all installed applications
+Exec=xfce4-appfinder
+Icon=view-app-grid-symbolic
+Terminal=false
+Categories=System;
+DESKTOP
+
+RUN cat > /home/agent/.config/plank/dock1/launchers/appgrid.dockitem <<'ITEM'
+[PlankDockItemPreferences]
+Launcher=file:///usr/share/applications/kemllm-appgrid.desktop
+ITEM
 
 # Autostart plank so the dock appears with the session
 RUN cat > /home/agent/.config/autostart/plank.desktop <<'DESKTOP'
@@ -276,8 +406,8 @@ mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
 cd "$HOME"
 log(){ echo "[start-desktop] $*" >&2; }
 
-log "starting Xvfb :0 1280x720x24"
-Xvfb :0 -screen 0 1280x720x24 -ac +extension GLX +render -noreset >/tmp/xvfb.log 2>&1 &
+log "starting Xvfb :0 1920x1080x24 (high quality)"
+Xvfb :0 -screen 0 1920x1080x24 -dpi 96 -ac +extension GLX +render -noreset >/tmp/xvfb.log 2>&1 &
 for i in 1 2 3 4 5 6 7 8 9 10; do
   xdpyinfo -display :0 >/dev/null 2>&1 && break
   sleep 0.3

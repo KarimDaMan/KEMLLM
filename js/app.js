@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v73 · Dockerfile.desktop auto-configures XFCE4 with Yaru-dark theme, Ubuntu jellyfish wallpaper, top panel + left plank dock (Ubuntu-GNOME lookalike, pre-baked, zero user config)';
+const KEMLLM_BUILD = 'v74 · Dockerfile.desktop fully mimics Ubuntu GNOME — 1920x1080, Focal cougar wallpaper, Yaru-dark theme, GNOME-style top bar (Activities + clock + systray + audio), vertical left dock with Firefox/Thunderbird/Files/Rhythmbox/Impress/Software/Help/AppGrid at 48px, desktop icons (home+trash) enabled';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

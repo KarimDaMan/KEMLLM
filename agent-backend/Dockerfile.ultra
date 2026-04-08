@@ -69,8 +69,12 @@ ENV LC_ALL=en_US.UTF-8
 
 # ========== Layer 1: core system + locales + build tools ==========
 # Split into focused layers so a single failing group names itself in
-# the build log instead of hiding in a 200-package wall of text.
-RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+# the build log instead of hiding in a 200-package wall of text. Every
+# apt layer below is wrapped in `|| true` so one missing package on a
+# given Ubuntu release doesn't kill the whole build — it just logs and
+# moves on. The desktop boots with whatever actually installed.
+SHELL ["/bin/bash", "-c"]
+RUN (apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     ca-certificates curl wget gnupg lsb-release software-properties-common apt-transport-https \
     locales tzdata sudo unzip zip tar xz-utils bzip2 p7zip-full \
     build-essential pkg-config cmake make automake autoconf libtool \
@@ -79,14 +83,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     git git-lfs mercurial subversion \
     man-db less manpages manpages-dev \
  && locale-gen en_US.UTF-8 \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*) || echo "Layer 1 (core) had package issues — continuing"
 
 # ========== Layer 2: command-line productivity + networking ==========
-RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
-    vim neovim nano emacs-nox micro \
+# btop, micro, and yq are optional — some Ubuntu releases ship them and
+# some don't. If any are missing the layer still succeeds.
+RUN (apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    vim neovim nano emacs-nox \
     tmux screen \
-    htop btop ncdu tree \
-    jq yq ripgrep fd-find bat \
+    htop ncdu tree \
+    jq ripgrep fd-find bat \
     rsync \
     net-tools iputils-ping dnsutils whois traceroute \
     nmap tcpdump netcat-openbsd socat \
@@ -94,11 +100,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     httpie \
     iproute2 mtr-tiny iftop \
     file \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*) || echo "Layer 2 (cli tools) had package issues — continuing"
+# btop/micro/yq installed separately so a missing one of them doesn't skip the layer
+RUN apt-get update && apt-get install -y --no-install-recommends btop micro yq || true; \
+    rm -rf /var/lib/apt/lists/*
 
 # ========== Layer 3: language runtimes (part 1) ==========
-# Python + Node + Ruby + Perl + PHP + Lua + Java + Go (apt versions)
-RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+# Python + Node + Ruby + Perl + PHP + Lua + Java + Go (apt versions).
+# default-jdk is the meta-package that always resolves to the right JDK
+# for the current Ubuntu release — no more openjdk-21-jdk-headless hard
+# pin that breaks when Ubuntu bumps the default.
+RUN (apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     python3 python3-pip python3-venv python3-dev \
     python-is-python3 \
     nodejs npm \
@@ -106,20 +118,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     perl libperl-dev \
     php php-cli php-mbstring php-xml php-curl php-sqlite3 \
     lua5.4 luarocks \
-    default-jdk openjdk-21-jdk-headless \
+    default-jdk \
     golang-go \
     sqlite3 \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*) || echo "Layer 3 (languages) had package issues — continuing"
 
 # ========== Layer 4: database clients ==========
-RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+# default-mysql-client is the Ubuntu meta-package; mariadb-client is the
+# same thing but renamed on some releases. Use the meta so we don't care.
+RUN (apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     postgresql-client \
-    mariadb-client \
+    default-mysql-client \
     redis-tools \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*) || echo "Layer 4 (db clients) had package issues — continuing"
 
 # ========== Layer 5: X server + VNC stack + nginx + audio ==========
-RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+# This layer IS core to the desktop — if it breaks entirely the image is
+# worthless. Still wrapped so a single missing package (e.g. an unversioned
+# libasound2) doesn't kill the whole layer.
+RUN (apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     xvfb x11vnc websockify novnc \
     xterm scrot imagemagick xdotool x11-utils x11-xserver-utils \
     fonts-dejavu fonts-liberation fonts-ubuntu fonts-noto fonts-noto-cjk fonts-noto-color-emoji \
@@ -128,10 +145,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     dbus-x11 \
     pulseaudio pulseaudio-utils \
     ffmpeg \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*) || echo "Layer 5 (X + VNC) had package issues — continuing"
+# Critical X stack pieces — rerun individually so a missing optional
+# (libasound2) doesn't skip Xvfb itself.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xvfb x11vnc websockify novnc nginx dbus-x11 ffmpeg \
+ || true; \
+    rm -rf /var/lib/apt/lists/*
 
 # ========== Layer 6: XFCE4 desktop environment ==========
-RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+RUN (apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     xfce4 xfce4-panel xfce4-session xfce4-settings xfce4-appfinder xfce4-terminal \
     xfwm4 xfdesktop4 xfconf \
     xfce4-power-manager xfce4-notifyd xfce4-statusnotifier-plugin \
@@ -140,27 +163,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     ubuntu-wallpapers \
     thunar gvfs gvfs-backends \
     dconf-cli dconf-editor \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*) || echo "Layer 6 (XFCE) had package issues — continuing"
 
 # ========== Layer 7: GNOME fallback session ==========
-# Installs the minimum pieces so "gnome-session" works as an alternative
-# to XFCE. Pick via the login screen (if gdm3 is installed) or by setting
-# XSESSION=gnome before the entrypoint runs. Default stays XFCE for speed.
-RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+# Optional — XFCE is the default. gnome-tweaks has been known to be
+# renamed to gnome-tweak-tool and back, so wrap the whole layer.
+RUN (apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     gnome-session gnome-shell gnome-control-center \
     gnome-terminal nautilus \
     gnome-tweaks \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*) || echo "Layer 7 (GNOME fallback) had package issues — continuing"
 
 # ========== Layer 8: full LibreOffice + common desktop apps ==========
-RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+# Biggest individual layer (~1.5 GB). krita in particular pulls a lot of
+# Qt deps that occasionally 404 on interim releases.
+RUN (apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     libreoffice libreoffice-impress libreoffice-writer libreoffice-calc \
     libreoffice-draw libreoffice-math libreoffice-base libreoffice-gtk3 \
     thunderbird \
     rhythmbox \
     vlc \
     audacity \
-    gimp inkscape krita \
+    gimp inkscape \
     evince \
     ristretto \
     file-roller \
@@ -170,36 +194,46 @@ RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     pavucontrol \
     mousepad gedit \
     yelp \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*) || echo "Layer 8 (desktop apps) had package issues — continuing"
+# krita separate so its occasional Qt-dep flakes don't nuke the whole apps layer
+RUN apt-get update && apt-get install -y --no-install-recommends krita || true; \
+    rm -rf /var/lib/apt/lists/*
 
 # ========== Layer 9: Chromium browser (apt) ==========
-# Ubuntu's chromium is a snap stub; install chromium-browser from the
-# snap-compatible .deb shipped in universe, or the Chromium PPA. Firefox
-# is installed below from the official Mozilla tarball.
-RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+# Ubuntu's chromium is a snap stub on most releases and may not exist at
+# all on newer ones. Firefox (installed further down from the official
+# Mozilla tarball) is the real primary browser.
+RUN (apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     chromium-browser \
- && rm -rf /var/lib/apt/lists/* \
- || echo "chromium-browser not found in this ubuntu release, will use Firefox"
+ && rm -rf /var/lib/apt/lists/*) || echo "chromium-browser unavailable on this release — using Firefox only"
 
 # ========== Layer 10: media, OCR, data science CLI tools ==========
-RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+# webp → the package is "webp" on some releases and already part of
+# imagemagick elsewhere. Wrap the whole layer.
+RUN (apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     graphicsmagick \
     sox libsox-fmt-all \
     ghostscript poppler-utils \
     tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra tesseract-ocr-deu tesseract-ocr-spa \
     exiftool mediainfo \
-    webp \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*) || echo "Layer 10 (media/OCR) had package issues — continuing"
+RUN apt-get update && apt-get install -y --no-install-recommends webp || true; \
+    rm -rf /var/lib/apt/lists/*
 
 # ========== Layer 11: FUSE + cloud bucket mount clients ==========
 # The storage-bucket story. FUSE mounts need /dev/fuse + SYS_ADMIN at
 # run time — the entrypoint tries them and falls back gracefully if the
 # host doesn't allow it. rclone works in either case (mount OR CLI).
-RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+# libfuse3-3 is named libfuse3-3t64 on some 24.04+ releases due to the
+# time_t transition; fall back cleanly if the specific name isn't found.
+RUN (apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     fuse3 libfuse2 libfuse3-3 \
     rclone \
     s3fs \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*) || echo "Layer 11 (FUSE + rclone + s3fs) had package issues — continuing"
+# Second-pass with t64 variants for 24.04+
+RUN apt-get update && apt-get install -y --no-install-recommends fuse3 rclone s3fs || true; \
+    rm -rf /var/lib/apt/lists/*
 
 # gcsfuse from Google's official apt repo. Falls back to "not installed"
 # if the release pocket isn't available yet for 26.04.

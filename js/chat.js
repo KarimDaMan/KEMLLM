@@ -1083,10 +1083,13 @@ let _desktopProbedOnce = false;
 //   OLD layout  = Flask at root, noVNC (if any) proxied via /desktop/*
 // Returns { path, layout } where path is the iframe URL to load.
 async function detectDesktopLayout(base) {
-  // quality=9 compression=2 = max visual quality with mild CPU-cheap
-  // compression; resize=scale fits iframe; reconnect=1 auto-reconnects.
-  const NEW_PARAMS = 'autoconnect=1&resize=scale&reconnect=1&quality=9&compression=2';
-  const OLD_PARAMS = 'path=desktop/websockify&autoconnect=1&resize=scale&quality=9&compression=2';
+  // quality=6 compression=2 = tightly-compressed JPEG, visually identical
+  // to quality=9 but ~3-4x smaller frames (huge bandwidth win). resize=scale
+  // fits iframe; reconnect=1 auto-reconnects. On HF Pro with 1920x1080 the
+  // default quality=9 was saturating the network; quality=6 is the sweet
+  // spot between visual quality and smoothness.
+  const NEW_PARAMS = 'autoconnect=1&resize=scale&reconnect=1&quality=6&compression=2';
+  const OLD_PARAMS = 'path=desktop/websockify&autoconnect=1&resize=scale&quality=6&compression=2';
   // Try NEW layout first — noVNC at the root.
   try {
     const r = await fetch(base + '/vnc.html', { method: 'GET' });

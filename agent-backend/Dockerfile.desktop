@@ -57,6 +57,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
 RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     xfce4 xfce4-panel xfce4-session xfce4-settings xfce4-appfinder xfce4-terminal \
     xfwm4 xfdesktop4 xfconf \
+    xfce4-power-manager xfce4-notifyd xfce4-statusnotifier-plugin \
     yaru-theme-gtk yaru-theme-icon yaru-theme-sound \
     ubuntu-wallpapers \
     thunar gvfs gvfs-backends \
@@ -409,17 +410,14 @@ RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml <
         <value type="string" value="+logout-dialog"/>
       </property>
     </property>
-    <!-- LEFT DOCK plugins. plugin-27 = applicationsmenu (Activities / apps
-         search with categories) pinned at the TOP of the dock. Rest are
-         launcher plugins pointing at specific .desktop files. -->
-    <property name="plugin-27" type="string" value="applicationsmenu">
-      <property name="button-title" type="string" value=""/>
-      <property name="button-icon" type="string" value="view-app-grid-symbolic"/>
-      <property name="show-button-title" type="bool" value="false"/>
-      <property name="show-button-icon" type="bool" value="true"/>
-      <property name="show-menu-icons" type="bool" value="true"/>
-      <property name="show-generic-names" type="bool" value="false"/>
-      <property name="show-tooltips" type="bool" value="true"/>
+    <!-- LEFT DOCK plugins. plugin-27 = xfce4-appfinder launcher (opens a
+         search dialog where you type to filter all installed apps).
+         This is the "apps search" the user asked for. Rest are normal
+         .desktop launchers. -->
+    <property name="plugin-27" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="xfce4-appfinder.desktop"/>
+      </property>
     </property>
     <property name="plugin-20" type="string" value="launcher">
       <property name="items" type="array">
@@ -462,6 +460,38 @@ XML
 
 # No plank config needed — the left dock is now panel-2 in xfce4-panel.xml above.
 
+# PulseAudio config file approach — more reliable than a giant CLI
+# command. ~/.config/pulse/default.pa is read automatically when
+# pulseaudio starts. Apps find the server via the X11 root window
+# property that module-x11-publish writes on startup.
+RUN mkdir -p /home/agent/.config/pulse \
+ && cat > /home/agent/.config/pulse/default.pa <<'PULSE'
+#!/usr/bin/pulseaudio -nF
+
+# Load audio drivers statically — only what we need. NO native hardware.
+load-module module-null-sink sink_name=kemllm_sink sink_properties=device.description="KEMLLM_Virtual_Speaker"
+load-module module-always-sink
+
+# Unix socket + anonymous auth so ffmpeg and other local tools connect
+load-module module-native-protocol-unix socket=/tmp/pulse/native auth-anonymous=1
+
+# Publish the server to the X11 root window so Firefox / pavucontrol /
+# Rhythmbox / anything using libpulse's X11 lookup finds us
+load-module module-x11-publish display=:0
+
+# Make sure the null sink is the default so app audio actually routes
+# through ffmpeg monitor → browser
+set-default-sink kemllm_sink
+PULSE
+
+# Matching client.conf — tells libpulse where the server is by default
+RUN cat > /home/agent/.config/pulse/client.conf <<'CLIENT'
+default-server = unix:/tmp/pulse/native
+autospawn = no
+daemon-binary = /bin/true
+enable-shm = true
+CLIENT
+
 WORKDIR /app
 COPY app.py /app/app.py
 
@@ -491,30 +521,27 @@ log "starting dbus session"
 eval "$(dbus-launch --sh-syntax)"
 export DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID
 
-log "starting pulseaudio (null sink + x11 publish)"
-# X11 must already be up so module-x11-publish can write PULSE_SERVER
-# into the root window properties — that's how Firefox/Thunderbird find
-# the server when PULSE_SERVER env isn't propagated through XFCE session.
+log "starting pulseaudio (config-file approach with X11 publish)"
+# pulseaudio reads ~/.config/pulse/default.pa automatically; that file
+# loads the null sink and module-x11-publish. Much more reliable than
+# trying to cram everything into CLI flags.
 mkdir -p /tmp/pulse
-export PULSE_SERVER=unix:/tmp/pulse/native
-export PULSE_RUNTIME_PATH=/tmp/pulse
-# Clean any stale state from a previous container run
+# Clean stale state (X11 root props from a crashed previous run + any
+# stale daemon)
 pulseaudio -k 2>/dev/null || true
 xprop -root -remove PULSE_SERVER 2>/dev/null || true
 xprop -root -remove PULSE_SESSION_ID 2>/dev/null || true
 xprop -root -remove PULSE_COOKIE 2>/dev/null || true
 xprop -root -remove PULSE_ID 2>/dev/null || true
-pulseaudio --start \
-  --exit-idle-time=-1 \
-  --disallow-exit=true \
-  --fail=false \
-  --log-target=file:/tmp/pulseaudio.log \
-  -L "module-native-protocol-unix socket=/tmp/pulse/native auth-anonymous=1" \
-  -L "module-null-sink sink_name=kemllm_sink sink_properties=device.description=KEMLLM-Speaker" \
-  -L "module-always-sink" \
-  -L "module-x11-publish display=:0" \
-  2>/tmp/pulse-startup.log || log "pulseaudio start failed (non-fatal)"
-(sleep 1 && pactl set-default-sink kemllm_sink 2>/dev/null) &
+rm -f /tmp/pulse/native 2>/dev/null || true
+export PULSE_SERVER=unix:/tmp/pulse/native
+export PULSE_RUNTIME_PATH=/tmp/pulse
+# -D = daemonize, --exit-idle-time=-1 keeps it running forever, no --fail
+# so any startup error actually shows in the log instead of silently
+# being swallowed.
+pulseaudio -D --exit-idle-time=-1 --log-target=file:/tmp/pulseaudio.log 2>/tmp/pulse-startup.log || log "pulseaudio daemonize failed — see /tmp/pulseaudio.log"
+# Verify: if pactl info works the daemon is alive and talking
+(sleep 1 && pactl info 2>&1 | head -5 | while read L; do log "pulse: $L"; done) &
 
 # HF Persistent Storage integration. If the Space has the paid Persistent
 # Storage add-on enabled, /data is a writable volume that survives across

@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v88 · 1920x1080 Xvfb + 60fps target (-defer 2), Activities moved to top of left dock, pulseaudio x11-publish fix for no-sink errors, accountsservice for settings, agent-backend-lite Dockerfile.lite (720p low-fps variant), Claude computer use bumped to 1920x1080, FIX runViaRemote auto-recovery was broken (window.agentSessionId doesnt work on let vars, direct assign fixes it)';
+const KEMLLM_BUILD = 'v89 · pulseaudio rewrite with default.pa config file + client.conf; dock icon back to xfce4-appfinder launcher (search dialog, not menu); noVNC quality 9→6 for 3-4x smaller frames; install xfce4-power-manager + notifyd + statusnotifier-plugin for settings';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

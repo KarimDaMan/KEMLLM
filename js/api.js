@@ -1188,7 +1188,7 @@ async function awaitPrediction(initialData, apiKey, maxSeconds) {
   throw new Error('Prediction timed out after ' + max + 's');
 }
 
-async function generateImage(prompt, aspectRatio) {
+async function generateImage(prompt, aspectRatio, extras) {
   const apiKey = getRepKey();
   if (!apiKey) throw new Error('Add your Replicate key in Settings to generate images');
   const m = findModel(selectedImage, 'image');
@@ -1198,7 +1198,10 @@ async function generateImage(prompt, aspectRatio) {
   let lastErr = null;
   for (const id of idsToTry) {
     try {
-      const input = addAspectRatioToInput({ prompt }, aspectRatio, id);
+      // Start with the user's chip extras, then layer the prompt + aspect
+      // ratio defaults on top so they always win over stale values.
+      const base = Object.assign({}, extras || {}, { prompt });
+      const input = addAspectRatioToInput(base, aspectRatio, id);
       const res = await replicatePredict(id, input, apiKey);
       if (res.status === 404) {
         lastErr = new Error('Model "' + id + '" not found on Replicate');
@@ -1244,12 +1247,15 @@ async function generateImage(prompt, aspectRatio) {
   throw lastErr || new Error('All image models failed');
 }
 
-async function generateVideo(prompt, aspectRatio) {
+async function generateVideo(prompt, aspectRatio, extras) {
   const apiKey = getRepKey();
   if (!apiKey) throw new Error('Add your Replicate key in Settings to generate videos');
   const m = findModel(selectedVideo, 'video');
   if (!m) throw new Error('No video model selected');
-  const vidInput = addAspectRatioToInput({ prompt }, aspectRatio, m.replicateId);
+  // Merge user-supplied chip extras into the input. The prompt + aspect
+  // ratio always win over stale extras values.
+  const baseVid = Object.assign({}, extras || {}, { prompt });
+  const vidInput = addAspectRatioToInput(baseVid, aspectRatio, m.replicateId);
   let res = await replicateFetch(`/v1/models/${m.replicateId}/predictions`, {
     method: 'POST',
     headers: {
@@ -1274,6 +1280,79 @@ async function generateVideo(prompt, aspectRatio) {
     data = await res.json();
   }
   throw new Error('Video timed out');
+}
+
+// ========== Replicate model schema ==========
+// Lazy fetcher for a Replicate model's openapi_schema, used to drive
+// the dynamic generator chip strip. Each model has different inputs:
+// FLUX has aspect_ratio + num_inference_steps + guidance_scale, Kling
+// has duration + cfg_scale + camera, Veo has aspect + duration + seed,
+// etc. Rather than hardcoding a per-model UI we read the schema and
+// render controls automatically.
+const _replicateSchemaCache = {};
+async function fetchModelSchema(modelId) {
+  if (!modelId) return null;
+  if (_replicateSchemaCache[modelId]) return _replicateSchemaCache[modelId];
+  const apiKey = getRepKey();
+  if (!apiKey) return null;
+  try {
+    const r = await replicateFetch(`/v1/models/${modelId}`, {
+      headers: { 'Authorization': 'Bearer ' + apiKey },
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const full = data?.latest_version?.openapi_schema;
+    if (!full) return null;
+    // Pull the Input schema (the top-level prediction-input shape) and
+    // resolve any internal $refs to component schemas (Replicate puts
+    // enums in components.schemas.<Name> with allOf: [{$ref: ...}]).
+    const inputSchema = full?.components?.schemas?.Input;
+    if (!inputSchema) return null;
+    const resolved = resolveRefs(inputSchema, full);
+    _replicateSchemaCache[modelId] = resolved;
+    return resolved;
+  } catch {
+    return null;
+  }
+}
+
+// Walk a JSON schema, replacing { $ref: '#/components/schemas/X' } with
+// the actual referenced schema (merged into parent for allOf wrappers).
+// Handles the common Replicate patterns:
+//   { allOf: [{ $ref: '#/components/schemas/aspect_ratio' }] }
+//   { $ref: '#/components/schemas/aspect_ratio' }
+function resolveRefs(node, root, depth) {
+  depth = depth || 0;
+  if (depth > 10 || node == null) return node;
+  if (Array.isArray(node)) return node.map(n => resolveRefs(n, root, depth + 1));
+  if (typeof node !== 'object') return node;
+  // Direct $ref
+  if (node.$ref && typeof node.$ref === 'string') {
+    const path = node.$ref.replace(/^#\//, '').split('/');
+    let target = root;
+    for (const p of path) {
+      target = target?.[p];
+      if (target == null) return node;
+    }
+    return resolveRefs(target, root, depth + 1);
+  }
+  // allOf wrapper — merge resolved children into a single object
+  if (Array.isArray(node.allOf)) {
+    let merged = {};
+    for (const sub of node.allOf) {
+      const r = resolveRefs(sub, root, depth + 1);
+      if (r && typeof r === 'object') merged = Object.assign({}, merged, r);
+    }
+    // Preserve other sibling fields (default, title, description, etc.)
+    const { allOf, ...rest } = node;
+    return Object.assign({}, merged, rest);
+  }
+  // Recurse into every child
+  const out = {};
+  for (const k of Object.keys(node)) {
+    out[k] = resolveRefs(node[k], root, depth + 1);
+  }
+  return out;
 }
 
 // ========== Universal Web Search ==========

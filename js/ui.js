@@ -617,12 +617,15 @@ function selectImgModel(id) {
   profileSet('selected_image', id);
   closeAllDrops();
   renderModelDropdowns();
+  // Refresh the gen-chip strip if the user is currently in image mode
+  if (typeof renderGenChips === 'function' && chatMode === 'image') renderGenChips();
 }
 function selectVidModel(id) {
   selectedVideo = id;
   profileSet('selected_video', id);
   closeAllDrops();
   renderModelDropdowns();
+  if (typeof renderGenChips === 'function' && chatMode === 'video') renderGenChips();
 }
 
 function updateTopbarLabels() {

@@ -54,6 +54,11 @@ const AGENT_LOOP_MAX_ITERATIONS = 25;
 
 function setChatMode(mode) {
   chatMode = mode;
+  // Refresh the dynamic generator chip strip whenever the mode flips —
+  // shown for image/video, hidden for chat/agent.
+  if (typeof renderGenChips === 'function') {
+    Promise.resolve().then(renderGenChips).catch(() => {});
+  }
   document.querySelectorAll('.mode-btn').forEach(b => {
     // The desktop button has no data-mode and is allowed to be active
     // ALONGSIDE the agent button — handled separately below.
@@ -76,6 +81,10 @@ function setChatMode(mode) {
       ? 'Agent mode · ask the AI to run commands in a sandbox'
       : mode === 'code'
       ? 'Code mode · ask for code, auto-runs in browser'
+      : mode === 'image'
+      ? 'Describe the image you want to generate…'
+      : mode === 'video'
+      ? 'Describe the video you want to generate…'
       : 'Ask anything, generate images, run code...';
   }
   // NOTE: agent backend is no longer spawned just because the user
@@ -443,6 +452,15 @@ async function sendMessage() {
   const atts = pendingAttachments.slice();
   pendingAttachments = [];
   renderAttachPreview();
+
+  // IMAGE / VIDEO mode: route to the inline generator panel instead
+  // of calling the chat model. The chip strip above the input box
+  // already collected the params; we just need the prompt text from
+  // the textarea (already captured into `text` above).
+  if (chatMode === 'image' || chatMode === 'video') {
+    if (typeof runGenSend === 'function') runGenSend(text);
+    return;
+  }
 
   // AGENT MODE: route through the agent flow
   if (chatMode === 'agent') {
@@ -1082,14 +1100,14 @@ function _appendImageResultScoped(originatingChatId, fakeModel, md, modelName, e
   }
 }
 
-async function handleImageRequest(prompt, aspectRatio) {
+async function handleImageRequest(prompt, aspectRatio, extras) {
   const m = findModel(selectedImage, 'image');
   const modelName = m?.name || 'Image';
   const fakeModel = { name: modelName, provider: 'google' };
   const originatingChatId = currentChatId;
   const typingEl = renderTyping(fakeModel);
   try {
-    const url = await generateImage(prompt, aspectRatio);
+    const url = await generateImage(prompt, aspectRatio, extras);
     typingEl.remove();
     const md = `Generated with ${modelName}:\n\n![generated](${url})`;
     _appendImageResultScoped(originatingChatId, fakeModel, md, modelName, false);
@@ -1121,14 +1139,14 @@ async function handleEditImageRequest(prompt, imageAttachment, aspectRatio) {
   }
 }
 
-async function handleVideoRequest(prompt, aspectRatio) {
+async function handleVideoRequest(prompt, aspectRatio, extras) {
   const m = findModel(selectedVideo, 'video');
   const modelName = m?.name || 'Video';
   const fakeModel = { name: modelName, provider: 'google' };
   const originatingChatId = currentChatId;
   const typingEl = renderTyping(fakeModel);
   try {
-    const url = await generateVideo(prompt, aspectRatio);
+    const url = await generateVideo(prompt, aspectRatio, extras);
     typingEl.remove();
     const md = `Generated with ${modelName}:\n\n<video controls loop src="${url}" style="max-width:520px;border-radius:10px;"></video>`;
     _appendImageResultScoped(originatingChatId, fakeModel, md, modelName, false);
@@ -1246,36 +1264,363 @@ function stopAgentLoop() {
   showToast('Stopping agent…');
 }
 
-// ===== Chat preview pane =====
-// Direct generate modal — lets the user generate an image or video
-// WITHOUT the AI. Calls handleImageRequest/handleVideoRequest with the
-// user's raw prompt. The AI path (via markers) still works unchanged.
-let _genModalType = 'image';
-function openGenModal(type) {
-  _genModalType = type || 'image';
-  const modal = document.getElementById('gen-modal');
-  const title = document.getElementById('gen-title');
-  const prompt = document.getElementById('gen-prompt');
-  if (!modal) return;
-  if (title) title.textContent = type === 'video' ? 'Generate video' : 'Generate image';
-  if (prompt) { prompt.value = ''; }
-  modal.querySelectorAll('.gen-ratio').forEach(el => el.classList.toggle('active', el.dataset.ar === '1:1'));
-  modal.classList.add('open');
-  setTimeout(() => prompt?.focus(), 80);
+// ===== Inline image / video generator panel =====
+// When the user picks "Generate image" or "Generate video" from the
+// + menu we flip chatMode to 'image' or 'video' and show a strip of
+// dynamic parameter chips (.gen-chips) above the chat input box. The
+// chip set is built from the selected Replicate model's openapi_schema
+// — every model has different params, so the UI adapts automatically.
+//
+// Pressing Send while in image/video mode routes the prompt + chip
+// values straight to handleImageRequest / handleVideoRequest. The AI
+// path (via [GENERATE_IMAGE] / [GENERATE_VIDEO] markers in chat mode)
+// still works unchanged.
+
+// Per-mode state. Each mode tracks { values: { fieldName: value }, schema }
+// so we can persist the user's chip selections across re-renders without
+// losing them when they switch chats / models.
+window._genState = window._genState || {
+  image: { values: {}, schema: null, modelId: null },
+  video: { values: {}, schema: null, modelId: null },
+};
+
+// Decide which schema property goes into which chip "bucket".
+// Returns one of: 'aspect' | 'duration' | 'quality' | 'extras' | 'skip'
+// (skip = handled separately, e.g. the prompt field which is the textarea).
+function classifyGenField(name, prop) {
+  const n = (name || '').toLowerCase();
+  if (n === 'prompt' || n === 'negative_prompt' || n === 'image' || n === 'image_input' || n === 'input_image' || n === 'source_image') return 'skip';
+  if (n.includes('aspect') || (n === 'width' || n === 'height')) return 'aspect';
+  if (n.includes('duration') || n === 'seconds' || n === 'length' || n.includes('num_frames') || n === 'frame_count') return 'duration';
+  if (n.includes('quality') || n.includes('inference_step') || n.includes('num_steps') || n === 'steps' || n.includes('guidance') || n.includes('cfg')) return 'quality';
+  return 'extras';
 }
-function closeGenModal() {
-  document.getElementById('gen-modal')?.classList.remove('open');
+
+// Build the chip definitions for a given resolved schema. Returns an
+// ordered array of { id, label, fields, render } where `fields` is the
+// list of schema properties that this chip controls.
+function buildGenChips(schema, mode) {
+  const props = schema?.properties || {};
+  const buckets = { aspect: [], duration: [], quality: [], extras: [] };
+  for (const name of Object.keys(props)) {
+    const prop = props[name];
+    const cls = classifyGenField(name, prop);
+    if (cls === 'skip') continue;
+    buckets[cls].push({ name, prop });
+  }
+  const chips = [];
+  if (buckets.aspect.length) chips.push({ id: 'aspect', label: 'Aspect', fields: buckets.aspect });
+  if (buckets.duration.length) chips.push({ id: 'duration', label: mode === 'video' ? 'Duration' : 'Frames', fields: buckets.duration });
+  if (buckets.quality.length) chips.push({ id: 'quality', label: 'Quality', fields: buckets.quality });
+  if (buckets.extras.length) chips.push({ id: 'extras', label: 'Extras', fields: buckets.extras });
+  return chips;
 }
-async function runGenModal() {
-  const prompt = document.getElementById('gen-prompt')?.value.trim();
-  if (!prompt) { showToast('Enter a prompt'); return; }
-  const activeRatio = document.querySelector('.gen-ratio.active');
-  const aspectRatio = activeRatio?.dataset.ar || '1:1';
-  closeGenModal();
-  if (_genModalType === 'video') {
-    if (typeof handleVideoRequest === 'function') handleVideoRequest(prompt, aspectRatio);
+
+// Format the value shown on a chip — e.g. "16:9", "5s", "50 steps".
+function formatChipValue(chipId, fields, values) {
+  const get = (n) => values[n];
+  if (chipId === 'aspect') {
+    const ar = get('aspect_ratio');
+    if (ar) return ar;
+    const w = get('width'), h = get('height');
+    if (w && h) return `${w}×${h}`;
+    return null;
+  }
+  if (chipId === 'duration') {
+    const f = fields[0];
+    const v = get(f.name);
+    if (v == null) return null;
+    if (/duration|second/.test(f.name)) return v + 's';
+    return v + ' frames';
+  }
+  if (chipId === 'quality') {
+    // Show the first defined quality field
+    for (const f of fields) {
+      const v = get(f.name);
+      if (v != null) return String(v);
+    }
+    return null;
+  }
+  if (chipId === 'extras') {
+    const set = fields.filter(f => values[f.name] != null && values[f.name] !== '');
+    if (!set.length) return null;
+    return set.length === 1 ? `1 set` : `${set.length} set`;
+  }
+  return null;
+}
+
+// Render the chip strip from the current gen state. Called whenever
+// chatMode flips to image/video, the model is changed, or a chip value
+// is updated.
+async function renderGenChips() {
+  const strip = document.getElementById('gen-chips');
+  if (!strip) return;
+  const isImage = chatMode === 'image';
+  const isVideo = chatMode === 'video';
+  if (!isImage && !isVideo) {
+    strip.style.display = 'none';
+    strip.innerHTML = '';
+    return;
+  }
+  const mode = isImage ? 'image' : 'video';
+  const sel = isImage ? selectedImage : selectedVideo;
+  const m = findModel(sel, mode);
+  const modelId = m?.replicateId;
+  const state = window._genState[mode];
+
+  strip.style.display = 'flex';
+  strip.innerHTML = `
+    <span class="gen-chip-modetag${isVideo ? ' video' : ''}">${isVideo ? 'VIDEO' : 'IMAGE'} · ${escapeHTML(m?.name || 'no model')}</span>
+    <span style="color:var(--text3);font-size:11px;">loading params…</span>
+  `;
+
+  if (!modelId) {
+    strip.innerHTML = `
+      <span class="gen-chip-modetag${isVideo ? ' video' : ''}">${isVideo ? 'VIDEO' : 'IMAGE'}</span>
+      <span style="color:var(--red);font-size:11px;">No ${mode} model selected — pick one in the topbar</span>
+    `;
+    return;
+  }
+
+  // Re-fetch schema if the user switched models
+  if (state.modelId !== modelId) {
+    state.modelId = modelId;
+    state.schema = null;
+    state.values = {};
+    state.schema = await fetchModelSchema(modelId);
+    // Seed defaults from the schema so chips show real values without
+    // forcing the user to click each chip first.
+    if (state.schema?.properties) {
+      for (const [name, prop] of Object.entries(state.schema.properties)) {
+        if (name === 'prompt') continue;
+        if (prop && prop.default !== undefined && prop.default !== null) {
+          state.values[name] = prop.default;
+        }
+      }
+    }
+  }
+
+  // Schema fetch failed (no rep key, model 404, etc.). Show a minimal
+  // chip set so the panel still works for basic aspect-ratio gen.
+  if (!state.schema) {
+    const minimalChips = [{ id: 'aspect', label: 'Aspect', fields: [{ name: 'aspect_ratio', prop: { type: 'string', enum: ['1:1', '16:9', '9:16', '4:3', '3:4', '21:9'], default: '1:1' } }] }];
+    if (isVideo) minimalChips.push({ id: 'duration', label: 'Duration', fields: [{ name: 'duration', prop: { type: 'integer', minimum: 1, maximum: 10, default: 5 } }] });
+    state.schema = { properties: Object.fromEntries(minimalChips.flatMap(c => c.fields).map(f => [f.name, f.prop])) };
+    if (state.values.aspect_ratio == null) state.values.aspect_ratio = '1:1';
+  }
+
+  const chips = buildGenChips(state.schema, mode);
+  const html = [`<span class="gen-chip-modetag${isVideo ? ' video' : ''}">${isVideo ? 'VIDEO' : 'IMAGE'} · ${escapeHTML(m.name)}</span>`];
+  for (const chip of chips) {
+    const valLabel = formatChipValue(chip.id, chip.fields, state.values);
+    const has = valLabel != null;
+    html.push(`
+      <button class="gen-chip${has ? ' has-value' : ''}" data-chip="${chip.id}" type="button">
+        <span class="gen-chip-label">${escapeHTML(chip.label)}</span>
+        <span class="gen-chip-val">${has ? escapeHTML(valLabel) : '—'}</span>
+      </button>
+    `);
+  }
+  strip.innerHTML = html.join('');
+
+  // Bind chip click handlers
+  strip.querySelectorAll('.gen-chip').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openGenChipPopover(btn.dataset.chip, btn, chips.find(c => c.id === btn.dataset.chip));
+    });
+  });
+}
+
+// Open a popover anchored beneath (or above) a chip with controls
+// appropriate to the chip type.
+function openGenChipPopover(chipId, anchorEl, chipDef) {
+  closeAllGenPopovers();
+  const mode = chatMode === 'video' ? 'video' : 'image';
+  const state = window._genState[mode];
+  const pop = document.createElement('div');
+  pop.className = 'gen-pop' + (chipId === 'extras' ? ' extras' : '');
+  pop.dataset.popOwner = chipId;
+  pop.innerHTML = renderChipPopBody(chipId, chipDef, state.values);
+  document.body.appendChild(pop);
+  // Position anchored ABOVE the chip (popover bottom = chip top - 8)
+  // Need real dimensions, so flip visibility for measurement
+  pop.style.visibility = 'hidden';
+  pop.style.display = 'block';
+  const aRect = anchorEl.getBoundingClientRect();
+  const pRect = pop.getBoundingClientRect();
+  let left = aRect.left;
+  let top = aRect.top - pRect.height - 8;
+  if (top < 8) top = aRect.bottom + 8;
+  const maxLeft = window.innerWidth - pRect.width - 8;
+  if (left > maxLeft) left = Math.max(8, maxLeft);
+  if (left < 8) left = 8;
+  pop.style.left = Math.round(left) + 'px';
+  pop.style.top = Math.round(top) + 'px';
+  pop.style.visibility = '';
+  pop.classList.add('open');
+
+  // Wire control change handlers
+  pop.addEventListener('input', (e) => handleChipInput(e, chipId, state));
+  pop.addEventListener('change', (e) => handleChipInput(e, chipId, state));
+  pop.addEventListener('click', (e) => {
+    const pill = e.target.closest('.gen-pop-pill');
+    if (pill && pill.dataset.field) {
+      state.values[pill.dataset.field] = pill.dataset.value;
+      // Update active visual on siblings of the same field
+      pop.querySelectorAll(`.gen-pop-pill[data-field="${pill.dataset.field}"]`).forEach(p =>
+        p.classList.toggle('active', p.dataset.value === pill.dataset.value));
+      renderGenChips();
+      return;
+    }
+    const clear = e.target.closest('.gen-pop-clear');
+    if (clear && clear.dataset.field) {
+      delete state.values[clear.dataset.field];
+      closeAllGenPopovers();
+      renderGenChips();
+      return;
+    }
+  });
+}
+
+function closeAllGenPopovers() {
+  document.querySelectorAll('.gen-pop').forEach(p => p.remove());
+}
+// Dismiss popovers on outside click
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.gen-pop')) return;
+  if (e.target.closest('.gen-chip')) return;
+  closeAllGenPopovers();
+});
+
+function handleChipInput(e, chipId, state) {
+  const t = e.target;
+  if (!t || !t.dataset || !t.dataset.field) return;
+  const field = t.dataset.field;
+  let value;
+  if (t.type === 'range' || t.type === 'number') {
+    value = parseFloat(t.value);
+    if (Number.isNaN(value)) value = null;
+    // Update the live numeric label next to the slider
+    const lbl = t.parentElement?.querySelector('.gen-pop-num');
+    if (lbl) lbl.textContent = String(value);
+  } else if (t.type === 'checkbox') {
+    value = !!t.checked;
   } else {
-    if (typeof handleImageRequest === 'function') handleImageRequest(prompt, aspectRatio);
+    value = t.value;
+  }
+  if (value === '' || value == null) {
+    delete state.values[field];
+  } else {
+    state.values[field] = value;
+  }
+  renderGenChips();
+}
+
+// Build the inner HTML of a chip's popover.
+function renderChipPopBody(chipId, chipDef, values) {
+  if (!chipDef) return '';
+  const lines = [];
+  lines.push(`<div class="gen-pop-title">${escapeHTML(chipDef.label)}</div>`);
+  if (chipId === 'aspect') {
+    // Aspect-ratio enum if present, otherwise width/height number inputs
+    const arField = chipDef.fields.find(f => /aspect/i.test(f.name));
+    if (arField && Array.isArray(arField.prop?.enum)) {
+      const enums = arField.prop.enum;
+      lines.push('<div class="gen-pop-grid">');
+      enums.forEach(v => {
+        const active = values[arField.name] === v ? ' active' : '';
+        lines.push(`<button type="button" class="gen-pop-pill${active}" data-field="${escapeHTML(arField.name)}" data-value="${escapeHTML(String(v))}">${escapeHTML(String(v))}</button>`);
+      });
+      lines.push('</div>');
+    } else {
+      // Fallback to canonical aspect set
+      const enums = ['1:1', '16:9', '9:16', '4:3', '3:4', '21:9', '3:2', '2:3'];
+      const fname = arField?.name || 'aspect_ratio';
+      lines.push('<div class="gen-pop-grid">');
+      enums.forEach(v => {
+        const active = values[fname] === v ? ' active' : '';
+        lines.push(`<button type="button" class="gen-pop-pill${active}" data-field="${escapeHTML(fname)}" data-value="${escapeHTML(v)}">${escapeHTML(v)}</button>`);
+      });
+      lines.push('</div>');
+    }
+    if (values[chipDef.fields[0]?.name] != null) {
+      lines.push(`<button type="button" class="gen-pop-clear" data-field="${escapeHTML(chipDef.fields[0].name)}">clear</button>`);
+    }
+    return lines.join('');
+  }
+  // Generic single-field render: slider for numbers with min/max,
+  // dropdown for enums, text input for strings, checkbox for booleans
+  for (const f of chipDef.fields) {
+    lines.push(renderFieldControl(f, values));
+  }
+  return lines.join('');
+}
+
+// Render one schema field as a labeled control.
+function renderFieldControl(field, values) {
+  const { name, prop } = field;
+  if (!prop) return '';
+  const val = values[name];
+  const label = prop.title || name;
+  const desc = prop.description || '';
+  const lines = [`<div class="gen-pop-field">`];
+  lines.push(`<label>${escapeHTML(label)}${desc ? ` <span style="color:var(--text3);font-weight:400;">— ${escapeHTML(desc.slice(0, 80))}</span>` : ''}</label>`);
+  // Enum → grid of pills
+  if (Array.isArray(prop.enum) && prop.enum.length) {
+    lines.push('<div class="gen-pop-grid">');
+    prop.enum.forEach(v => {
+      const active = String(val) === String(v) ? ' active' : '';
+      lines.push(`<button type="button" class="gen-pop-pill${active}" data-field="${escapeHTML(name)}" data-value="${escapeHTML(String(v))}">${escapeHTML(String(v))}</button>`);
+    });
+    lines.push('</div>');
+  } else if ((prop.type === 'integer' || prop.type === 'number') && prop.minimum != null && prop.maximum != null) {
+    // Numeric with bounds → slider + live label
+    const min = prop.minimum;
+    const max = prop.maximum;
+    const step = prop.type === 'integer' ? 1 : (max - min) / 100;
+    const cur = (val != null) ? val : (prop.default != null ? prop.default : min);
+    lines.push(`<div class="gen-pop-row">`);
+    lines.push(`<input type="range" min="${min}" max="${max}" step="${step}" value="${cur}" data-field="${escapeHTML(name)}">`);
+    lines.push(`<span class="gen-pop-num">${cur}</span>`);
+    lines.push(`</div>`);
+  } else if (prop.type === 'integer' || prop.type === 'number') {
+    // Numeric, no bounds → number input
+    const cur = (val != null) ? val : (prop.default != null ? prop.default : '');
+    lines.push(`<div class="gen-pop-row"><input type="number" value="${cur}" data-field="${escapeHTML(name)}"></div>`);
+  } else if (prop.type === 'boolean') {
+    const checked = val ? ' checked' : '';
+    lines.push(`<div class="gen-pop-row"><label style="display:flex;align-items:center;gap:6px;color:var(--text);font-size:12px;"><input type="checkbox" data-field="${escapeHTML(name)}"${checked}> on</label></div>`);
+  } else {
+    // String / unknown → text input
+    const cur = (val != null) ? val : (prop.default != null ? prop.default : '');
+    lines.push(`<div class="gen-pop-row"><input type="text" value="${escapeHTML(String(cur))}" data-field="${escapeHTML(name)}" placeholder="${escapeHTML(String(prop.default || ''))}"></div>`);
+  }
+  if (val != null && val !== '') {
+    lines.push(`<button type="button" class="gen-pop-clear" data-field="${escapeHTML(name)}">clear</button>`);
+  }
+  lines.push(`</div>`);
+  return lines.join('');
+}
+
+// Called from sendMessage when chatMode is image/video. Receives the
+// prompt text (already captured before the textarea was cleared) and
+// merges in all chip values as `extras`, then dispatches to the right
+// generator.
+async function runGenSend(promptText) {
+  const prompt = (promptText || '').trim();
+  if (!prompt) { showToast('Type a prompt first'); return; }
+  const mode = chatMode === 'video' ? 'video' : 'image';
+  const state = window._genState[mode];
+  const extras = Object.assign({}, state.values || {});
+  // aspect_ratio gets pulled out so it goes through the normal aspect
+  // path (which also sets width/height/orientation hints downstream).
+  const aspectRatio = extras.aspect_ratio || null;
+  delete extras.aspect_ratio;
+  if (mode === 'video') {
+    if (typeof handleVideoRequest === 'function') handleVideoRequest(prompt, aspectRatio, extras);
+  } else {
+    if (typeof handleImageRequest === 'function') handleImageRequest(prompt, aspectRatio, extras);
   }
 }
 

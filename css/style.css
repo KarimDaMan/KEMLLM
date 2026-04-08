@@ -32,23 +32,41 @@
 #input-wrap{position:relative;}
 
 /* Direct generate modal */
-.gen-modal{position:fixed;inset:0;z-index:2147483600;display:none;}
-.gen-modal.open{display:block;}
-.gen-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);}
-.gen-sheet{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,94vw);background:var(--bg2);border:1px solid var(--border2);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6);}
-.gen-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);}
-.gen-title{font-size:15px;font-weight:600;color:var(--text);}
-.gen-close{background:transparent;border:none;color:var(--text2);font-size:24px;cursor:pointer;line-height:1;padding:0 6px;}
-.gen-close:hover{color:var(--text);}
-.gen-prompt{width:calc(100% - 36px);margin:16px 18px 0;padding:12px 14px;background:var(--bg);border:1px solid var(--border2);border-radius:10px;color:var(--text);font-family:inherit;font-size:14px;resize:vertical;outline:none;box-sizing:border-box;}
-.gen-prompt:focus{border-color:var(--accent);}
-.gen-ratios{display:flex;flex-wrap:wrap;gap:6px;padding:14px 18px 0;}
-.gen-ratio{background:var(--bg3);border:1px solid var(--border2);color:var(--text2);padding:6px 12px;border-radius:999px;font-size:12px;cursor:pointer;font-family:inherit;}
-.gen-ratio:hover{background:var(--bg4);color:var(--text);}
-.gen-ratio.active{background:var(--accent);border-color:var(--accent);color:#fff;}
-.gen-foot{padding:16px 18px 18px;display:flex;justify-content:flex-end;}
-.gen-go{background:var(--accent);border:none;color:#fff;padding:9px 22px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;}
-.gen-go:hover{filter:brightness(1.15);}
+/* ── Dynamic generator chip strip ──
+   Shown above the chat input box when chatMode is 'image' or 'video'.
+   Each chip is a parameter from the selected Replicate model's
+   openapi_schema, rendered with a tiny popover (slider/select/text)
+   that lets the user tune it before pressing send. */
+.gen-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:0 24px 8px;max-width:720px;margin:0 auto;}
+.gen-chip{background:var(--bg2);border:1px solid var(--border2);color:var(--text2);padding:6px 12px;border-radius:999px;font-size:12px;font-family:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all .15s;}
+.gen-chip:hover{background:var(--bg3);color:var(--text);border-color:var(--text3);}
+.gen-chip.has-value{color:var(--text);border-color:#3a3a3a;}
+.gen-chip .gen-chip-label{font-weight:600;letter-spacing:.2px;}
+.gen-chip .gen-chip-val{color:var(--text3);}
+.gen-chip.has-value .gen-chip-val{color:var(--text);}
+.gen-chip-modetag{margin-right:auto;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text);background:linear-gradient(135deg,#8b5cf6,#ec4899);padding:4px 10px;border-radius:999px;}
+.gen-chip-modetag.video{background:linear-gradient(135deg,#06b6d4,#22d3ee);color:#001;}
+/* Popover anchored under a chip with position:fixed (set in JS). */
+.gen-pop{position:fixed;left:0;top:0;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:14px;min-width:260px;max-width:340px;box-shadow:0 18px 48px rgba(0,0,0,.7);z-index:9998;display:none;animation:plusMenuIn .18s var(--ease-out);}
+.gen-pop.open{display:block;}
+.gen-pop-title{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text2);margin-bottom:8px;}
+.gen-pop-desc{font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.4;}
+.gen-pop-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.gen-pop-row:last-child{margin-bottom:0;}
+.gen-pop input[type=range]{flex:1;accent-color:var(--accent);}
+.gen-pop input[type=text],.gen-pop input[type=number],.gen-pop select,.gen-pop textarea{flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:8px 10px;font-family:inherit;font-size:12px;outline:none;}
+.gen-pop input[type=text]:focus,.gen-pop input[type=number]:focus,.gen-pop select:focus,.gen-pop textarea:focus{border-color:var(--accent);}
+.gen-pop-num{min-width:48px;text-align:right;color:var(--text);font-family:var(--mono);font-size:12px;}
+.gen-pop-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+.gen-pop-pill{background:var(--bg3);border:1px solid var(--border2);color:var(--text2);padding:7px 10px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;text-align:center;}
+.gen-pop-pill:hover{background:var(--bg4);color:var(--text);}
+.gen-pop-pill.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.gen-pop-clear{background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;font-family:inherit;padding:4px 0;margin-top:4px;text-decoration:underline;}
+.gen-pop-clear:hover{color:var(--text);}
+/* Extras popover (full schema form) is taller and scrollable */
+.gen-pop.extras{min-width:320px;max-width:380px;max-height:60vh;overflow-y:auto;}
+.gen-pop.extras .gen-pop-field{margin-bottom:12px;}
+.gen-pop.extras .gen-pop-field label{display:block;font-size:11px;color:var(--text2);margin-bottom:4px;font-weight:600;}
 
 /* Topbar profile avatar button (GitHub PFP sync) */
 .tb-ava{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border2);background:var(--bg3);cursor:pointer;padding:0;overflow:hidden;background-size:cover;background-position:center;flex-shrink:0;transition:border-color .15s,transform .12s;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;}
@@ -757,7 +775,18 @@ input,textarea{font-family:inherit;color:inherit;}
   /* Backdrop is unnecessary on mobile since the sidebar IS the screen */
   #sb-backdrop{display:none !important;}
   #main{width:100vw;}
-  #topbar{padding:0 12px;gap:6px;height:56px;overflow-x:auto;scrollbar-width:none;}
+  /* Safe-area padding for iOS notch / Dynamic Island. Without these,
+     the topbar and input bar slide under the system UI on iPhones with
+     a notch. The viewport meta now includes viewport-fit=cover so we
+     can use env(safe-area-inset-*) values. */
+  #topbar{
+    padding:env(safe-area-inset-top,0) 12px 0 calc(12px + env(safe-area-inset-left,0));
+    gap:6px;
+    height:calc(56px + env(safe-area-inset-top,0));
+    overflow-x:auto;scrollbar-width:none;
+  }
+  #input-wrap{padding-bottom:calc(18px + env(safe-area-inset-bottom,0)) !important;}
+  #sidebar{padding-left:env(safe-area-inset-left,0);padding-top:env(safe-area-inset-top,0);}
   #topbar::-webkit-scrollbar{display:none;}
   .tb-model{font-size:11.5px;padding:5px 9px;flex-shrink:0;}
   .tb-spacer{display:none;}
@@ -943,10 +972,12 @@ input,textarea{font-family:inherit;color:inherit;}
 }
 
 /* Floating Desktop button — top-right of the chat panel, only shows when ready */
-/* Desktop button lives inside the mode row next to Chat/Code/Agent. It's
-   hidden until probeDesktopSupport detects a working /desktop endpoint. */
-#chat-desktop-btn{display:none;}
-#chat-desktop-btn.show{display:inline-flex;}
+/* Desktop button is now shown ONLY as a plus-menu item (.plus-desktop)
+   when in agent mode. The floating button at #chat-desktop-btn still
+   exists in the DOM and gets clicked programmatically by the plus-menu
+   item dispatch — but it stays visually hidden. */
+#chat-desktop-btn{display:none !important;}
+#chat-desktop-btn.show{display:none !important;}
 .mode-btn-desktop{gap:6px;}
 .mode-btn-desktop svg{width:14px;height:14px;}
 

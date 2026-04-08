@@ -348,7 +348,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v117 · plus menu rebuilt with position:fixed at <body> level (immune to any layout); web search now uses Jina Reader as primary source (CORS, no key, no worker deploy needed); much stronger system prompt so every model actually emits [WEB_SEARCH]';
+const KEMLLM_BUILD = 'v118 · inline generator panel — Generate image/video buttons flip mode and show dynamic chip strip (Aspect/Quality/Duration/Extras) built from each model\'s Replicate openapi_schema, send button routes prompt+chip values to the model. Desktop sub-action moved into the + menu (agent-mode only). Mobile notch / Dynamic Island safe-area padding on topbar and input.';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.
@@ -636,6 +636,16 @@ document.addEventListener('DOMContentLoaded', () => {
     menu.querySelectorAll('.plus-mode').forEach(el => {
       el.classList.toggle('active', el.dataset.mode === chatMode);
     });
+    // Desktop sub-item: visible only when we're in agent mode AND the
+    // hidden floating chat-desktop-btn has been marked desktopReady=1 by
+    // probeDesktopSupport (which only succeeds when the configured HF
+    // backend has a noVNC layer at /vnc.html).
+    const dItem = menu.querySelector('.plus-desktop');
+    if (dItem) {
+      const dBtn = document.getElementById('chat-desktop-btn');
+      const ready = dBtn?.dataset?.desktopReady === '1';
+      dItem.style.display = (chatMode === 'agent' && ready) ? '' : 'none';
+    }
     const willOpen = !menu.classList.contains('open');
     if (willOpen) {
       positionPlusMenu();
@@ -656,7 +666,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target.closest('#plus-menu') || e.target.closest('#plus-btn')) return;
     menu.classList.remove('open');
   });
-  // Menu item click dispatch
+  // Menu item click dispatch. The "Generate image" / "Generate video"
+  // entries flip chatMode → 'image' / 'video', which triggers the inline
+  // gen-chips strip above the input box (rendered by setChatMode →
+  // renderGenChips). The user then types a prompt and presses send;
+  // sendMessage() routes to runGenSend() when in those modes.
   document.getElementById('plus-menu')?.addEventListener('click', (e) => {
     const btn = e.target.closest('.plus-item');
     if (!btn) return;
@@ -665,25 +679,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (act === 'attach') {
       document.getElementById('attach-input').click();
     } else if (act === 'image') {
-      openGenModal('image');
+      setChatMode('image');
     } else if (act === 'video') {
-      openGenModal('video');
+      setChatMode('video');
+    } else if (act === 'desktop') {
+      // Desktop sub-action — synthesize a click on the floating
+      // chat-desktop-btn so the existing open-desktop pipeline (probe,
+      // agentStart, showAgentDesktop, preview-pane wiring) is reused.
+      const dBtn = document.getElementById('chat-desktop-btn');
+      if (dBtn) dBtn.click();
     } else if (act && act.startsWith('mode-')) {
       setChatMode(btn.dataset.mode);
     }
-  });
-  // Gen modal (direct image/video generation, no AI)
-  document.getElementById('gen-close')?.addEventListener('click', closeGenModal);
-  document.getElementById('gen-modal')?.querySelector('.gen-backdrop')?.addEventListener('click', closeGenModal);
-  document.getElementById('gen-go')?.addEventListener('click', runGenModal);
-  document.getElementById('gen-modal')?.addEventListener('click', (e) => {
-    const ratio = e.target.closest('.gen-ratio');
-    if (!ratio) return;
-    document.querySelectorAll('.gen-ratio').forEach(el => el.classList.remove('active'));
-    ratio.classList.add('active');
-  });
-  document.getElementById('gen-prompt')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runGenModal(); }
   });
 
   // Legacy fallback — the old attach button id still exists in some

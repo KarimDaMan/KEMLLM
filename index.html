@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -10,11 +10,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=117">
+<link rel="stylesheet" href="css/style.css?v=118">
 <!-- KaTeX for math rendering (lazy-loaded by chat.js when first math is detected) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" media="print" onload="this.media='all'">
 </head>
-<body data-kemllm-build="117">
+<body data-kemllm-build="118">
 
 <!-- Plus button popover menu — sits at the top of <body> on purpose so it
      uses position:fixed against the viewport and is never affected by any
@@ -27,6 +27,10 @@
   <div class="plus-sep"></div>
   <button class="plus-item plus-mode" data-act="mode-chat" data-mode="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Chat mode</span></button>
   <button class="plus-item plus-mode" data-act="mode-agent" data-mode="agent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><polyline points="6 8 10 12 6 16"/><line x1="12" y1="16" x2="17" y2="16"/></svg><span>Agent mode</span></button>
+  <!-- Desktop sub-action — only visible while in agent mode AND the
+       /vnc.html probe found a noVNC layer on the configured HF backend.
+       Visibility is toggled by the plus-btn click handler in app.js. -->
+  <button class="plus-item plus-desktop" data-act="desktop" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>Show AI desktop</span></button>
 </div>
 
 <!-- ========== LOGIN SCREEN ========== -->
@@ -180,6 +184,13 @@
       </div>
       <div id="input-wrap">
         <div id="attach-preview" class="attach-preview"></div>
+        <!-- Dynamic generator chips. Hidden in chat/agent mode. When the
+             user picks "Generate image" / "Generate video" from the +
+             menu we set chatMode to 'image' / 'video', read the selected
+             Replicate model's openapi_schema, and render a row of chips
+             here (Aspect, Quality, Duration, Extras, etc.). Pressing send
+             then routes the prompt + chip params straight to the model. -->
+        <div id="gen-chips" class="gen-chips" style="display:none;"></div>
         <div id="input-box">
           <button id="plus-btn" class="attach-btn" title="Add — attach, generate, switch mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
           <input id="attach-input" type="file" multiple style="display:none">
@@ -190,27 +201,6 @@
         </div>
       </div>
 
-      <!-- Direct image / video generation modal -->
-      <div id="gen-modal" class="gen-modal">
-        <div class="gen-backdrop"></div>
-        <div class="gen-sheet">
-          <div class="gen-head">
-            <div id="gen-title" class="gen-title">Generate image</div>
-            <button id="gen-close" class="gen-close" type="button">×</button>
-          </div>
-          <textarea id="gen-prompt" class="gen-prompt" rows="3" placeholder="Describe what you want… e.g. 'a purple nebula with neon stars, cinematic'"></textarea>
-          <div class="gen-ratios">
-            <button class="gen-ratio active" data-ar="1:1">1:1 Square</button>
-            <button class="gen-ratio" data-ar="16:9">16:9 Wide</button>
-            <button class="gen-ratio" data-ar="9:16">9:16 Tall</button>
-            <button class="gen-ratio" data-ar="4:3">4:3</button>
-            <button class="gen-ratio" data-ar="21:9">21:9 Cinema</button>
-          </div>
-          <div class="gen-foot">
-            <button id="gen-go" class="gen-go" type="button">Generate</button>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- CODE PANEL -->
@@ -552,13 +542,13 @@
 
 <div id="toast"></div>
 
-<script src="js/state.js?v=117"></script>
-<script src="js/models.js?v=117"></script>
-<script src="js/api.js?v=117"></script>
-<script src="js/chat.js?v=117"></script>
-<script src="js/code.js?v=117"></script>
-<script src="js/agent.js?v=117"></script>
-<script src="js/ui.js?v=117"></script>
-<script src="js/app.js?v=117"></script>
+<script src="js/state.js?v=118"></script>
+<script src="js/models.js?v=118"></script>
+<script src="js/api.js?v=118"></script>
+<script src="js/chat.js?v=118"></script>
+<script src="js/code.js?v=118"></script>
+<script src="js/agent.js?v=118"></script>
+<script src="js/ui.js?v=118"></script>
+<script src="js/app.js?v=118"></script>
 </body>
 </html>

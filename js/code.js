@@ -121,10 +121,26 @@ async function runViaRemote(lang, code) {
       await agentStart();
     }
     if (typeof agentSessionId !== 'undefined' && agentSessionId) {
-      const r = await hfFetch('/sessions/' + agentSessionId + '/exec', {
+      const tryExec = async () => hfFetch('/sessions/' + agentSessionId + '/exec', {
         method: 'POST',
         body: JSON.stringify({ command: builder(code) })
       });
+      let r = await tryExec();
+      // If the session went stale (container restarted, sleep-wake, etc.)
+      // the backend returns 404 { code: 'no_session' }. Create a fresh
+      // session and retry once — users shouldn't have to care.
+      if (r.status === 404) {
+        try {
+          const txt = await r.clone().text();
+          if (/no_session|session not found/i.test(txt)) {
+            if (typeof window !== 'undefined') window.agentSessionId = '';
+            if (typeof agentStart === 'function') await agentStart();
+            if (typeof agentSessionId !== 'undefined' && agentSessionId) {
+              r = await tryExec();
+            }
+          }
+        } catch {}
+      }
       if (!r.ok) throw new Error('Agent backend ' + r.status);
       const d = await r.json();
       return {

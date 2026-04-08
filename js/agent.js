@@ -326,10 +326,24 @@ async function agentRun(rawCmd, fromAgent, silent) {
 
   if (agentBackend === 'hf') {
     try {
-      const r = await hfFetch('/sessions/' + agentSessionId + '/exec', {
+      const tryExec = async () => hfFetch('/sessions/' + agentSessionId + '/exec', {
         method: 'POST',
         body: JSON.stringify({ command: rawCmd })
       });
+      let r = await tryExec();
+      // Stale session auto-recovery: on 404 "no_session" we transparently
+      // create a new session and retry once. Users should never see the
+      // raw "session not found" error.
+      if (r.status === 404) {
+        try {
+          const txt = await r.clone().text();
+          if (/no_session|session not found/i.test(txt)) {
+            agentSessionId = '';
+            await agentStart();
+            if (agentSessionId) r = await tryExec();
+          }
+        } catch {}
+      }
       if (!r.ok) {
         const t = await r.text();
         throw new Error('backend ' + r.status + ': ' + t.slice(0, 200));

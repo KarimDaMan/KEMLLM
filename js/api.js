@@ -246,12 +246,20 @@ function getSystemPrompt(model) {
   const lines = [];
   lines.push(`You are ${name}, a generative AI. You have the following tools:`);
   lines.push('');
-  lines.push('- CODE EXECUTION. Write a fenced code block (```python, ```javascript, ```bash, etc). It runs automatically and the output is returned to you. Python runs in Pyodide; JavaScript in a sandboxed iframe; other languages in a remote sandbox.');
+  lines.push('- CODE EXECUTION. When a question needs computation, data processing, API calls, file operations, math you can\'t do in your head, or anything verifiable — WRITE A FENCED CODE BLOCK (```python, ```javascript, ```bash, ```c, ```rust, ```go, etc). It runs automatically in a sandbox and the output comes back to you as the next turn. Use this whenever it helps, not just when the user explicitly says "write code". Python runs in Pyodide (browser); JavaScript in a sandboxed iframe; bash/c/cpp/rust/go/java/lua run in a remote Linux sandbox. Do NOT ask permission to run code — just write the block. After execution, explain the result in plain prose.');
   lines.push('- IMAGE GENERATION. Emit `[GENERATE_IMAGE prompt="..."]`. Write a rich visual description (subject, composition, lighting, style, colors). The image is generated and shown inline.');
   lines.push('- VIDEO GENERATION. Emit `[GENERATE_VIDEO prompt="..."]`.');
   lines.push('- IMAGE EDITING. If the user has ATTACHED an image to their message and asks you to modify, change, recolor, restyle, remove, add, replace, or transform something in it — emit `[EDIT_IMAGE prompt="rewritten detailed instruction for the image editor"]`. Do this even for short requests like "make it blue" or "remove the background" — rewrite the prompt to be descriptive. This also works on images you previously generated in the same conversation. Do NOT describe the edit in words and refuse to do it — emit the marker. You can still discuss the image in prose too, but ALWAYS emit the marker when an edit is requested.');
   lines.push('- MATH. Use LaTeX inside `$...$` for inline and `$$...$$` for display. Rendered with KaTeX.');
   lines.push('- PERSISTENT MEMORY. When the user tells you something useful about themselves (name, preferences, projects, skills, goals, context, opinions, style, anything worth recalling later), emit `[REMEMBER fact="short declarative sentence"]`. One marker per fact. Emit as many markers as appropriate per reply — do not hold back. The user cannot see these markers in your reply (they are stripped).');
+  // Computer Use — only when Claude 3.5+ is the model, HF backend is
+  // configured, and user is in Agent mode. We can't easily detect the
+  // last one at prompt-build time, so always mention it; the tool is
+  // only injected into the API request when conditions are met.
+  if (typeof chatMode !== 'undefined' && chatMode === 'agent' &&
+      typeof getHfBackendUrl === 'function' && getHfBackendUrl()) {
+    lines.push('- DESKTOP CONTROL (computer use tool). You have a `computer` tool that can screenshot, click, type, press keys, and drag on a real Linux desktop running in a remote sandbox (1600×900). When the user asks you to do something visual — open an app, fill a form, navigate a webpage, click a button — USE THE TOOL. Always start with a screenshot to see the current state. Describe what you see before acting. After each action, take another screenshot to verify. Think step-by-step about coordinates. Do NOT ask permission to use the tool — just use it.');
+  }
 
   // Sandbox web access — a real constraint the AI needs to know about.
   if (profileGet('sandbox-web') !== '1') {
@@ -321,50 +329,175 @@ function getUserMaxTokens() {
 }
 
 // ===== Anthropic =====
+// Helper: decide whether to wire Claude's Computer Use tool into the API
+// call. We only enable it when (a) the model is Sonnet 3.5+ / Opus 4+
+// (earlier Claudes aren't trained for it), (b) the HF Agent backend is
+// configured and reachable, and (c) the user is in Agent mode. The
+// display dimensions MUST match what the XFCE Xvfb is running at —
+// the current Dockerfile.desktop uses 1600×900.
+function shouldEnableComputerUse(model) {
+  if (typeof chatMode === 'undefined' || chatMode !== 'agent') return false;
+  if (typeof getHfBackendUrl !== 'function' || !getHfBackendUrl()) return false;
+  const id = (model?.apiId || '').toLowerCase();
+  // claude-3-5-sonnet-20241022+, claude-sonnet-4, claude-opus-4, claude-4-*
+  if (/claude-(3-5|3\.5)-sonnet/.test(id)) return true;
+  if (/claude-(sonnet|opus|haiku)-4/.test(id)) return true;
+  if (/claude-4/.test(id)) return true;
+  return false;
+}
+
+// Convert one of our messages[] entries into Claude's content-block form.
+function anthropicMessageFrom(m) {
+  const role = m.role === 'assistant' ? 'assistant' : 'user';
+  const images = (m.attachments || []).filter(a => a.isImage || (a.mime || '').startsWith('image/'));
+  if (images.length) {
+    const parts = images.map(a => {
+      const d = parseDataUrl(a.dataUrl);
+      if (!d) return null;
+      return { type: 'image', source: { type: 'base64', media_type: d.mediaType, data: d.base64 } };
+    }).filter(Boolean);
+    if (m.content) parts.push({ type: 'text', text: m.content });
+    return { role, content: parts };
+  }
+  return { role, content: m.content };
+}
+
+// Execute a Claude computer_use tool call via the HF agent backend.
+// Returns the base64 screenshot that becomes the tool_result content.
+async function runComputerAction(input) {
+  const base = getHfBackendUrl();
+  const tok = getHfBackendToken();
+  if (!base) throw new Error('HF backend URL not configured');
+  // Flask endpoint under /api/desktop/action thanks to the nginx front-door.
+  const r = await fetch(`${base}/api/desktop/action?token=${encodeURIComponent(tok)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!r.ok) {
+    const t = await r.text().catch(() => '');
+    throw new Error(`desktop action failed: ${r.status} ${t.slice(0, 200)}`);
+  }
+  const j = await r.json();
+  if (!j.ok) throw new Error('desktop action error: ' + (j.error || 'unknown'));
+  return { data: j.data, media_type: j.media_type || 'image/png', text: j.text };
+}
+
 async function callAnthropicDirect(model, messages, apiKey, onChunk) {
   const sys = messages.find(m => m.role === 'system')?.content || '';
-  const msgs = messages.filter(m => m.role !== 'system').map(m => {
-    const role = m.role === 'assistant' ? 'assistant' : 'user';
-    // Only pass image attachments to Claude — it doesn't accept arbitrary
-    // file types. Non-image files are ignored here (the AI can still
-    // reference them by name via the text prompt).
-    const images = (m.attachments || []).filter(a => a.isImage || (a.mime || '').startsWith('image/'));
-    if (images.length) {
-      const parts = images.map(a => {
-        const d = parseDataUrl(a.dataUrl);
-        if (!d) return null;
-        return { type: 'image', source: { type: 'base64', media_type: d.mediaType, data: d.base64 } };
-      }).filter(Boolean);
-      if (m.content) parts.push({ type: 'text', text: m.content });
-      return { role, content: parts };
-    }
-    return { role, content: m.content };
-  });
-  // Anthropic's API REQUIRES max_tokens — we must send something even
-  // if the user hasn't set one. Default to the model's reasonable cap
-  // when unset. For Opus/Sonnet that's 8192, which is the API default
-  // output limit anyway.
+  const msgs = messages.filter(m => m.role !== 'system').map(anthropicMessageFrom);
   const anthropicMax = getUserMaxTokens() || 8192;
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: model.apiId,
-      max_tokens: anthropicMax,
-      system: sys,
-      messages: msgs
-    })
-  });
-  if (!res.ok) throw new Error('Anthropic API error: ' + res.status + ' ' + (await res.text()).slice(0, 200));
-  const data = await res.json();
-  const text = data.content?.[0]?.text || '';
-  onChunk(text, true);
-  return text;
+
+  const useComputer = shouldEnableComputerUse(model);
+  const tools = useComputer ? [{
+    type: 'computer_20241022',
+    name: 'computer',
+    // Must match the Xvfb :0 resolution in start-desktop.sh
+    display_width_px: 1600,
+    display_height_px: 900,
+    display_number: 0,
+  }] : undefined;
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-api-key': apiKey,
+    'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true',
+  };
+  if (useComputer) {
+    headers['anthropic-beta'] = 'computer-use-2024-10-22';
+  }
+
+  // If computer-use is NOT enabled, do the simple single-shot call.
+  if (!useComputer) {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: model.apiId,
+        max_tokens: anthropicMax,
+        system: sys,
+        messages: msgs,
+      }),
+    });
+    if (!res.ok) throw new Error('Anthropic API error: ' + res.status + ' ' + (await res.text()).slice(0, 200));
+    const data = await res.json();
+    const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+    onChunk(text, true);
+    return text;
+  }
+
+  // Computer-use loop. Each iteration: call the API, handle any tool_use
+  // blocks by running them on the HF backend, feed the screenshot(s) back
+  // as a user-role tool_result message, and loop until stop_reason !=
+  // 'tool_use'. Caps at 20 iterations as a safety net.
+  let convo = msgs.slice();
+  let finalText = '';
+  for (let iter = 0; iter < 20; iter++) {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: model.apiId,
+        max_tokens: anthropicMax,
+        system: sys,
+        tools,
+        messages: convo,
+      }),
+    });
+    if (!res.ok) throw new Error('Anthropic API error: ' + res.status + ' ' + (await res.text()).slice(0, 200));
+    const data = await res.json();
+    const content = data.content || [];
+
+    // Append the assistant turn to the convo unchanged.
+    convo.push({ role: 'assistant', content });
+
+    // Stream text content to the caller.
+    const textPieces = content.filter(b => b.type === 'text').map(b => b.text);
+    const iterText = textPieces.join('');
+    if (iterText) {
+      finalText += (finalText ? '\n\n' : '') + iterText;
+      onChunk(iterText, false);
+    }
+
+    if (data.stop_reason !== 'tool_use') {
+      onChunk('', true);
+      return finalText;
+    }
+
+    // Collect all tool_use blocks, run each one, assemble tool_result list.
+    const toolUses = content.filter(b => b.type === 'tool_use');
+    const results = [];
+    for (const tu of toolUses) {
+      try {
+        const out = await runComputerAction(tu.input || {});
+        const resultContent = [];
+        if (out.data) {
+          resultContent.push({
+            type: 'image',
+            source: { type: 'base64', media_type: out.media_type || 'image/png', data: out.data },
+          });
+        }
+        if (out.text) {
+          resultContent.push({ type: 'text', text: out.text });
+        }
+        if (!resultContent.length) {
+          resultContent.push({ type: 'text', text: '(action completed)' });
+        }
+        results.push({ type: 'tool_result', tool_use_id: tu.id, content: resultContent });
+      } catch (e) {
+        results.push({
+          type: 'tool_result',
+          tool_use_id: tu.id,
+          content: [{ type: 'text', text: 'ERROR: ' + (e.message || String(e)) }],
+          is_error: true,
+        });
+      }
+    }
+    convo.push({ role: 'user', content: results });
+  }
+  onChunk('', true);
+  return finalText;
 }
 
 async function callAnthropicBuiltin(model, messages, onChunk) {

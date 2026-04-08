@@ -923,11 +923,11 @@ function chatPreviewShow(url, title) {
   if (title && titleEl) titleEl.textContent = title;
   frame.src = url;
   pane.classList.add('show');
-  // Reveal the audio toggle only for the AI Desktop preview. Browsers
-  // won't autoplay without a user gesture, so the button starts muted
-  // and the user taps to enable.
+  // Show the audio toggle for the AI Desktop preview. Detect by title
+  // (exact match) or by URL containing 'vnc' — both mean noVNC is loaded.
   const audioBtn = document.getElementById('chat-preview-audio');
-  if (audioBtn) audioBtn.style.display = (title === 'AI Desktop') ? '' : 'none';
+  const isDesktop = title === 'AI Desktop' || /vnc(\.html|_lite)/.test(url || '');
+  if (audioBtn) audioBtn.style.display = isDesktop ? 'inline-block' : 'none';
 }
 function chatPreviewClose() {
   const pane = document.getElementById('chat-preview');
@@ -954,15 +954,15 @@ function togglePreviewAudio() {
     el.pause();
     el.src = '';
     el.removeAttribute('src');
-    btn.textContent = '🔇';
+    btn.textContent = '🔇 Audio';
     btn.dataset.on = '0';
-    btn.title = 'Enable audio';
+    btn.title = 'Enable desktop audio';
   } else {
     el.src = `${base}/api/audio?token=${encodeURIComponent(tok)}`;
     el.play().then(() => {
-      btn.textContent = '🔊';
+      btn.textContent = '🔊 Audio';
       btn.dataset.on = '1';
-      btn.title = 'Disable audio';
+      btn.title = 'Disable desktop audio';
     }).catch((e) => {
       showToast('Audio failed: ' + (e.message || e));
     });

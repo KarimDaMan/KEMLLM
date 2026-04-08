@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v86 · desktop perf tuning — disable xfwm4 compositing (~30% CPU save), drop Xvfb to 1600x900 (2.25x fewer pixels), tighten x11vnc (-defer 5 -wait 5 -noxkb, multi-threaded, tight encoding). Should feel much more responsive.';
+const KEMLLM_BUILD = 'v87 · left dock moved below top bar (SW anchor len=97), audio button widened with label, stronger code-exec system prompt, Claude Computer Use tool wired end-to-end (xdotool/scrot via /api/desktop/action + screenshot tool_result loop), stale-session auto-recovery in agentRun and runViaRemote';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

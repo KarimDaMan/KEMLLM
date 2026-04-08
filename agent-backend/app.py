@@ -293,6 +293,131 @@ def desktop_proxy(rest=""):
     return resp
 
 
+@app.route("/desktop/screenshot", methods=["GET", "OPTIONS"])
+def desktop_screenshot():
+    """Capture the current X display as a PNG and return base64 JSON.
+    Used by Claude Computer Use tool_result blocks so the model can see
+    what happened after an action."""
+    if request.method == "OPTIONS":
+        return ("", 204)
+    if AGENT_TOKEN:
+        tok = request.args.get("token") or (request.headers.get("Authorization") or "").replace("Bearer ", "")
+        if tok != AGENT_TOKEN:
+            return jsonify({"error": "invalid token"}), 401
+    import subprocess as _sp
+    import base64 as _b64
+    env = {"DISPLAY": ":0", "HOME": "/home/agent", "PATH": "/usr/local/bin:/usr/bin:/bin"}
+    try:
+        # scrot writes to stdout with -o -
+        r = _sp.run(["scrot", "-o", "/tmp/kemllm-screen.png"], env=env, capture_output=True, timeout=5)
+        if r.returncode != 0:
+            return jsonify({"error": "scrot failed: " + r.stderr.decode(errors="ignore")}), 500
+        with open("/tmp/kemllm-screen.png", "rb") as f:
+            data = _b64.b64encode(f.read()).decode("ascii")
+    except Exception as e:
+        return jsonify({"error": "screenshot failed: " + str(e)}), 500
+    resp = jsonify({"ok": True, "data": data, "media_type": "image/png"})
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
+
+
+@app.route("/desktop/action", methods=["POST", "OPTIONS"])
+def desktop_action():
+    """Execute a Claude Computer Use action via xdotool. Accepts the
+    same action vocabulary as the Anthropic computer_20241022 tool:
+      - screenshot      (handled here, returns a fresh PNG)
+      - key             {action:'key', text:'Return'}
+      - type            {action:'type', text:'hello world'}
+      - mouse_move      {action:'mouse_move', coordinate:[x,y]}
+      - left_click      {action:'left_click'}              (at current pos)
+      - right_click, middle_click, double_click
+      - left_click_drag {action:'left_click_drag', coordinate:[x,y]}
+      - cursor_position {action:'cursor_position'} → returns [x,y]
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    if AGENT_TOKEN:
+        tok = request.args.get("token") or (request.headers.get("Authorization") or "").replace("Bearer ", "")
+        if tok != AGENT_TOKEN:
+            return jsonify({"error": "invalid token"}), 401
+    import subprocess as _sp
+    import base64 as _b64
+    body = request.get_json(silent=True) or {}
+    action = body.get("action", "")
+    env = {"DISPLAY": ":0", "HOME": "/home/agent", "PATH": "/usr/local/bin:/usr/bin:/bin"}
+
+    def run_xdo(args):
+        try:
+            r = _sp.run(["xdotool"] + args, env=env, capture_output=True, timeout=10)
+            return r.returncode, r.stdout.decode(errors="ignore"), r.stderr.decode(errors="ignore")
+        except Exception as e:
+            return -1, "", str(e)
+
+    def take_screenshot():
+        try:
+            r = _sp.run(["scrot", "-o", "/tmp/kemllm-screen.png"], env=env, capture_output=True, timeout=5)
+            if r.returncode != 0:
+                return None
+            with open("/tmp/kemllm-screen.png", "rb") as f:
+                return _b64.b64encode(f.read()).decode("ascii")
+        except Exception:
+            return None
+
+    coord = body.get("coordinate")
+    text = body.get("text", "")
+
+    if action == "screenshot":
+        data = take_screenshot()
+        if data is None:
+            return jsonify({"error": "screenshot failed"}), 500
+        return jsonify({"ok": True, "data": data, "media_type": "image/png"})
+
+    if action == "mouse_move" and coord and len(coord) == 2:
+        run_xdo(["mousemove", "--sync", str(int(coord[0])), str(int(coord[1]))])
+    elif action == "left_click":
+        if coord and len(coord) == 2:
+            run_xdo(["mousemove", "--sync", str(int(coord[0])), str(int(coord[1]))])
+        run_xdo(["click", "1"])
+    elif action == "right_click":
+        if coord and len(coord) == 2:
+            run_xdo(["mousemove", "--sync", str(int(coord[0])), str(int(coord[1]))])
+        run_xdo(["click", "3"])
+    elif action == "middle_click":
+        if coord and len(coord) == 2:
+            run_xdo(["mousemove", "--sync", str(int(coord[0])), str(int(coord[1]))])
+        run_xdo(["click", "2"])
+    elif action == "double_click":
+        if coord and len(coord) == 2:
+            run_xdo(["mousemove", "--sync", str(int(coord[0])), str(int(coord[1]))])
+        run_xdo(["click", "--repeat", "2", "1"])
+    elif action == "left_click_drag" and coord and len(coord) == 2:
+        run_xdo(["mousedown", "1"])
+        run_xdo(["mousemove", "--sync", str(int(coord[0])), str(int(coord[1]))])
+        run_xdo(["mouseup", "1"])
+    elif action == "type":
+        if text:
+            run_xdo(["type", "--delay", "12", text])
+    elif action == "key":
+        if text:
+            run_xdo(["key", text])
+    elif action == "cursor_position":
+        rc, out, err = run_xdo(["getmouselocation", "--shell"])
+        x = y = 0
+        for line in out.splitlines():
+            if line.startswith("X="): x = int(line[2:])
+            elif line.startswith("Y="): y = int(line[2:])
+        return jsonify({"ok": True, "x": x, "y": y})
+    else:
+        return jsonify({"error": "unknown action: " + action}), 400
+
+    # After any state-changing action, return a fresh screenshot so the
+    # client loop can feed it back to Claude.
+    data = take_screenshot()
+    resp = jsonify({"ok": True, "data": data, "media_type": "image/png"})
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
+
+
 @app.route("/audio", methods=["GET", "OPTIONS"])
 def audio_stream():
     """Stream the PulseAudio default sink's monitor as a continuous MP3.

@@ -103,6 +103,11 @@ function loadAllSettings() {
   const savedVideo = profileGet('selected_video');
   if (savedVideo && typeof selectedVideo !== 'undefined') selectedVideo = savedVideo;
   if (typeof renderModelDropdowns === 'function') renderModelDropdowns();
+  // Sync topbar Web button to match the sandbox-web profile setting
+  const webIsOn = profileGet('sandbox-web') !== '0';
+  const webBtn = document.getElementById('tb-web');
+  if (webBtn) webBtn.classList.toggle('on', webIsOn);
+  if (typeof window !== 'undefined') window.webSearchOn = webIsOn;
   // Background music settings (auto-on by default)
   const musicOnEl = document.getElementById('sp-music-on');
   const musicVolEl = document.getElementById('sp-music-vol');

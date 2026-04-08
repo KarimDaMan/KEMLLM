@@ -69,23 +69,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
  && rm -rf /var/lib/apt/lists/*
 
 # Real Firefox from Mozilla (Ubuntu 22.04's apt firefox is a snap stub).
-# Tolerant: if the download fails, the build still succeeds and xfce4
-# just won't have a firefox launcher — the user can install it later.
+# As of Firefox 122+ Mozilla ships .tar.xz (not .tar.bz2) — use `tar -xaf`
+# which auto-detects the compression format from the magic bytes regardless
+# of extension, so we don't have to know whether it's xz/bz2/gz.
 RUN set -e \
  && mkdir -p /opt \
- && (wget -qO /tmp/firefox.tar.bz2 \
+ && wget -qO /tmp/firefox.tar \
        "https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US" \
-     || wget -qO /tmp/firefox.tar.bz2 \
-       "https://ftp.mozilla.org/pub/firefox/releases/latest/linux-x86_64/en-US/firefox-latest.tar.bz2" \
-     || echo "firefox download failed, continuing without it") \
- && if [ -s /tmp/firefox.tar.bz2 ] && file /tmp/firefox.tar.bz2 | grep -q bzip2; then \
-      tar -xjf /tmp/firefox.tar.bz2 -C /opt/ \
-      && ln -sf /opt/firefox/firefox /usr/local/bin/firefox \
-      && echo "firefox installed to /opt/firefox"; \
-    else \
-      echo "firefox tarball missing or invalid, skipping"; \
+ && if [ ! -s /tmp/firefox.tar ]; then \
+      echo "ERROR: firefox download returned empty file"; exit 1; \
     fi \
- && rm -f /tmp/firefox.tar.bz2
+ && ls -lh /tmp/firefox.tar \
+ && file /tmp/firefox.tar \
+ && tar -xaf /tmp/firefox.tar -C /opt/ \
+ && rm /tmp/firefox.tar \
+ && ln -sf /opt/firefox/firefox /usr/local/bin/firefox \
+ && echo "firefox installed to /opt/firefox" \
+ && ls /opt/firefox/firefox
 
 # Firefox .desktop entry (points at /opt/firefox if present, otherwise
 # clicking the launcher just no-ops harmlessly).

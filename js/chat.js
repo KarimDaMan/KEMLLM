@@ -545,7 +545,74 @@ async function sendMessage() {
       } catch {}
 
       typingEl.remove();
-      const visibleText = stripAIMarkers(full);
+      let visibleText = stripAIMarkers(full);
+
+      // === Universal [WEB_SEARCH query="..."] loop ===
+      // ANY model can emit this marker. We run the search through the
+      // KEMLLM worker (DuckDuckGo) with Wikipedia + DDG-instant-answer
+      // fallback, then feed the results back as a follow-up turn so the
+      // model writes its actual answer with live data. Capped at 3 hops
+      // to keep a confused model from looping forever.
+      let webSearchIters = 0;
+      while (webSearchIters < 3) {
+        const wsMatch = full.match(/\[WEB_SEARCH\s+query=(?:"([^"]+)"|'([^']+)')\s*\]/i);
+        if (!wsMatch) break;
+        const wsQuery = (wsMatch[1] || wsMatch[2] || '').trim();
+        if (!wsQuery) break;
+
+        // Render whatever prose the model wrote alongside the marker so
+        // the user sees something happening. If the response was JUST
+        // the marker, skip rendering an empty bubble.
+        if (visibleText.trim()) {
+          renderAIMessage(model, parseMarkdown(visibleText));
+        }
+
+        // Live progress line — same UI as code execution.
+        const prog = renderProgressLine(`Searching the web: ${wsQuery}`);
+        let resultText;
+        try {
+          resultText = await runWebSearch(wsQuery);
+          prog.done(`Searched: "${wsQuery}"`, '🔎');
+        } catch (e) {
+          resultText = 'Web search failed: ' + (e.message || String(e));
+          prog.done('Search failed: ' + (e.message || String(e)), '⚠');
+        }
+
+        // User may have switched chats while search was running.
+        if (currentChatId !== originatingChatId) return;
+
+        // Build the follow-up turn. We use a user-role message because
+        // every chat API supports it — no provider-specific tool plumbing.
+        const followup = [...messages, {
+          role: 'user',
+          content: `[web search results]\n\n${resultText}\n\nUse these results to answer my previous question accurately. Cite sources by URL when you reference them. Do NOT emit another [WEB_SEARCH] marker unless you genuinely need a different query.`,
+        }];
+
+        const typing2 = renderTyping(model);
+        let next = '';
+        try {
+          await callChat(model, followup, (chunk) => { next += chunk; });
+        } catch (e) {
+          typing2.remove();
+          renderAIMessage(model, `<p style="color:var(--red)">${escapeHTML(e.message || String(e))}</p>`);
+          return;
+        }
+        typing2.remove();
+
+        // Persist the follow-up answer and re-sync messages.
+        appendAssistantToOriginatingChat(next, model.name, model.provider);
+        if (currentChatId !== originatingChatId) return;
+        try {
+          const fresh = loadHistory().find(c => c.id === originatingChatId);
+          if (fresh) messages = fresh.messages.slice();
+        } catch {}
+
+        full = next;
+        visibleText = stripAIMarkers(full);
+        webSearchIters++;
+      }
+      // === end web search loop ===
+
       const runnable = extractFirstRunnableBlock(visibleText);
       if (runnable) {
         // Remove the runnable code block from the visible text so it
@@ -630,6 +697,7 @@ function stripAIMarkers(text) {
     .replace(/\[GENERATE_VIDEO\s+prompt=(?:"[^"]+"|'[^']+'|[^\]]+)\]/gi, '')
     .replace(/\[EDIT_IMAGE\s+prompt=(?:"[^"]+"|'[^']+'|[^\]]+)\]/gi, '')
     .replace(/\[REMEMBER\s+fact=(?:"[^"]+"|'[^']+'|[^\]]+)\]/gi, '')
+    .replace(/\[WEB_SEARCH\s+query=(?:"[^"]+"|'[^']+'|[^\]]+)\]/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

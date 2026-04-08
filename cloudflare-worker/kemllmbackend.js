@@ -148,6 +148,62 @@ export default {
       return json({ ok: true });
     }
 
+    // ===== Universal web search =====
+    // GET /search?q=...   →  { results: [{ title, url, snippet }, ...] }
+    //
+    // Proxies DuckDuckGo's HTML endpoint server-side (DDG doesn't send
+    // permissive CORS headers, so the browser can't call it directly) and
+    // parses out result links + snippets. Used by the [WEB_SEARCH query="..."]
+    // marker in chat — gives every model in KEMLLM (Claude, GPT, Gemini,
+    // Grok, Llama, Mistral, etc.) live web search with no per-provider
+    // tool wiring and no API key.
+    if (url.pathname === '/search' && request.method === 'GET') {
+      const q = (url.searchParams.get('q') || '').trim();
+      if (!q) return json({ error: 'missing q' }, 400);
+      try {
+        const ddgRes = await fetch(
+          'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q),
+          {
+            headers: {
+              // Pretend to be a normal browser so DDG doesn't redirect us
+              // to the simplified mobile page (which has a different layout).
+              'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml',
+              'Accept-Language': 'en-US,en;q=0.9',
+            },
+          }
+        );
+        if (!ddgRes.ok) {
+          return json({ error: 'ddg http ' + ddgRes.status, results: [] }, 502);
+        }
+        const html = await ddgRes.text();
+
+        // Parse out result blocks. DDG HTML uses <a class="result__a" href="...">title</a>
+        // and <a class="result__snippet">...</a>. The href on result__a is a
+        // DuckDuckGo redirect URL of the form //duckduckgo.com/l/?uddg=<encoded-real-url>
+        // — we have to decode the uddg query param to get the actual link.
+        const results = [];
+        const resultRe = /<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
+        let m;
+        while ((m = resultRe.exec(html)) !== null && results.length < 12) {
+          let href = m[1];
+          // Decode //duckduckgo.com/l/?uddg=... → real URL
+          try {
+            const u = new URL(href.startsWith('//') ? 'https:' + href : href);
+            const real = u.searchParams.get('uddg');
+            if (real) href = decodeURIComponent(real);
+          } catch {}
+          const stripTags = (s) => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+          const title = stripTags(m[2]);
+          const snippet = stripTags(m[3]);
+          if (title && href) results.push({ title, url: href, snippet });
+        }
+        return json({ ok: true, query: q, results });
+      } catch (e) {
+        return json({ error: String(e && e.message || e), results: [] }, 502);
+      }
+    }
+
     // ===== Replicate proxy =====
     // Forwards /replicate/* → https://api.replicate.com/*
     // (same behavior as the legacy kemllmx worker). The client passes its

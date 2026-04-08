@@ -292,19 +292,25 @@ function getSystemPrompt(model) {
 
   // Sandbox web access — a real constraint the AI needs to know about.
   // Web access defaults ON — only off if user explicitly set to '0'.
-  // When ON we ALSO tell the AI exactly HOW to fetch URLs in each runtime,
-  // because the in-browser sandboxes don't support `requests`/`urllib` over
-  // raw sockets — Pyodide needs `pyodide.http.pyfetch`, the JS iframe needs
-  // `fetch()`, and the remote Linux sandbox uses `curl`/`wget`. Without
-  // these instructions the AI tries `import requests` and silently fails.
+  //
+  // UNIVERSAL WEB SEARCH: every model — Claude, GPT, Gemini, Grok, Llama,
+  // Mistral, DeepSeek, anything on Replicate — gets web search via the
+  // [WEB_SEARCH query="..."] marker. The frontend intercepts the marker,
+  // runs the search through the KEMLLM Cloudflare worker (DuckDuckGo) with
+  // a Wikipedia + DDG-instant-answer fallback, and feeds the results back
+  // as a follow-up turn so the model can answer with live info. No API
+  // key, no provider-specific tool wiring required.
+  //
+  // We ALSO tell the AI how to fetch URLs in code (Pyodide pyfetch, iframe
+  // fetch, HF curl) for cases where it wants raw data instead of search.
   if (profileGet('sandbox-web') === '0') {
     lines.push('- NETWORK: OFF. Code execution has no internet access. Do not attempt HTTP requests in code.');
   } else {
-    lines.push('- WEB ACCESS / NETWORK: ON. You CAN fetch live data from the internet. Use it whenever the user asks for current information, news, prices, sports scores, weather, web pages, APIs, or anything time-sensitive — DO NOT say you can\'t browse the web. How to actually fetch a URL in each runtime:');
+    lines.push('- WEB SEARCH. To search the live web for ANY current information — news, prices, scores, weather, recent events, anything time-sensitive or factual you are unsure about — emit `[WEB_SEARCH query="your search terms"]`. The frontend will run the search and feed the results back to you as the next turn so you can answer with up-to-date information. Use it FREELY whenever it helps. NEVER say "I can\'t browse the web" or "my training cuts off in" — you have web search via this marker. One marker per response. After you receive the results, write your answer in plain prose and cite the sources.');
+    lines.push('- WEB FETCH (raw): you can also fetch a specific URL directly via code execution when you need raw HTML/JSON instead of search results:');
     lines.push('  • Python (Pyodide, browser): `requests` and `urllib` do NOT work (no raw sockets). Use `pyodide.http.pyfetch` with top-level await:\n    ```python\n    from pyodide.http import pyfetch\n    r = await pyfetch("https://example.com/api.json")\n    data = await r.json()       # or: text = await r.string()\n    print(data)\n    ```');
     lines.push('  • JavaScript (sandboxed iframe): use `fetch()` with await:\n    ```javascript\n    const r = await fetch("https://example.com/api.json");\n    const data = await r.json();\n    console.log(data);\n    ```');
     lines.push('  • Bash / shell (only when an HF Agent backend is configured): use `curl -s` or `wget -qO-`.');
-    lines.push('  CORS: most public JSON APIs and many sites work. If a site blocks CORS, try a different source or a CORS-friendly mirror — do NOT give up after one failure. For web search specifically, prefer the DuckDuckGo HTML endpoint (`https://html.duckduckgo.com/html/?q=...`) or Wikipedia\'s REST API.');
   }
   // HF Persistent Storage note. Files under ~/Documents, ~/Downloads,
   // ~/Desktop, ~/Pictures, ~/Videos, ~/Music, ~/Projects, the Firefox
@@ -1245,4 +1251,122 @@ async function generateVideo(prompt, aspectRatio) {
     data = await res.json();
   }
   throw new Error('Video timed out');
+}
+
+// ========== Universal Web Search ==========
+// Provider-agnostic web search backend used by the [WEB_SEARCH query="..."]
+// marker. ALL chat models (Claude, GPT, Gemini, Grok, Llama, Mistral,
+// DeepSeek, etc.) call into this when they emit the marker — no per-provider
+// tool wiring required.
+//
+// Multi-source strategy, tried in order:
+//   1. KEMLLM Cloudflare worker /search endpoint, which proxies DuckDuckGo
+//      HTML and parses out title/url/snippet for each hit. Best results.
+//   2. DuckDuckGo Instant Answer API (CORS-enabled, no key). Limited to
+//      "instant answers" — Wikipedia summaries, calculators, definitions —
+//      but works directly from the browser without the worker.
+//   3. Wikipedia opensearch + REST summaries (CORS-enabled, no key).
+//      Always works for encyclopedic queries.
+//
+// Returns a markdown-formatted string ready to feed back to the model as a
+// follow-up turn, OR throws if every source failed.
+const SEARCH_BASE = REPLICATE_BASE.replace(/\/replicate$/, '') + '/search';
+
+async function runWebSearch(query) {
+  const q = (query || '').trim();
+  if (!q) throw new Error('empty search query');
+
+  const sources = [];
+
+  // Source 1: KEMLLM worker /search → DuckDuckGo HTML proxy
+  try {
+    const r = await fetch(SEARCH_BASE + '?q=' + encodeURIComponent(q), {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+    });
+    if (r.ok) {
+      const j = await r.json();
+      if (j && Array.isArray(j.results) && j.results.length) {
+        const lines = [`Web search results for "${q}" (DuckDuckGo via KEMLLM worker):`, ''];
+        j.results.slice(0, 8).forEach((res, i) => {
+          const title = (res.title || res.url || '').trim();
+          const url = (res.url || '').trim();
+          const snip = (res.snippet || '').trim();
+          lines.push(`${i + 1}. ${title}`);
+          if (url) lines.push(`   ${url}`);
+          if (snip) lines.push(`   ${snip}`);
+          lines.push('');
+        });
+        return lines.join('\n').trim();
+      }
+    }
+  } catch (e) {
+    sources.push('worker: ' + (e.message || String(e)));
+  }
+
+  // Source 2: DuckDuckGo Instant Answer (CORS-enabled, no key)
+  let ddgBlock = '';
+  try {
+    const r = await fetch(
+      'https://api.duckduckgo.com/?q=' + encodeURIComponent(q) +
+      '&format=json&no_html=1&skip_disambig=1&t=kemllm'
+    );
+    if (r.ok) {
+      const j = await r.json();
+      const parts = [];
+      if (j.AbstractText) parts.push(j.AbstractText);
+      if (j.AbstractURL) parts.push('Source: ' + j.AbstractURL);
+      if (j.Definition) parts.push('Definition: ' + j.Definition);
+      if (j.Answer) parts.push('Answer: ' + j.Answer);
+      if (Array.isArray(j.RelatedTopics) && j.RelatedTopics.length) {
+        parts.push('');
+        parts.push('Related:');
+        j.RelatedTopics.slice(0, 6).forEach(rt => {
+          if (rt.Text) parts.push('- ' + rt.Text + (rt.FirstURL ? ' (' + rt.FirstURL + ')' : ''));
+        });
+      }
+      if (parts.length) ddgBlock = parts.join('\n');
+    }
+  } catch (e) {
+    sources.push('ddg-ia: ' + (e.message || String(e)));
+  }
+
+  // Source 3: Wikipedia opensearch + summary (CORS-enabled, no key)
+  let wikiBlock = '';
+  try {
+    const r = await fetch(
+      'https://en.wikipedia.org/w/api.php?action=opensearch&limit=5&format=json&origin=*&search=' +
+      encodeURIComponent(q)
+    );
+    if (r.ok) {
+      const j = await r.json();
+      // opensearch returns [query, [titles], [descriptions], [urls]]
+      const titles = j[1] || [];
+      const descs = j[2] || [];
+      const urls = j[3] || [];
+      if (titles.length) {
+        const lines = ['Wikipedia matches:'];
+        for (let i = 0; i < Math.min(titles.length, 5); i++) {
+          lines.push(`- ${titles[i]}: ${descs[i] || '(no description)'}`);
+          if (urls[i]) lines.push(`  ${urls[i]}`);
+        }
+        wikiBlock = lines.join('\n');
+      }
+    }
+  } catch (e) {
+    sources.push('wiki: ' + (e.message || String(e)));
+  }
+
+  if (ddgBlock || wikiBlock) {
+    const out = [`Web search results for "${q}":`, ''];
+    if (ddgBlock) { out.push(ddgBlock); out.push(''); }
+    if (wikiBlock) { out.push(wikiBlock); }
+    return out.join('\n').trim();
+  }
+
+  throw new Error(
+    'Web search failed across all sources. Tried: ' +
+    (sources.length ? sources.join('; ') : 'worker, ddg-ia, wikipedia') +
+    '. The KEMLLM worker /search endpoint may not be deployed yet — see cloudflare-worker/kemllmbackend.js.'
+  );
 }

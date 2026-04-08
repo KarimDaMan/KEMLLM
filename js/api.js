@@ -103,13 +103,11 @@ function loadAllSettings() {
   const savedVideo = profileGet('selected_video');
   if (savedVideo && typeof selectedVideo !== 'undefined') selectedVideo = savedVideo;
   if (typeof renderModelDropdowns === 'function') renderModelDropdowns();
-  // Background music settings
+  // Background music settings (auto-on by default)
   const musicOnEl = document.getElementById('sp-music-on');
-  const musicUrlEl = document.getElementById('sp-music-url');
   const musicVolEl = document.getElementById('sp-music-vol');
   const musicVolLabelEl = document.getElementById('sp-music-vol-label');
-  if (musicOnEl) musicOnEl.checked = profileGet('music-on') === '1';
-  if (musicUrlEl) musicUrlEl.value = profileGet('music-url') || '';
+  if (musicOnEl) musicOnEl.checked = profileGet('music-on') !== '0';
   if (musicVolEl) {
     const v = parseInt(profileGet('music-vol') || '50', 10);
     musicVolEl.value = String(v);
@@ -225,8 +223,20 @@ async function callChat(model, messages, onChunk, overrideSystem) {
     (provider === 'xai'       && !!getKey('xai'));
 
   if (hasDirectKey && model.apiId) {
-    // Direct API has priority. If it fails, surface the REAL error.
-    return tryProvider();
+    // Direct API has priority. But if the direct API returns 404
+    // "model not found" (e.g. outdated Anthropic model id), fall back
+    // to Replicate automatically instead of surfacing the 404.
+    try {
+      return await tryProvider();
+    } catch (e) {
+      const msg = String(e && e.message || e);
+      const is404 = /404|not[_ ]?found|not found/i.test(msg);
+      if (is404 && model.replicateId && getRepKey()) {
+        showToast(model.name + ' not found on ' + provider + ' API, falling back to Replicate');
+        return tryReplicate();
+      }
+      throw e;
+    }
   }
 
   // No direct key (or no apiId for this model) → Replicate path.
@@ -275,7 +285,8 @@ function getSystemPrompt(model) {
   }
 
   // Sandbox web access — a real constraint the AI needs to know about.
-  if (profileGet('sandbox-web') !== '1') {
+  // Web access defaults ON — only off if user explicitly set to '0'
+  if (profileGet('sandbox-web') === '0') {
     lines.push('- NETWORK: OFF. Code execution has no internet access. Do not attempt HTTP requests in code.');
   } else {
     lines.push('- NETWORK: ON. Code execution can reach the internet.');
@@ -315,6 +326,16 @@ function getSystemPrompt(model) {
       aiMems.forEach((m) => { lines.push('- ' + m); });
     }
   } catch {}
+
+  // Style rules — no emojis, no "be helpful" / "I'd be happy to" filler.
+  lines.push('');
+  lines.push('STYLE:');
+  lines.push('- Do not use emojis or emoticons in your responses. Ever.');
+  lines.push('- No filler phrases like "Great question!", "Certainly!", "I\'d be happy to help", "Let me know if you need anything else".');
+  lines.push('- No chirpy disclaimers. No meta-commentary about being an AI.');
+  lines.push('- Use real Markdown tables, headings, code blocks when appropriate. Render data as tables when it has multiple columns.');
+  lines.push('- Prefer concrete technical detail over generic advice.');
+  lines.push('- When showing multiple items (models, options, comparisons), use a table.');
 
   return lines.join('\n');
 }
@@ -985,14 +1006,42 @@ function aspectRatioToWH(ar) {
   return { width: pw, height: ph };
 }
 
+// Translate natural language aspect ratio terms → numeric string.
+// Sora and some other models use words like "portrait" instead of numeric.
+function normalizeAspectRatio(ar) {
+  if (!ar) return null;
+  const s = String(ar).trim().toLowerCase();
+  const map = {
+    'square': '1:1', '1:1': '1:1',
+    'landscape': '16:9', 'wide': '16:9', 'widescreen': '16:9', '16:9': '16:9',
+    'portrait': '9:16', 'tall': '9:16', 'phone': '9:16', '9:16': '9:16',
+    'cinema': '21:9', 'cinematic': '21:9', 'ultrawide': '21:9', '21:9': '21:9',
+    '4:3': '4:3', 'standard': '4:3',
+    '3:4': '3:4',
+    '3:2': '3:2', '2:3': '2:3',
+  };
+  if (map[s]) return map[s];
+  if (/^\d+\s*[:x\/]\s*\d+$/.test(s)) return s;
+  return s;
+}
+
 // Add aspect_ratio + width/height to a Replicate input dict in-place if
-// the caller passed an aspectRatio. Most modern image models accept
-// `aspect_ratio` as a string ("16:9"); older diffusion models want
-// width/height. We send both so whichever the model uses, it picks up.
+// the caller passed an aspectRatio. Also adds the ORIGINAL word form
+// ("portrait"/"landscape") under a second key so Sora-style models that
+// expect words instead of numbers still work.
 function addAspectRatioToInput(input, aspectRatio) {
   if (!aspectRatio) return input;
-  input.aspect_ratio = aspectRatio;
-  const wh = aspectRatioToWH(aspectRatio);
+  const normalized = normalizeAspectRatio(aspectRatio);
+  input.aspect_ratio = normalized;
+  // Sora uses words: send both the numeric and the word form if applicable
+  if (/^\d+:\d+$/.test(normalized)) {
+    if (normalized === '9:16') input.orientation = 'portrait';
+    else if (normalized === '16:9') input.orientation = 'landscape';
+    else if (normalized === '1:1') input.orientation = 'square';
+  } else {
+    input.orientation = normalized;
+  }
+  const wh = aspectRatioToWH(normalized);
   if (wh) {
     input.width = wh.width;
     input.height = wh.height;
@@ -1073,17 +1122,28 @@ async function generateImage(prompt, aspectRatio) {
         lastErr = new Error('Model "' + id + '" not found on Replicate');
         continue;
       }
+      if (res.status === 422) {
+        // Schema mismatch — either the model wants a different field
+        // name, OR (more commonly) it's an edit-only model that refuses
+        // to run without an `image` input. Either way we can't generate
+        // from this model — skip and try the next fallback.
+        const t = await res.text().catch(() => '');
+        lastErr = new Error('Model "' + id + '" rejected: ' + t.slice(0, 200));
+        continue;
+      }
       if (!res.ok) {
         const t = await res.text();
         throw new Error('Image gen ' + res.status + ': ' + t.slice(0, 200));
       }
       let data = await res.json();
-      // CRITICAL: poll if not yet done. Prefer:wait only blocks for 60s
-      // server-side; for slow models we get back status=processing with
-      // a polling URL, NOT the final output.
+      // Poll past Replicate's 60s Prefer:wait timeout for slow models.
       data = await awaitPrediction(data, apiKey);
       if (data.status === 'failed' || data.status === 'canceled') {
-        throw new Error('Image generation ' + data.status + ': ' + (data.error || 'unknown'));
+        const errMsg = (data.error || 'unknown').toString();
+        lastErr = new Error('Model "' + id + '" ' + data.status + ': ' + errMsg);
+        // If it's an edit-only model or no-image error, skip to next
+        if (/image|edit|required/i.test(errMsg)) continue;
+        throw lastErr;
       }
       const url = extractOutputUrl(data.output);
       if (!url) {
@@ -1094,7 +1154,9 @@ async function generateImage(prompt, aspectRatio) {
       return url;
     } catch (e) {
       lastErr = e;
-      if (!String(e.message).includes('not found')) throw e;
+      // Only propagate non-recoverable errors; everything that looks
+      // like a schema/edit-only/no-image rejection should try the next.
+      if (!/not found|rejected|edit|image is required|422/i.test(String(e.message))) throw e;
     }
   }
   throw lastErr || new Error('All image models failed');

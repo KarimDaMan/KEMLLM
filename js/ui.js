@@ -11,7 +11,7 @@ let currentPanel = 'chat';
 //   #/chat/<chatId>     → a specific chat by id
 //   #/code, #/models, #/settings → other panels
 // Legacy (no hash) → defaults to chat.
-const VALID_PANELS = ['chat', 'code', 'models', 'settings'];
+const VALID_PANELS = ['chat', 'code', 'settings'];
 
 function parseHash() {
   const raw = (location.hash || '').replace(/^#\/?/, '');
@@ -93,9 +93,10 @@ let _ytPlayer = null;
 let _ytApiReady = false;
 let _ytPendingId = null;
 
-// Default music URL — the YouTube link the user wants. If they paste a
-// different one in Settings, that wins.
-const DEFAULT_MUSIC_URL = 'https://www.youtube.com/watch?v=sVqbmWYKGmw';
+// Hardcoded music URL — the user's chosen link. This is the ONLY track
+// that can play; there's no URL field in Settings. To change it, edit
+// this constant.
+const HOME_MUSIC_URL = 'https://www.youtube.com/watch?v=sVqbmWYKGmw';
 
 function youtubeIdFromUrl(url) {
   if (!url) return null;
@@ -121,8 +122,10 @@ function ensureYTApi() {
 }
 
 function syncHomeMusic() {
-  const url = (typeof profileGet === 'function' && profileGet('music-url')) || DEFAULT_MUSIC_URL;
-  const on = typeof profileGet === 'function' && profileGet('music-on') === '1';
+  const url = HOME_MUSIC_URL;
+  // Music is AUTO-ON by default. Only off if the user explicitly set music-on to '0'.
+  const musicOnPref = typeof profileGet === 'function' ? profileGet('music-on') : null;
+  const on = musicOnPref !== '0';
   const vol = parseInt((typeof profileGet === 'function' && profileGet('music-vol')) || '50', 10);
   const homeEl = document.getElementById('home-screen');
   const homeVisible = homeEl && !homeEl.classList.contains('hidden') && currentPanel === 'chat';
@@ -362,8 +365,25 @@ function renderModelDropdowns() {
       html = `<div class="mds">NO IMAGE MODELS</div><div class="mdi"><div class="mdi-info"><div class="mdi-n">Add your Replicate key</div><div class="mdi-s">Settings → Replicate</div></div></div>`;
     } else {
       html = `<div class="mds">IMAGE MODELS</div>`;
-      IMAGE_MODELS.forEach(m => {
-        html += `<div class="mdi${m.id === selectedImage ? ' sel' : ''}" onclick="selectImgModel('${m.id}')"><span class="mdot" style="background:#f472b6"></span><div class="mdi-info"><div class="mdi-n">${escapeHTML(m.name)}</div><div class="mdi-s">${escapeHTML(m.replicateId)}</div></div></div>`;
+      // Sort by creator prefix (the part before '/' in replicateId),
+      // then by name within each creator group.
+      const sortedImg = [...IMAGE_MODELS].sort((a, b) => {
+        const ca = (a.replicateId || '').split('/')[0];
+        const cb = (b.replicateId || '').split('/')[0];
+        return ca.localeCompare(cb) || a.name.localeCompare(b.name);
+      });
+      let lastCreator = null;
+      sortedImg.forEach(m => {
+        const creator = (m.replicateId || '').split('/')[0];
+        if (creator !== lastCreator) {
+          html += `<div class="mds mds-creator">${escapeHTML(creator.toUpperCase())}</div>`;
+          lastCreator = creator;
+        }
+        // Tag models that need an image input (edit-only) so the user
+        // knows to pair them with an attachment.
+        const needsImage = /kontext|edit|inpaint|img2img|variat/i.test(m.replicateId || '');
+        const tag = needsImage ? ' <span class="mdi-tag mdi-tag-img">IMG INPUT</span>' : '';
+        html += `<div class="mdi${m.id === selectedImage ? ' sel' : ''}" onclick="selectImgModel('${m.id}')"><span class="mdot" style="background:#f472b6"></span><div class="mdi-info"><div class="mdi-n">${escapeHTML(m.name)}${tag}</div><div class="mdi-s">${escapeHTML(m.replicateId)}</div></div></div>`;
       });
     }
     const customs = getCustomModels().filter(m => m.type === 'image');
@@ -384,8 +404,21 @@ function renderModelDropdowns() {
       html = `<div class="mds">NO VIDEO MODELS</div><div class="mdi"><div class="mdi-info"><div class="mdi-n">Add your Replicate key</div><div class="mdi-s">Settings → Replicate</div></div></div>`;
     } else {
       html = `<div class="mds">VIDEO MODELS</div>`;
-      VIDEO_MODELS.forEach(m => {
-        html += `<div class="mdi${m.id === selectedVideo ? ' sel' : ''}" onclick="selectVidModel('${m.id}')"><span class="mdot" style="background:#4ade80"></span><div class="mdi-info"><div class="mdi-n">${escapeHTML(m.name)}</div><div class="mdi-s">${escapeHTML(m.replicateId)}</div></div></div>`;
+      const sortedVid = [...VIDEO_MODELS].sort((a, b) => {
+        const ca = (a.replicateId || '').split('/')[0];
+        const cb = (b.replicateId || '').split('/')[0];
+        return ca.localeCompare(cb) || a.name.localeCompare(b.name);
+      });
+      let lastVidCreator = null;
+      sortedVid.forEach(m => {
+        const creator = (m.replicateId || '').split('/')[0];
+        if (creator !== lastVidCreator) {
+          html += `<div class="mds mds-creator">${escapeHTML(creator.toUpperCase())}</div>`;
+          lastVidCreator = creator;
+        }
+        const needsImage = /i2v|img2vid|image-to|kontext/i.test(m.replicateId || '');
+        const tag = needsImage ? ' <span class="mdi-tag mdi-tag-img">IMG INPUT</span>' : '';
+        html += `<div class="mdi${m.id === selectedVideo ? ' sel' : ''}" onclick="selectVidModel('${m.id}')"><span class="mdot" style="background:#4ade80"></span><div class="mdi-info"><div class="mdi-n">${escapeHTML(m.name)}${tag}</div><div class="mdi-s">${escapeHTML(m.replicateId)}</div></div></div>`;
       });
     }
     const customs = getCustomModels().filter(m => m.type === 'video');

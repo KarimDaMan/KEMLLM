@@ -7,7 +7,9 @@ let pendingAttachments = []; // {dataUrl, name}
 let abortCtrl = null;
 window.webSearchOn = false;
 let chatMode = 'chat'; // 'chat' | 'code' | 'agent'
-let agentUnlocked = false;
+// Agent mode is always unlocked — the old lock was confusing and the
+// backend auto-spawns on first use anyway.
+let agentUnlocked = true;
 // Blocks the send button while an AI response is in progress — user must
 // wait (or press stop) before sending the next message. Matches ChatGPT's
 // interaction model.
@@ -51,14 +53,6 @@ let agentInjectQueue = []; // messages the user types while the loop is running
 const AGENT_LOOP_MAX_ITERATIONS = 25;
 
 function setChatMode(mode) {
-  // Agent mode is gated: user must have a backend OR explicitly enable Pyodide
-  if (mode === 'agent' && !agentUnlocked) {
-    const hasBackend = (profileGet('hf-backend-url') || '').trim();
-    if (!hasBackend) {
-      showToast('Agent mode uses Pyodide (no Linux backend). Set one in Settings for the real thing.');
-    }
-    agentUnlocked = true;
-  }
   chatMode = mode;
   document.querySelectorAll('.mode-btn').forEach(b => {
     // The desktop button has no data-mode and is allowed to be active
@@ -76,8 +70,6 @@ function setChatMode(mode) {
     // If we just left agent mode, drop the desktop active highlight too.
     if (mode !== 'agent') dBtn.classList.remove('active');
   }
-  const lock = document.getElementById('mode-agent-lock');
-  if (lock) lock.style.display = agentUnlocked ? 'none' : '';
   const input = document.getElementById('input-text');
   if (input) {
     input.placeholder = mode === 'agent'
@@ -86,11 +78,10 @@ function setChatMode(mode) {
       ? 'Code mode · ask for code, auto-runs in browser'
       : 'Ask anything, generate images, run code...';
   }
-  // If switching to agent, make sure backend is primed (fire-and-forget,
-  // but subsequent callers share the same agentStartPromise so nothing races)
-  if (mode === 'agent' && !agentReady) {
-    agentStart().catch(() => {});
-  }
+  // NOTE: agent backend is no longer spawned just because the user
+  // clicked Agent. It spawns lazily on the first send in agent mode
+  // (see runAgentModeChat in sendMessage). This way clicking Agent
+  // never uses resources until the user actually starts chatting.
 }
 
 // NOTE: keyword-based IMG/VID/EDIT regex routing was REMOVED. Generation is
@@ -425,9 +416,13 @@ async function sendMessage() {
   // answer. saveCurrentChat also assigns currentChatId if it was null.
   saveCurrentChat();
   // Now that we definitely have a chat id, push the per-chat URL so
-  // this conversation has its own page from the very first message.
+  // this conversation has its own page from the very first message,
+  // and register it as an open tab.
   if (currentChatId && typeof setHashForPanel === 'function' && currentPanel === 'chat') {
     setHashForPanel('chat', currentChatId);
+  }
+  if (currentChatId && typeof openChatTab === 'function') {
+    openChatTab(currentChatId);
   }
 
   // CHAT SCOPING: capture the chat id this message belongs to BEFORE the
@@ -476,18 +471,33 @@ async function sendMessage() {
       full += chunk;
     });
 
-    // CHAT SCOPING: did the user navigate away during the fetch?
+    // SAVE FIRST, RENDER SECOND. History is the authoritative store —
+    // never trust the global `messages` array across async boundaries
+    // because a chat switch may have replaced it mid-fetch. Always
+    // persist the response to the originating chat's history, THEN
+    // decide whether to render into the current view.
+    const saved = appendAssistantToOriginatingChat(full, model.name, model.provider);
     const stillHere = (currentChatId === originatingChatId);
 
     if (stillHere) {
-      typingEl.remove();
-      delete userMsg.pending;
-      messages.push({ role: 'assistant', content: full });
+      // Re-sync the live messages array from the freshly-saved history
+      // so it's guaranteed to include the new assistant reply and have
+      // the pending flag cleared on the user msg.
+      try {
+        const fresh = loadHistory().find(c => c.id === originatingChatId);
+        if (fresh) messages = fresh.messages.slice();
+      } catch {}
 
+      typingEl.remove();
       const visibleText = stripAIMarkers(full);
       const runnable = extractFirstRunnableBlock(visibleText);
       if (runnable) {
-        const aiEl = renderAIMessage(model, parseMarkdown(visibleText));
+        // Remove the runnable code block from the visible text so it
+        // doesn't also render as inline <pre> in the message bubble —
+        // ALL executed code lives ONLY in the dropdown strip below the
+        // message. Any prose before/after the code block is preserved.
+        const withoutCode = visibleText.replace(/```(\w+)\n[\s\S]*?```/, '').trim();
+        const aiEl = renderAIMessage(model, parseMarkdown(withoutCode || ' '));
         const analysisEl = await runAnalysisBlock(aiEl, runnable);
         if (analysisEl && currentChatId === originatingChatId) {
           const typing2 = renderTyping(model);
@@ -499,11 +509,13 @@ async function sendMessage() {
             let more = '';
             await callChat(model, followup, (chunk) => { more += chunk; });
             typing2.remove();
+            appendAssistantToOriginatingChat(more, model.name, model.provider);
             if (currentChatId === originatingChatId) {
+              try {
+                const fresh2 = loadHistory().find(c => c.id === originatingChatId);
+                if (fresh2) messages = fresh2.messages.slice();
+              } catch {}
               renderAIMessage(model, parseMarkdown(stripAIMarkers(more)));
-              messages.push({ role: 'assistant', content: more });
-            } else {
-              appendAssistantToOriginatingChat(more, model.name, model.provider);
             }
           } catch (e) {
             typing2.remove();
@@ -513,12 +525,10 @@ async function sendMessage() {
         renderAIMessage(model, parseMarkdown(visibleText));
       }
       processAIMarkers(full);
-      saveCurrentChat();
     } else {
-      // User navigated away mid-fetch. Save to the originating chat
-      // without touching the current DOM. Notify the user.
+      // User navigated away mid-fetch. History already has the reply
+      // (saved above). Just notify.
       typingEl.remove();
-      appendAssistantToOriginatingChat(full, model.name, model.provider);
       const list = loadHistory();
       const origChat = list.find(c => c.id === originatingChatId);
       const title = origChat?.title || 'a previous chat';
@@ -566,9 +576,24 @@ function extractFirstRunnableBlock(md) {
   let m;
   while ((m = re.exec(md)) !== null) {
     const lang = (m[1] || '').toLowerCase();
-    if (isRunnable(lang)) return { lang, code: m[2] };
+    if (isRunnable(lang) || lang === 'html') return { lang, code: m[2] };
   }
   return null;
+}
+
+// Detect HTML + interactive-JS apps that should render as a live
+// preview (Claude-artifact style) instead of being sent to Piston.
+function isInteractiveApp(block) {
+  const lang = (block.lang || '').toLowerCase();
+  const code = block.code || '';
+  if (lang === 'html') return true;
+  if (lang === 'javascript' || lang === 'js') {
+    // JS that touches the DOM → needs a preview, not a stdout dump
+    if (/document\.|window\.|\.innerHTML|getElementById|querySelector|addEventListener|canvas/i.test(code)) return true;
+  }
+  // Raw HTML without a fence (doctype, <html>, <body>, <head>)
+  if (/^\s*(?:<!doctype\s+html|<html|<body|<head)/i.test(code)) return true;
+  return false;
 }
 
 // Render a slim "code execution strip" directly after the AI message bubble.
@@ -1423,10 +1448,16 @@ function newChat(skipHash) {
   if (home) home.classList.remove('hidden');
   if (window.termBootStart) window.termBootStart();
   closeDrawer();
+  // Make sure we're on the chat panel (so the home screen is visible and
+  // the music plays — music only runs when currentPanel === 'chat').
+  if (typeof siNav === 'function' && currentPanel !== 'chat') {
+    siNav('chat', !!skipHash);
+  }
   // Close any open preview pane from a previous chat
   if (typeof chatPreviewClose === 'function') chatPreviewClose();
   // Clear any stuck highlight on the old chat in the sidebar / history list
   if (typeof renderHistory === 'function') renderHistory();
+  if (typeof renderChatTabs === 'function') renderChatTabs();
   // Push URL #/chat (no chat id) so back button returns to "new chat"
   if (!skipHash && typeof setHashForPanel === 'function') {
     setHashForPanel('chat', null);

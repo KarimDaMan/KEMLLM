@@ -121,13 +121,76 @@ function loadChat(id, skipHash) {
   if (typeof refreshBusyUI === 'function') refreshBusyUI();
   // Pause home-screen music since we're now in a chat
   if (typeof syncHomeMusic === 'function') syncHomeMusic();
+  // Add as an open tab and refresh the tab bar
+  openChatTab(id);
 }
 function deleteChat(id) {
   let list = loadHistory();
   list = list.filter(c => c.id !== id);
   profileSetJSON('history', list);
+  // Remove from open tabs as well
+  const tabs = loadOpenTabs().filter(tid => tid !== id);
+  saveOpenTabs(tabs);
   if (currentChatId === id) newChat();
   renderHistory();
+  renderChatTabs();
+}
+
+// ===== In-app chat tabs =====
+// Each open chat shows as a pill in the #chat-tabs bar. Click to switch,
+// × to close. Persists across reloads via localStorage so refresh
+// doesn't lose your workspace. Independent of the sidebar history.
+const OPEN_TABS_KEY = 'kemllm_open_tabs';
+function loadOpenTabs() {
+  try { return JSON.parse(localStorage.getItem(OPEN_TABS_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveOpenTabs(ids) {
+  localStorage.setItem(OPEN_TABS_KEY, JSON.stringify(ids));
+}
+function openChatTab(chatId) {
+  if (!chatId) return;
+  const tabs = loadOpenTabs();
+  if (!tabs.includes(chatId)) {
+    tabs.push(chatId);
+    saveOpenTabs(tabs);
+  }
+  renderChatTabs();
+}
+function closeChatTab(chatId) {
+  let tabs = loadOpenTabs();
+  const wasActive = currentChatId === chatId;
+  tabs = tabs.filter(id => id !== chatId);
+  saveOpenTabs(tabs);
+  if (wasActive) {
+    // Switch to the next tab to the right, or the last one, or home
+    if (tabs.length) {
+      const next = tabs[tabs.length - 1];
+      if (typeof loadChat === 'function') loadChat(next);
+    } else {
+      if (typeof newChat === 'function') newChat();
+    }
+  }
+  renderChatTabs();
+}
+function renderChatTabs() {
+  const bar = document.getElementById('chat-tabs');
+  if (!bar) return;
+  const tabs = loadOpenTabs();
+  if (!tabs.length) {
+    bar.innerHTML = '';
+    return;
+  }
+  const history = typeof loadHistory === 'function' ? loadHistory() : [];
+  const validTabs = tabs.filter(id => history.some(c => c.id === id));
+  if (validTabs.length !== tabs.length) saveOpenTabs(validTabs);
+  bar.innerHTML = validTabs.map(id => {
+    const chat = history.find(c => c.id === id);
+    if (!chat) return '';
+    const title = (chat.title || 'Chat').slice(0, 30);
+    const isActive = currentChatId === id;
+    return `<div class="chat-tab${isActive ? ' active' : ''}" onclick="loadChat('${id}')" title="${escapeHTML(chat.title || '')}"><span class="chat-tab-title">${escapeHTML(title)}</span><button class="chat-tab-close" onclick="event.stopPropagation();closeChatTab('${id}')" title="Close tab">×</button></div>`;
+  }).join('');
 }
 
 // ===== Background response auto-resume =====
@@ -235,7 +298,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v99 · per-chat busy state (new chat works while another is responding) + YouTube background music with the user-supplied default video; volume slider, on/off toggle, auto-pause off home screen';
+const KEMLLM_BUILD = 'v100 · MEGA fixes — (1) chat scoping save-first never loses responses; (2) hardcoded music + auto-on + only on home; (3) generateImage 422 tolerated for edit-only models; (4) agent mode unlocked, auto-spawns on first send not click; (5) no emojis/no filler in system prompt; (6) Anthropic 404 → Replicate fallback; (7) web search auto-on; (8) Models tab removed; (9) image+video models sorted by creator with IMG-INPUT tags; (10) Sora portrait/landscape word mapping; (11) in-app chat TABS bar that survives reloads; (12) code runs inside dropdown strip not inline.';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -583,31 +646,28 @@ document.addEventListener('DOMContentLoaded', () => {
   // AI-written memory (read-only view + reset button)
   document.getElementById('sp-aimem-reset')?.addEventListener('click', resetAIMemory);
 
-  // Sandbox web access toggle
+  // Sandbox web access toggle — defaults to ON (auto-enabled)
   const sandboxWebEl = document.getElementById('sp-sandbox-web');
   if (sandboxWebEl) {
-    sandboxWebEl.checked = profileGet('sandbox-web') === '1';
+    // Default ON: only off if user explicitly set to '0'
+    const raw = profileGet('sandbox-web');
+    const isOn = raw !== '0';
+    sandboxWebEl.checked = isOn;
+    if (raw == null) profileSet('sandbox-web', '1');
     sandboxWebEl.addEventListener('change', () => {
       profileSet('sandbox-web', sandboxWebEl.checked ? '1' : '0');
       showToast(sandboxWebEl.checked ? 'Sandbox web access enabled' : 'Sandbox web access disabled');
     });
   }
 
-  // Background music — settings inputs persist to profile and re-sync
-  // the player. Default volume is 50%, default off.
+  // Background music — hardcoded URL + auto-on by default. Only the
+  // on/off toggle and volume slider are user-controllable.
   const musicOnEl = document.getElementById('sp-music-on');
-  const musicUrlEl = document.getElementById('sp-music-url');
   const musicVolEl = document.getElementById('sp-music-vol');
   const musicVolLabelEl = document.getElementById('sp-music-vol-label');
   if (musicOnEl) {
     musicOnEl.addEventListener('change', () => {
       profileSet('music-on', musicOnEl.checked ? '1' : '0');
-      syncHomeMusic();
-    });
-  }
-  if (musicUrlEl) {
-    musicUrlEl.addEventListener('change', () => {
-      profileSet('music-url', musicUrlEl.value.trim());
       syncHomeMusic();
     });
   }
@@ -618,6 +678,9 @@ document.addEventListener('DOMContentLoaded', () => {
       profileSet('music-vol', String(v));
       const a = document.getElementById('home-music');
       if (a) a.volume = v / 100;
+      if (typeof _ytPlayer !== 'undefined' && _ytPlayer) {
+        try { _ytPlayer.setVolume(v); } catch {}
+      }
     });
   }
 
@@ -766,6 +829,9 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!handleGithubCallback() && !checkExistingProfile()) {
     document.getElementById('login').classList.add('show');
   }
+
+  // Render the in-app chat tab bar (restores tabs across reloads)
+  if (typeof renderChatTabs === 'function') renderChatTabs();
 
   // Resume any pending background AI responses left over from a previous
   // tab session (tab was closed mid-response, laptop slept, etc). Runs

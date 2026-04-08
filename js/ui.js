@@ -96,7 +96,7 @@ let _ytPendingId = null;
 // Hardcoded music URL — the user's chosen link. This is the ONLY track
 // that can play; there's no URL field in Settings. To change it, edit
 // this constant.
-const HOME_MUSIC_URL = 'https://www.youtube.com/watch?v=sVqbmWYKGmw';
+const HOME_MUSIC_URL = 'https://www.youtube.com/watch?v=7cMp97PPzxc';
 
 function youtubeIdFromUrl(url) {
   if (!url) return null;

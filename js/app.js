@@ -298,7 +298,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v100 · MEGA fixes — (1) chat scoping save-first never loses responses; (2) hardcoded music + auto-on + only on home; (3) generateImage 422 tolerated for edit-only models; (4) agent mode unlocked, auto-spawns on first send not click; (5) no emojis/no filler in system prompt; (6) Anthropic 404 → Replicate fallback; (7) web search auto-on; (8) Models tab removed; (9) image+video models sorted by creator with IMG-INPUT tags; (10) Sora portrait/landscape word mapping; (11) in-app chat TABS bar that survives reloads; (12) code runs inside dropdown strip not inline.';
+const KEMLLM_BUILD = 'v101 · update home music URL to new track (7cMp97PPzxc)';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

@@ -118,12 +118,112 @@ function deleteChat(id) {
   renderHistory();
 }
 
+// ===== Background response auto-resume =====
+// If the user sent a message and then closed the tab / put the laptop
+// to sleep / navigated away before the AI replied, the user message
+// gets persisted to history with pending=true (set by sendMessage just
+// before it calls callChat). On the next app load we scan every chat
+// for pending messages and re-fire callChat to finish the response.
+// The browser request that the original tab launched is dead, so this
+// genuinely re-runs the model — not free, but the only way without a
+// server-side queue.
+async function resumePendingResponses() {
+  if (typeof loadHistory !== 'function' || typeof callChat !== 'function') return;
+  const list = loadHistory();
+  if (!list || !list.length) return;
+
+  // Find the (chatId, messageIndex) pairs that need a reply
+  const pendingJobs = [];
+  for (const c of list) {
+    if (!c.messages) continue;
+    for (let i = 0; i < c.messages.length; i++) {
+      const m = c.messages[i];
+      if (m.role === 'user' && m.pending) {
+        // Skip if it's already been answered (next message is assistant)
+        const next = c.messages[i + 1];
+        if (next && next.role === 'assistant') continue;
+        pendingJobs.push({ chatId: c.id, messageIndex: i });
+      }
+    }
+  }
+  if (!pendingJobs.length) return;
+
+  showToast(`Resuming ${pendingJobs.length} background ${pendingJobs.length === 1 ? 'response' : 'responses'}…`);
+  // Ask for notification permission so we can alert when each one finishes
+  if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+    try { Notification.requestPermission(); } catch {}
+  }
+
+  for (const job of pendingJobs) {
+    try {
+      // Reload the freshest version of the chat (in case another process
+      // already finished it)
+      const fresh = loadHistory().find(x => x.id === job.chatId);
+      if (!fresh) continue;
+      const userMsg = fresh.messages[job.messageIndex];
+      if (!userMsg || !userMsg.pending) continue;
+      const next = fresh.messages[job.messageIndex + 1];
+      if (next && next.role === 'assistant') continue;
+
+      // Use whatever chat model is currently selected. We don't save the
+      // model with the user message (yet), so default to the active one.
+      const model = findModel(selectedChat, 'chat');
+      if (!model) continue;
+
+      // Build the conversation up to and including the pending user msg
+      const convo = fresh.messages.slice(0, job.messageIndex + 1).map(m => ({
+        role: m.role,
+        content: m.content,
+        attachments: m.attachments,
+      }));
+
+      let full = '';
+      await callChat(model, convo, (chunk) => { full += chunk; });
+
+      // Append assistant response and persist
+      const finalList = loadHistory();
+      const idx = finalList.findIndex(x => x.id === job.chatId);
+      if (idx < 0) continue;
+      const finalChat = finalList[idx];
+      // Re-find the user message in case indices changed
+      const reIdx = finalChat.messages.findIndex((m, i) =>
+        i === job.messageIndex && m.role === 'user' && m.pending
+      );
+      if (reIdx < 0) continue;
+      delete finalChat.messages[reIdx].pending;
+      // Insert the assistant reply right after
+      finalChat.messages.splice(reIdx + 1, 0, { role: 'assistant', content: full });
+      profileSetJSON('history', finalList);
+
+      // Notify the user
+      const preview = full.replace(/\s+/g, ' ').slice(0, 100);
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try {
+          new Notification('KEMLLM · ' + (model.name || 'AI') + ' replied', {
+            body: preview,
+            icon: '/favicon.ico',
+            tag: 'kemllm-bg-' + job.chatId,
+          });
+        } catch {}
+      }
+
+      // If this is the chat the user is currently looking at, refresh it
+      if (currentChatId === job.chatId) {
+        loadChat(job.chatId);
+      }
+    } catch (e) {
+      console.warn('[KEMLLM] resume failed for', job, e);
+    }
+  }
+  renderHistory();
+}
+
 // ===== Stars (removed) =====
 function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v94 · loadChat now strips AI markers (no more raw [GENERATE_IMAGE prompt=...] on reload) and reads each message modelName so image/edit/video results show the actual generator (Nano Banana Pro etc) instead of the chat model name';
+const KEMLLM_BUILD = 'v95 · background AI responses — sendMessage saves user msg with pending=true BEFORE calling the model, so it survives tab close. On app reopen, resumePendingResponses scans every chat for pending msgs and re-fires the model. Browser notification when each background reply lands.';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -626,4 +726,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!handleGithubCallback() && !checkExistingProfile()) {
     document.getElementById('login').classList.add('show');
   }
+
+  // Resume any pending background AI responses left over from a previous
+  // tab session (tab was closed mid-response, laptop slept, etc). Runs
+  // after a short delay so the UI is fully loaded first.
+  setTimeout(() => {
+    if (typeof resumePendingResponses === 'function') {
+      resumePendingResponses().catch(e => console.warn('[KEMLLM] resume error', e));
+    }
+  }, 1500);
 });

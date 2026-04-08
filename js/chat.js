@@ -393,10 +393,15 @@ async function sendMessage() {
   }
 
   const userMsg = atts.length
-    ? { role: 'user', content: text, attachments: atts }
-    : { role: 'user', content: text };
+    ? { role: 'user', content: text, attachments: atts, pending: true, ts: Date.now() }
+    : { role: 'user', content: text, pending: true, ts: Date.now() };
   messages.push(userMsg);
   renderUserMessage(text, atts);
+  // Persist IMMEDIATELY so the user message survives tab-close before
+  // the AI response arrives. The pending=true flag is what tells the
+  // background-resume logic on next load that this message needs an
+  // answer.
+  saveCurrentChat();
 
   // NO MORE keyword routing. Every message goes to the AI chat model first.
   // The AI decides whether image/video generation is needed and emits the
@@ -417,6 +422,8 @@ async function sendMessage() {
       full += chunk;
     });
     typingEl.remove();
+    // Clear the pending flag on the user message now that we have a reply
+    delete userMsg.pending;
     messages.push({ role: 'assistant', content: full });
 
     // Strip generation markers from the visible text so the user doesn't

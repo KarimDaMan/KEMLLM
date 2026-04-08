@@ -11,7 +11,7 @@ let currentPanel = 'chat';
 //   #/chat/<chatId>     → a specific chat by id
 //   #/code, #/models, #/settings → other panels
 // Legacy (no hash) → defaults to chat.
-const VALID_PANELS = ['chat', 'code', 'settings'];
+const VALID_PANELS = ['chat', 'code', 'media', 'settings'];
 
 function parseHash() {
   const raw = (location.hash || '').replace(/^#\/?/, '');
@@ -52,7 +52,120 @@ function siNav(panel, skipHash) {
   const pretty = panel.charAt(0).toUpperCase() + panel.slice(1);
   document.title = 'KEMLLM · ' + pretty;
   if (typeof syncHomeMusic === 'function') syncHomeMusic();
+  if (panel === 'media' && typeof renderMediaGrid === 'function') renderMediaGrid();
 }
+
+// ===== Media panel =====
+// Scans every chat in history for generated images + videos and renders
+// them as a grid. Each item has a download button and opens fullscreen
+// when clicked.
+let _mediaFilter = 'all';
+function collectAllMedia() {
+  const list = typeof loadHistory === 'function' ? loadHistory() : [];
+  const items = [];
+  const imgRe = /!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g;
+  const vidRe = /<video[^>]*\ssrc=["']([^"']+)["'][^>]*>/g;
+  for (const chat of list) {
+    for (const m of (chat.messages || [])) {
+      const c = typeof m.content === 'string' ? m.content : '';
+      if (!c) continue;
+      let match;
+      imgRe.lastIndex = 0;
+      while ((match = imgRe.exec(c)) !== null) {
+        items.push({
+          type: 'image',
+          url: match[2],
+          alt: match[1] || '',
+          chatId: chat.id,
+          chatTitle: chat.title || 'Chat',
+          modelName: m.modelName || 'Image',
+          ts: chat.ts || 0,
+        });
+      }
+      vidRe.lastIndex = 0;
+      while ((match = vidRe.exec(c)) !== null) {
+        items.push({
+          type: 'video',
+          url: match[1],
+          chatId: chat.id,
+          chatTitle: chat.title || 'Chat',
+          modelName: m.modelName || 'Video',
+          ts: chat.ts || 0,
+        });
+      }
+    }
+  }
+  // Newest first
+  items.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  return items;
+}
+
+function renderMediaGrid() {
+  const grid = document.getElementById('media-grid');
+  if (!grid) return;
+  let items = collectAllMedia();
+  if (_mediaFilter !== 'all') items = items.filter(i => i.type === _mediaFilter);
+  document.querySelectorAll('.media-tab').forEach(el => {
+    el.classList.toggle('active', el.dataset.mediaTab === _mediaFilter);
+  });
+  if (!items.length) {
+    grid.innerHTML = `<div class="media-empty">No ${_mediaFilter === 'all' ? '' : _mediaFilter + ' '}media yet. Generate some in a chat and it will show up here.</div>`;
+    return;
+  }
+  grid.innerHTML = items.map((it, idx) => {
+    const safeName = escapeHTML(it.modelName);
+    const safeUrl = escapeHTML(it.url);
+    const media = it.type === 'image'
+      ? `<img src="${safeUrl}" loading="lazy" onclick="openMediaViewer(${idx})">`
+      : `<video src="${safeUrl}" muted loop onmouseover="this.play()" onmouseout="this.pause()" onclick="openMediaViewer(${idx})"></video>`;
+    return `<div class="media-item" data-media-idx="${idx}">
+      ${media}
+      <div class="media-badge">${it.type}</div>
+      <div class="media-meta">
+        <div class="media-name">${safeName}</div>
+        <button class="media-dl" onclick="event.stopPropagation();downloadMediaUrl('${safeUrl.replace(/'/g, "\\'")}','${it.type}')" title="Download">↓</button>
+      </div>
+    </div>`;
+  }).join('');
+  // Cache items globally for the viewer callback
+  window._mediaCache = items;
+}
+
+function openMediaViewer(idx) {
+  const items = window._mediaCache || [];
+  const it = items[idx];
+  if (!it) return;
+  if (it.type === 'image') {
+    if (typeof openImageViewer === 'function') openImageViewer(it.url);
+  } else {
+    // Open video in a new tab for now
+    window.open(it.url, '_blank');
+  }
+}
+
+async function downloadMediaUrl(url, type) {
+  try {
+    showToast('Downloading…');
+    const r = await fetch(url);
+    if (!r.ok) { showToast('Download failed: HTTP ' + r.status); return; }
+    const blob = await r.blob();
+    const ext = (blob.type.split('/')[1] || (type === 'video' ? 'mp4' : 'png')).split(';')[0];
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'kemllm-' + Date.now() + '.' + ext;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(a.href); }, 1000);
+  } catch (e) { showToast('Download failed: ' + (e.message || e)); }
+}
+
+// Wire filter tabs once the DOM is ready
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('.media-tab');
+  if (!t) return;
+  _mediaFilter = t.dataset.mediaTab || 'all';
+  renderMediaGrid();
+});
 
 // Apply whatever the URL hash currently says: switch panel + load chat
 // if a chatId is present. Used by initRouter, popstate, and hashchange.
@@ -121,6 +234,44 @@ function ensureYTApi() {
   document.head.appendChild(s);
 }
 
+function stopHomeMusic() {
+  // Aggressive stop. YT.Player.destroy() replaces our element with a
+  // new <iframe>; we then need to replace it with an empty div again
+  // so the NEXT new YT.Player() call can find a mount point.
+  if (_ytPlayer) {
+    try { _ytPlayer.pauseVideo(); } catch {}
+    try { _ytPlayer.stopVideo(); } catch {}
+    try { _ytPlayer.destroy(); } catch {}
+    _ytPlayer = null;
+  }
+  // The destroy may have left an iframe OR nothing where the div was.
+  // Re-create a fresh empty div with the same id + offscreen styles.
+  let mount = document.getElementById('home-music-yt');
+  if (!mount) {
+    mount = document.createElement('div');
+    mount.id = 'home-music-yt';
+    mount.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;';
+    const chatPanel = document.getElementById('chat-panel');
+    if (chatPanel) chatPanel.appendChild(mount);
+  } else if (mount.tagName === 'IFRAME') {
+    // destroy() replaced our div with an iframe — swap it back
+    const parent = mount.parentNode;
+    const fresh = document.createElement('div');
+    fresh.id = 'home-music-yt';
+    fresh.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;';
+    if (parent) parent.replaceChild(fresh, mount);
+  } else {
+    // A div — just clear any leftover children
+    mount.innerHTML = '';
+  }
+  const audioEl = document.getElementById('home-music');
+  if (audioEl) {
+    try { audioEl.pause(); } catch {}
+    audioEl.src = '';
+    audioEl.removeAttribute('src');
+  }
+}
+
 function syncHomeMusic() {
   const url = HOME_MUSIC_URL;
   // Music is AUTO-ON by default. Only off if the user explicitly set music-on to '0'.
@@ -128,14 +279,15 @@ function syncHomeMusic() {
   const on = musicOnPref !== '0';
   const vol = parseInt((typeof profileGet === 'function' && profileGet('music-vol')) || '50', 10);
   const homeEl = document.getElementById('home-screen');
-  const homeVisible = homeEl && !homeEl.classList.contains('hidden') && currentPanel === 'chat';
+  // Only play on the home screen of the chat panel — the "new tab" page.
+  // Any other panel (code, media, settings) OR any chat with currentChatId
+  // set means the user isn't on the new-tab home and music must stop.
+  const homeVisible = homeEl && !homeEl.classList.contains('hidden') && currentPanel === 'chat' && !currentChatId;
   const ytId = youtubeIdFromUrl(url);
   const audioEl = document.getElementById('home-music');
 
-  // Stop everything if disabled, no URL, or home screen not visible
   if (!on || !url || !homeVisible) {
-    if (_ytPlayer) { try { _ytPlayer.pauseVideo(); } catch {} }
-    if (audioEl && !audioEl.paused) { try { audioEl.pause(); } catch {} }
+    stopHomeMusic();
     return;
   }
 

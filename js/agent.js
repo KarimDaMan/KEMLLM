@@ -35,6 +35,17 @@ function agentLog(text, cls) {
     legacy.scrollTop = legacy.scrollHeight;
     return div;
   }
+  // Only render into #msgs when the user is actually viewing an agent-
+  // mode chat. Otherwise silently console.log — we don't want sandbox
+  // startup spam ("HF Space waking up… 25s") landing on the home screen
+  // when the user never asked for agent mode.
+  const homeEl = document.getElementById('home-screen');
+  const homeVisible = homeEl && !homeEl.classList.contains('hidden');
+  const inAgentMode = (typeof chatMode !== 'undefined' && chatMode === 'agent');
+  if (homeVisible || !inAgentMode) {
+    try { console.log('[agent]', cls || '', text); } catch {}
+    return null;
+  }
   const msgs = document.getElementById('msgs');
   if (!msgs) return null;
   const div = document.createElement('div');

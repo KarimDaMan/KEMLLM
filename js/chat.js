@@ -115,6 +115,38 @@ function parseMarkdown(md) {
   html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  // GFM-style tables: | col | col |  with separator row | --- | --- |
+  // Match a header row, a separator row, and any number of body rows.
+  html = html.replace(
+    /(^|\n)(\|[^\n]+\|)\n(\|[ \-:|]+\|)\n((?:\|[^\n]+\|\n?)+)/g,
+    (m, lead, header, sep, body) => {
+      const splitRow = r => r.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+      const heads = splitRow(header);
+      const aligns = splitRow(sep).map(s => {
+        if (/^:-+:$/.test(s)) return 'center';
+        if (/-+:$/.test(s)) return 'right';
+        if (/^:-+/.test(s)) return 'left';
+        return '';
+      });
+      const rows = body.trim().split('\n').map(splitRow);
+      let out = '<table class="md-table"><thead><tr>';
+      heads.forEach((h, i) => {
+        const a = aligns[i] ? ` style="text-align:${aligns[i]}"` : '';
+        out += `<th${a}>${h}</th>`;
+      });
+      out += '</tr></thead><tbody>';
+      rows.forEach(r => {
+        out += '<tr>';
+        r.forEach((c, i) => {
+          const a = aligns[i] ? ` style="text-align:${aligns[i]}"` : '';
+          out += `<td${a}>${c}</td>`;
+        });
+        out += '</tr>';
+      });
+      out += '</tbody></table>';
+      return lead + out;
+    }
+  );
   // Bold/italic/strike
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
@@ -139,7 +171,7 @@ function parseMarkdown(md) {
   html = html.replace(/(<oli>.*<\/oli>\n?)+/g, m => '<ol>' + m.replace(/oli/g, 'li') + '</ol>');
   // Paragraphs
   html = html.split(/\n\n+/).map(p => {
-    if (/^<(h\d|ul|ol|blockquote|pre)/.test(p.trim())) return p;
+    if (/^<(h\d|ul|ol|blockquote|pre|table)/.test(p.trim())) return p;
     return '<p>' + p.replace(/\n/g, '<br>') + '</p>';
   }).join('');
   // Restore inline code
@@ -594,10 +626,36 @@ function isInteractiveApp(block) {
 
 // Render a slim "code execution strip" directly after the AI message bubble.
 // It's collapsed by default — just a thin bar saying "▶ Ran python · 120ms".
-// Click opens a centered modal popup with the full output, the code itself,
-// and (if the code is HTML) a Preview button that renders it in an iframe.
+// For HTML (and interactive JS apps) we don't run it through Piston —
+// we treat it as a Claude-style artifact, show a "Preview ready" strip,
+// and open it in the chat-preview pane on click.
 async function runAnalysisBlock(aiEl, block) {
   if (!aiEl || !aiEl.parentNode) return null;
+
+  // HTML artifact path — no Piston, just render a preview iframe
+  if (block.lang === 'html' || isInteractiveApp(block)) {
+    const strip = document.createElement('div');
+    strip.className = 'code-strip ok';
+    strip.innerHTML = `<button type="button" class="code-strip-bar"><span class="code-strip-dot"></span><span class="code-strip-label">HTML preview ready · click to open</span></button>`;
+    aiEl.parentNode.insertBefore(strip, aiEl.nextSibling);
+    scrollToBottom();
+    const htmlCode = block.lang === 'html' ? block.code : `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Preview</title></head><body><script>${block.code}<\/script></body></html>`;
+    strip.querySelector('.code-strip-bar').addEventListener('click', () => {
+      // Open in the chat preview pane via a blob URL (srcdoc would also
+      // work but blob URLs survive reloads better for longer HTML).
+      const blob = new Blob([htmlCode], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      if (typeof chatPreviewShow === 'function') chatPreviewShow(url, 'HTML Preview');
+    });
+    // Auto-open the preview the first time it's generated
+    setTimeout(() => {
+      const blob = new Blob([htmlCode], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      if (typeof chatPreviewShow === 'function') chatPreviewShow(url, 'HTML Preview');
+    }, 200);
+    return { stdout: '', stderr: '', exit: 0, isHtmlArtifact: true };
+  }
+
   const strip = document.createElement('div');
   strip.className = 'code-strip running';
   strip.innerHTML = `<button type="button" class="code-strip-bar"><span class="code-strip-dot"></span><span class="code-strip-label">Running ${escapeHTML(block.lang)}…</span></button>`;
@@ -1439,7 +1497,14 @@ function newChat(skipHash) {
   pendingAttachments = [];
   agentInjectQueue = [];
   renderAttachPreview();
-  document.getElementById('msgs').innerHTML = '';
+  const msgsEl = document.getElementById('msgs');
+  if (msgsEl) {
+    msgsEl.innerHTML = '';
+    // Also purge any stray agent-log lines that leaked in from a
+    // previous sandbox start. Defense in depth on top of the agentLog
+    // guard in agent.js.
+    msgsEl.querySelectorAll('.agent-log').forEach(el => el.remove());
+  }
   const home = document.getElementById('home-screen');
   if (home) home.classList.remove('hidden');
   if (window.termBootStart) window.termBootStart();

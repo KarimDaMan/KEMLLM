@@ -235,7 +235,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v102 · remove in-app chat tab bar (was added in v100 by mistake). URL-based #/chat/<id> routing stays.';
+const KEMLLM_BUILD = 'v103 · media tab, HTML artifact preview, markdown tables, aggressive music stop off home, stronger HTML system prompt, agent log guard for home screen';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

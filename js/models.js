@@ -197,6 +197,20 @@ const VIDEO_MODELS = [
   { id: 'ltx-video',  name: 'LTX Video',  replicateId: 'lightricks/ltx-video' },
   // xAI Grok video
   { id: 'grok-imagine-video', name: 'Grok Imagine Video', replicateId: 'xai/grok-imagine-video' },
+  // Kuaishou Kling — all known variants on Replicate (kwaivgi account)
+  { id: 'kling-v2.1-master',   name: 'Kling v2.1 Master',   replicateId: 'kwaivgi/kling-v2.1-master' },
+  { id: 'kling-v2.1',          name: 'Kling v2.1',          replicateId: 'kwaivgi/kling-v2.1' },
+  { id: 'kling-v2.1-pro',      name: 'Kling v2.1 Pro',      replicateId: 'kwaivgi/kling-v2.1-pro' },
+  { id: 'kling-v2.1-standard', name: 'Kling v2.1 Standard', replicateId: 'kwaivgi/kling-v2.1-standard' },
+  { id: 'kling-v2.0',          name: 'Kling v2.0',          replicateId: 'kwaivgi/kling-v2.0' },
+  { id: 'kling-v2-master',     name: 'Kling v2 Master',     replicateId: 'kwaivgi/kling-v2-master' },
+  { id: 'kling-v1.6-pro',      name: 'Kling v1.6 Pro',      replicateId: 'kwaivgi/kling-v1.6-pro' },
+  { id: 'kling-v1.6-standard', name: 'Kling v1.6 Standard', replicateId: 'kwaivgi/kling-v1.6-standard' },
+  { id: 'kling-v1.5-pro',      name: 'Kling v1.5 Pro',      replicateId: 'kwaivgi/kling-v1.5-pro' },
+  { id: 'kling-v1.5-standard', name: 'Kling v1.5 Standard', replicateId: 'kwaivgi/kling-v1.5-standard' },
+  { id: 'kling-v1-pro',        name: 'Kling v1 Pro',        replicateId: 'kwaivgi/kling-v1-pro' },
+  { id: 'kling-v1-standard',   name: 'Kling v1 Standard',   replicateId: 'kwaivgi/kling-v1-standard' },
+  { id: 'kling-lipsync',       name: 'Kling Lip Sync',      replicateId: 'kwaivgi/kling-lipsync' },
 ];
 
 let selectedChat  = 'claude-4.5-sonnet';

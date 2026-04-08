@@ -239,7 +239,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v112 · stale HTML auto-reload + user modal cleanup';
+const KEMLLM_BUILD = 'v113 · add all Kling video models';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.

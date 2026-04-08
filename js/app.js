@@ -235,7 +235,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v107 · remove Code mode button, HTML artifacts skip the Piston follow-up spam, tolerate CRLF line endings in code block detection';
+const KEMLLM_BUILD = 'v108 · chat-preview is now a real split pane (HTML 50%, Desktop 75%) + GitHub avatar sync in sidebar profile';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

@@ -134,19 +134,28 @@ function activateProfile(id) {
   document.getElementById('login').classList.remove('show');
   document.getElementById('app').classList.add('show');
 
-  // Avatar
-  const ava = document.getElementById('si-ava');
-  if (ava) {
-    ava.style.background = p.color;
-    ava.textContent = p.name[0].toUpperCase();
-  }
+  // Avatar — use GitHub avatar_url if we have one, otherwise fall back
+  // to the colored letter circle. GitHub's avatar_url works with ?s=N
+  // query param for a specific pixel size.
+  const setAva = (el, size) => {
+    if (!el) return;
+    if (p.avatar) {
+      const src = p.avatar + (p.avatar.includes('?') ? '&' : '?') + 's=' + (size * 2);
+      el.style.background = '';
+      el.style.backgroundImage = `url("${src}")`;
+      el.style.backgroundSize = 'cover';
+      el.style.backgroundPosition = 'center';
+      el.textContent = '';
+    } else {
+      el.style.backgroundImage = '';
+      el.style.background = p.color;
+      el.textContent = (p.name || '?')[0].toUpperCase();
+    }
+  };
+  setAva(document.getElementById('si-ava'), 30);
   const avaName = document.getElementById('si-ava-name');
   if (avaName) avaName.textContent = p.name;
-  const umAva = document.getElementById('um-ava');
-  if (umAva) {
-    umAva.style.background = p.color;
-    umAva.textContent = p.name[0].toUpperCase();
-  }
+  setAva(document.getElementById('um-ava'), 48);
   const umName = document.getElementById('um-name');
   if (umName) umName.textContent = p.name;
   const umEmail = document.getElementById('um-email');

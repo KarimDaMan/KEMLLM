@@ -1209,10 +1209,11 @@ function chatPreviewShow(url, title) {
   // Hide the raw-code view by default when loading a new URL
   const codeView = document.getElementById('chat-preview-code');
   if (codeView) codeView.style.display = 'none';
-  // Show the audio toggle for the AI Desktop preview. Detect by title
-  // (exact match) or by URL containing 'vnc' — both mean noVNC is loaded.
-  const audioBtn = document.getElementById('chat-preview-audio');
+  // Desktop mode: bigger pane (75% of screen instead of 50%). Detect by
+  // title (exact match) or by URL containing 'vnc' — both mean noVNC.
   const isDesktop = title === 'AI Desktop' || /vnc(\.html|_lite)/.test(url || '');
+  pane.classList.toggle('mode-desktop', isDesktop);
+  const audioBtn = document.getElementById('chat-preview-audio');
   if (audioBtn) audioBtn.style.display = isDesktop ? 'inline-block' : 'none';
 }
 

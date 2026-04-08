@@ -103,6 +103,19 @@ function loadAllSettings() {
   const savedVideo = profileGet('selected_video');
   if (savedVideo && typeof selectedVideo !== 'undefined') selectedVideo = savedVideo;
   if (typeof renderModelDropdowns === 'function') renderModelDropdowns();
+  // Background music settings
+  const musicOnEl = document.getElementById('sp-music-on');
+  const musicUrlEl = document.getElementById('sp-music-url');
+  const musicVolEl = document.getElementById('sp-music-vol');
+  const musicVolLabelEl = document.getElementById('sp-music-vol-label');
+  if (musicOnEl) musicOnEl.checked = profileGet('music-on') === '1';
+  if (musicUrlEl) musicUrlEl.value = profileGet('music-url') || '';
+  if (musicVolEl) {
+    const v = parseInt(profileGet('music-vol') || '50', 10);
+    musicVolEl.value = String(v);
+    if (musicVolLabelEl) musicVolLabelEl.textContent = v + '%';
+  }
+  if (typeof syncHomeMusic === 'function') syncHomeMusic();
 }
 function saveKey(provider) {
   const el = document.getElementById('key-' + provider);

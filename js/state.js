@@ -254,6 +254,10 @@ const SYNC_KEYS = [
   'ai-memory',
   // Sandbox toggle
   'sandbox-web',
+  // Background music
+  'music-on',
+  'music-url',
+  'music-vol',
 ];
 const SYNC_POLL_INTERVAL_MS = 30 * 1000; // re-pull every 30s while open
 let _syncPollTimer = null;

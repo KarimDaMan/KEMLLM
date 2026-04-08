@@ -116,6 +116,11 @@ function loadChat(id, skipHash) {
   renderHistory();
   closeDrawer();
   siNav('chat');
+  // Refresh send/stop button — the new chat may have its own in-flight
+  // response (or not), independent of the chat we just left.
+  if (typeof refreshBusyUI === 'function') refreshBusyUI();
+  // Pause home-screen music since we're now in a chat
+  if (typeof syncHomeMusic === 'function') syncHomeMusic();
 }
 function deleteChat(id) {
   let list = loadHistory();
@@ -230,7 +235,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v98 · per-chat URLs — each chat is now its own page at #/chat/<chatId>. Browser back/forward navigates between chats. Reload restores the active chat. New chat = #/chat. Direct deep-links work. The router now parses chatId from the hash and loadChat/newChat push their own URL.';
+const KEMLLM_BUILD = 'v99 · per-chat busy state (new chat works while another is responding) + YouTube background music with the user-supplied default video; volume slider, on/off toggle, auto-pause off home screen';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -585,6 +590,34 @@ document.addEventListener('DOMContentLoaded', () => {
     sandboxWebEl.addEventListener('change', () => {
       profileSet('sandbox-web', sandboxWebEl.checked ? '1' : '0');
       showToast(sandboxWebEl.checked ? 'Sandbox web access enabled' : 'Sandbox web access disabled');
+    });
+  }
+
+  // Background music — settings inputs persist to profile and re-sync
+  // the player. Default volume is 50%, default off.
+  const musicOnEl = document.getElementById('sp-music-on');
+  const musicUrlEl = document.getElementById('sp-music-url');
+  const musicVolEl = document.getElementById('sp-music-vol');
+  const musicVolLabelEl = document.getElementById('sp-music-vol-label');
+  if (musicOnEl) {
+    musicOnEl.addEventListener('change', () => {
+      profileSet('music-on', musicOnEl.checked ? '1' : '0');
+      syncHomeMusic();
+    });
+  }
+  if (musicUrlEl) {
+    musicUrlEl.addEventListener('change', () => {
+      profileSet('music-url', musicUrlEl.value.trim());
+      syncHomeMusic();
+    });
+  }
+  if (musicVolEl) {
+    musicVolEl.addEventListener('input', () => {
+      const v = parseInt(musicVolEl.value, 10);
+      if (musicVolLabelEl) musicVolLabelEl.textContent = v + '%';
+      profileSet('music-vol', String(v));
+      const a = document.getElementById('home-music');
+      if (a) a.volume = v / 100;
     });
   }
 

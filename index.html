@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=98">
+<link rel="stylesheet" href="css/style.css?v=99">
 <!-- KaTeX for math rendering (lazy-loaded by chat.js when first math is detected) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" media="print" onload="this.media='all'">
 </head>
@@ -157,6 +157,12 @@
             <span>KEMLLM</span>
           </div>
         </div>
+        <!-- Background music player. Two backends:
+             - Direct audio URLs go through <audio id="home-music">.
+             - YouTube URLs go through the YouTube IFrame Player which
+               creates an invisible <iframe> inside #home-music-yt. -->
+        <audio id="home-music" preload="none" loop></audio>
+        <div id="home-music-yt" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;"></div>
         <div id="msgs"></div>
       </div>
       <div id="input-wrap">
@@ -360,6 +366,26 @@
         </div>
 
         <div class="sp-section">
+          <div class="sp-h">Background music</div>
+          <div class="sp-row">
+            <label class="sp-toggle">
+              <input id="sp-music-on" type="checkbox">
+              <span>Play music on the home screen</span>
+            </label>
+            <div class="sub" style="margin-top:6px;">Plays a track in the background when you're on the home screen. Stops when you open a chat. Browsers block autoplay until you click the page once.</div>
+            <div style="margin-top:12px;">
+              <div class="sub" style="margin-bottom:4px;">Audio URL</div>
+              <input id="sp-music-url" class="sp-input font" placeholder="https://www.youtube.com/watch?v=... (YouTube links work — or paste a direct .mp3/.ogg/.m4a URL)">
+            </div>
+            <div style="margin-top:12px;display:flex;align-items:center;gap:10px;">
+              <span class="sub" style="min-width:60px;">Volume</span>
+              <input id="sp-music-vol" type="range" min="0" max="100" value="50" style="flex:1;">
+              <span id="sp-music-vol-label" class="sub" style="min-width:36px;text-align:right;">50%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sp-section">
           <div class="sp-h">Sandbox</div>
           <div class="sp-row">
             <label class="sp-toggle">
@@ -501,13 +527,13 @@
 
 <div id="toast"></div>
 
-<script src="js/state.js?v=98"></script>
-<script src="js/models.js?v=98"></script>
-<script src="js/api.js?v=98"></script>
-<script src="js/chat.js?v=98"></script>
-<script src="js/code.js?v=98"></script>
-<script src="js/agent.js?v=98"></script>
-<script src="js/ui.js?v=98"></script>
-<script src="js/app.js?v=98"></script>
+<script src="js/state.js?v=99"></script>
+<script src="js/models.js?v=99"></script>
+<script src="js/api.js?v=99"></script>
+<script src="js/chat.js?v=99"></script>
+<script src="js/code.js?v=99"></script>
+<script src="js/agent.js?v=99"></script>
+<script src="js/ui.js?v=99"></script>
+<script src="js/app.js?v=99"></script>
 </body>
 </html>

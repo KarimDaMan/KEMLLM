@@ -11,16 +11,37 @@ let agentUnlocked = false;
 // Blocks the send button while an AI response is in progress — user must
 // wait (or press stop) before sending the next message. Matches ChatGPT's
 // interaction model.
-let chatBusy = false;
-function setChatBusy(busy) {
-  chatBusy = busy;
+// Per-chat busy state. Each chat that currently has an in-flight AI
+// response is in this set. The send/stop button reflects the CURRENT
+// chat's state — so the user can navigate to a different chat (or new
+// chat) while one is still responding and that other chat is NOT busy.
+const busyChats = new Set();
+// Magic key for the "draft" chat (no id yet, just typing in a fresh
+// home screen). Lets us track busy state before the first save.
+const PENDING_DRAFT = '__draft__';
+
+function setChatBusy(chatId, busy) {
+  if (!chatId) chatId = PENDING_DRAFT;
+  if (busy) busyChats.add(chatId);
+  else busyChats.delete(chatId);
+  refreshBusyUI();
+}
+
+function refreshBusyUI() {
+  const isBusy = busyChats.has(currentChatId || PENDING_DRAFT);
   const sendBtn = document.getElementById('send-btn');
   const stopBtn = document.getElementById('stop-btn');
   const input = document.getElementById('input-text');
-  if (sendBtn) sendBtn.classList.toggle('hide', busy);
-  if (stopBtn) stopBtn.classList.toggle('show', busy);
-  if (input) input.disabled = false; // still allow typing ahead
+  if (sendBtn) sendBtn.classList.toggle('hide', isBusy);
+  if (stopBtn) stopBtn.classList.toggle('show', isBusy);
+  if (input) input.disabled = false;
 }
+
+// Backwards-compat shim — anything that still references the global
+// `chatBusy` value reads the current chat's state via this getter.
+Object.defineProperty(window, 'chatBusy', {
+  get() { return busyChats.has(currentChatId || PENDING_DRAFT); },
+});
 
 // Agent loop state — lets the AI keep running autonomously until the task
 // is done, while the user can inject additional instructions mid-loop.
@@ -353,10 +374,11 @@ async function sendMessage() {
   if (!text && !pendingAttachments.length) return;
   // Block a new send while the current response is still streaming in.
   // User must wait (or press the stop button) before sending the next
-  // message — same pattern as ChatGPT. Agent-loop mode has its own
-  // injection queue so we let those pass through.
-  if (chatBusy && chatMode !== 'agent') {
-    showToast('Wait for the current response to finish');
+  // message IN THIS CHAT — same pattern as ChatGPT. Other chats with
+  // their own in-flight responses are unaffected. Agent-loop mode has
+  // its own injection queue so we let those pass through.
+  if (busyChats.has(currentChatId || PENDING_DRAFT) && chatMode !== 'agent') {
+    showToast('Wait for this chat to finish, or open a new chat');
     return;
   }
   input.value = '';
@@ -421,7 +443,7 @@ async function sendMessage() {
   if (!model) { showToast('No model selected'); return; }
 
   const typingEl = renderTyping(model);
-  setChatBusy(true);
+  setChatBusy(originatingChatId, true);
 
   // Helper: append assistant content to the originating chat's saved
   // history. Returns true if it could find the chat. Independent of the
@@ -519,7 +541,7 @@ async function sendMessage() {
       console.warn('[KEMLLM] background fetch error in chat', originatingChatId, e);
     }
   } finally {
-    setChatBusy(false);
+    setChatBusy(originatingChatId, false);
   }
 }
 
@@ -1410,6 +1432,8 @@ function newChat(skipHash) {
     setHashForPanel('chat', null);
   }
   document.title = 'KEMLLM · Chat';
+  if (typeof refreshBusyUI === 'function') refreshBusyUI();
+  if (typeof syncHomeMusic === 'function') syncHomeMusic();
 }
 
 // ===== Attachments =====

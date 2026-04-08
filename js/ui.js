@@ -51,6 +51,7 @@ function siNav(panel, skipHash) {
   // Update document title so it shows in browser history / tab bar
   const pretty = panel.charAt(0).toUpperCase() + panel.slice(1);
   document.title = 'KEMLLM · ' + pretty;
+  if (typeof syncHomeMusic === 'function') syncHomeMusic();
 }
 
 // Apply whatever the URL hash currently says: switch panel + load chat
@@ -82,6 +83,127 @@ function initRouter() {
   window.addEventListener('popstate', applyHashRoute);
   window.addEventListener('hashchange', applyHashRoute);
 }
+
+// ===== Background music =====
+// Two backends: <audio> for direct audio URLs, YT IFrame Player for
+// YouTube links. Plays only when home screen is visible AND the toggle
+// is enabled in Settings. Browser autoplay restrictions still apply —
+// the first user click anywhere unlocks playback.
+let _ytPlayer = null;
+let _ytApiReady = false;
+let _ytPendingId = null;
+
+// Default music URL — the YouTube link the user wants. If they paste a
+// different one in Settings, that wins.
+const DEFAULT_MUSIC_URL = 'https://www.youtube.com/watch?v=sVqbmWYKGmw';
+
+function youtubeIdFromUrl(url) {
+  if (!url) return null;
+  // youtube.com/watch?v=ID, youtube.com/watch?...&v=ID, youtu.be/ID,
+  // youtube.com/embed/ID, music.youtube.com/watch?v=ID
+  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+function ensureYTApi() {
+  if (window.YT && window.YT.Player) { _ytApiReady = true; return; }
+  if (document.getElementById('yt-iframe-api-script')) return;
+  // The YT IFrame API calls window.onYouTubeIframeAPIReady when loaded
+  window.onYouTubeIframeAPIReady = function() {
+    _ytApiReady = true;
+    // Re-sync now that we have the API
+    if (typeof syncHomeMusic === 'function') syncHomeMusic();
+  };
+  const s = document.createElement('script');
+  s.id = 'yt-iframe-api-script';
+  s.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(s);
+}
+
+function syncHomeMusic() {
+  const url = (typeof profileGet === 'function' && profileGet('music-url')) || DEFAULT_MUSIC_URL;
+  const on = typeof profileGet === 'function' && profileGet('music-on') === '1';
+  const vol = parseInt((typeof profileGet === 'function' && profileGet('music-vol')) || '50', 10);
+  const homeEl = document.getElementById('home-screen');
+  const homeVisible = homeEl && !homeEl.classList.contains('hidden') && currentPanel === 'chat';
+  const ytId = youtubeIdFromUrl(url);
+  const audioEl = document.getElementById('home-music');
+
+  // Stop everything if disabled, no URL, or home screen not visible
+  if (!on || !url || !homeVisible) {
+    if (_ytPlayer) { try { _ytPlayer.pauseVideo(); } catch {} }
+    if (audioEl && !audioEl.paused) { try { audioEl.pause(); } catch {} }
+    return;
+  }
+
+  if (ytId) {
+    // YouTube path
+    if (audioEl && !audioEl.paused) { try { audioEl.pause(); } catch {} }
+    ensureYTApi();
+    if (!_ytApiReady) { _ytPendingId = ytId; return; }
+    if (!_ytPlayer) {
+      try {
+        _ytPlayer = new YT.Player('home-music-yt', {
+          height: '1',
+          width: '1',
+          videoId: ytId,
+          playerVars: {
+            autoplay: 1,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            modestbranding: 1,
+            rel: 0,
+            loop: 1,
+            playlist: ytId, // required for loop=1 to actually loop
+          },
+          events: {
+            onReady: function(e) {
+              try {
+                e.target.setVolume(vol);
+                e.target.playVideo();
+              } catch {}
+            },
+            onStateChange: function(e) {
+              // Restart on end (extra safety on top of loop=1)
+              if (e.data === YT.PlayerState.ENDED) {
+                try { e.target.playVideo(); } catch {}
+              }
+            },
+          },
+        });
+      } catch (err) { console.warn('[KEMLLM] YT player init failed', err); }
+    } else {
+      try {
+        _ytPlayer.setVolume(vol);
+        const cur = _ytPlayer.getVideoData && _ytPlayer.getVideoData();
+        if (cur && cur.video_id !== ytId) {
+          _ytPlayer.loadVideoById(ytId);
+        }
+        _ytPlayer.playVideo();
+      } catch {}
+    }
+  } else {
+    // Direct audio URL path
+    if (_ytPlayer) { try { _ytPlayer.pauseVideo(); } catch {} }
+    if (!audioEl) return;
+    if (audioEl.src !== url) audioEl.src = url;
+    audioEl.volume = Math.max(0, Math.min(1, vol / 100));
+    audioEl.loop = true;
+    audioEl.play().catch(() => {/* autoplay blocked, will retry on user click */});
+  }
+}
+
+// First-click unlock — browsers won't autoplay audio until the user
+// interacts with the page. Re-sync the music on the first pointer event.
+let _musicUnlocked = false;
+function _musicUnlockOnce() {
+  if (_musicUnlocked) return;
+  _musicUnlocked = true;
+  syncHomeMusic();
+}
+document.addEventListener('click', _musicUnlockOnce, { once: false, capture: true });
+document.addEventListener('keydown', _musicUnlockOnce, { once: false, capture: true });
 
 function toggleDrawer() {
   const d = document.getElementById('drawer');

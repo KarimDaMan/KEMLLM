@@ -66,8 +66,48 @@ RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
 RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     thunderbird \
     rhythmbox \
-    libreoffice-impress libreoffice-gtk3 \
+    libreoffice libreoffice-impress libreoffice-writer libreoffice-calc libreoffice-gtk3 \
     yelp \
+ && rm -rf /var/lib/apt/lists/*
+
+# Permanent apps baked into the image. These show up in the Activities
+# menu automatically because each installs its own .desktop file. Users
+# and the AI can open any of them via the applications menu or by name.
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    mousepad \
+    gedit \
+    gimp \
+    inkscape \
+    vlc \
+    audacity \
+    evince \
+    ristretto \
+    file-roller \
+    gnome-calculator \
+    gnome-system-monitor \
+    xfce4-taskmanager \
+    xfce4-screenshooter \
+    xfce4-clipman-plugin \
+    xfce4-notes-plugin \
+    xfce4-dict \
+    galculator \
+    simple-scan \
+    pavucontrol \
+ && rm -rf /var/lib/apt/lists/*
+
+# Skins / themes. Installing them populates /usr/share/themes and
+# /usr/share/icons so XFCE's Appearance settings picks them up
+# automatically — users can swap at runtime from Settings → Appearance
+# with no rebuild. Yaru-dark remains the default.
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    arc-theme \
+    materia-gtk-theme \
+    numix-gtk-theme numix-icon-theme numix-icon-theme-circle \
+    papirus-icon-theme \
+    adwaita-icon-theme-full \
+    elementary-xfce-icon-theme \
+    gnome-themes-extra \
+    gtk2-engines-murrine gtk2-engines-pixbuf \
  && rm -rf /var/lib/apt/lists/*
 
 # Real Firefox from Mozilla (Ubuntu 22.04's apt firefox is a snap stub).

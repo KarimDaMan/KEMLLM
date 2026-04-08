@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v84 · left dock panel fills full column (length=100 length-adjust=true), Activities top-bar button now has grid icon so it is obviously an apps launcher';
+const KEMLLM_BUILD = 'v85 · permanent apps (gimp, inkscape, vlc, audacity, evince, mousepad, gedit, gnome-calc, taskmanager, screenshooter, clipman, notes, scanner, pavucontrol) + skins/themes (arc, materia, numix, papirus, adwaita, elementary-xfce)';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

@@ -175,12 +175,20 @@ function applyHashRoute() {
   siNav(panel, true);
   if (panel === 'chat') {
     if (chatId) {
-      // Load the chat only if it's not already the active one
-      if (chatId !== currentChatId && typeof loadHistory === 'function') {
-        const exists = loadHistory().some(c => c.id === chatId);
-        if (exists && typeof loadChat === 'function') {
-          loadChat(chatId, true);
-        }
+      // Load the chat only if it's not already the active one. If the
+      // chat id isn't in history yet (profile not loaded, sync race,
+      // etc), retry briefly so a page reload on #/chat/<id> restores
+      // the chat instead of bouncing to the home screen.
+      if (chatId !== currentChatId) {
+        const tryLoad = (attempt) => {
+          const list = typeof loadHistory === 'function' ? loadHistory() : [];
+          if (list.some(c => c.id === chatId)) {
+            if (typeof loadChat === 'function') loadChat(chatId, true);
+          } else if (attempt < 8) {
+            setTimeout(() => tryLoad(attempt + 1), 150);
+          }
+        };
+        tryLoad(0);
       }
     } else {
       // Hash says #/chat with no id → home screen / new chat

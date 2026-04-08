@@ -239,7 +239,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v109 · topbar GitHub avatar button (click → profile modal) + fix click-chat-goes-to-new-chat (loadChat siNav race)';
+const KEMLLM_BUILD = 'v110 · clean user modal (no Code/Models/Switch), refresh on /chat/<id> actually restores the chat, terminal cards removed, preview pane position-relative fix';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -504,12 +504,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tb-ava')?.addEventListener('click', openUserModal);
 
   // User modal
-  document.getElementById('um-switch')?.addEventListener('click', switchProfile);
   document.getElementById('um-signout')?.addEventListener('click', signOut);
+  document.getElementById('um-media')?.addEventListener('click', () => { closeUserModal(); siNav('media'); });
   document.getElementById('um-close')?.addEventListener('click', closeUserModal);
   document.getElementById('um-settings')?.addEventListener('click', () => { closeUserModal(); siNav('settings'); });
-  document.getElementById('um-code')?.addEventListener('click', () => { closeUserModal(); siNav('code'); });
-  document.getElementById('um-models')?.addEventListener('click', () => { closeUserModal(); siNav('models'); });
 
   // MCP modal close
 
@@ -762,20 +760,21 @@ document.addEventListener('DOMContentLoaded', () => {
   renderModelsPanel();
   createStars();
   termBootStart();
-  // Wire hash router so URLs update on nav and deep-links work
-  if (typeof initRouter === 'function') initRouter();
-  // Refresh sync from cloud when the tab becomes visible (e.g. after
-  // switching back from another app or another device)
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && typeof pullSync === 'function') {
       pullSync({ silent: true });
     }
   });
 
-  // Handle GitHub OAuth callback if present
+  // ORDER MATTERS: activate the profile FIRST so history/settings are
+  // loaded, THEN initRouter so applyHashRoute can find the chat by id
+  // on a reload of #/chat/<id>. Previously the router ran before the
+  // profile was active, loadHistory() returned [], and the chat wasn't
+  // found — so a refresh on /chat/c_xxx dropped you to the home screen.
   if (!handleGithubCallback() && !checkExistingProfile()) {
     document.getElementById('login').classList.add('show');
   }
+  if (typeof initRouter === 'function') initRouter();
 
 
   // Resume any pending background AI responses left over from a previous

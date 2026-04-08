@@ -238,7 +238,7 @@ input,textarea{font-family:inherit;color:inherit;}
 .mdsep{height:1px;background:var(--border2);margin:4px 0;}
 
 /* ====== PANELS ====== */
-.panel{display:none;flex:1;min-height:0;overflow:hidden;flex-direction:column;}
+.panel{display:none;flex:1;min-height:0;overflow:hidden;flex-direction:column;position:relative;}
 .panel.active{display:flex;}
 
 /* ====== HOME / TERMINAL BOOT ====== */

@@ -731,36 +731,18 @@ async function runAnalysisBlock(aiEl, block) {
     return { stdout: '', stderr: '', exit: 0, isHtmlArtifact: true };
   }
 
-  const strip = document.createElement('div');
-  strip.className = 'code-strip running';
-  strip.innerHTML = `<button type="button" class="code-strip-bar"><span class="code-strip-dot"></span><span class="code-strip-label">Running ${escapeHTML(block.lang)}…</span></button>`;
-  aiEl.parentNode.insertBefore(strip, aiEl.nextSibling);
-  scrollToBottom();
+  // Non-HTML code: run silently. No visible "terminal card" in the
+  // chat flow — the user asked for no execution strips. Output still
+  // gets fed back to the AI for explanation via the follow-up turn.
   try {
-    const start = Date.now();
     const out = await runViaPiston(block.lang, block.code);
-    const ms = Date.now() - start;
-    const stdout = out.run?.stdout || '';
-    const stderr = out.run?.stderr || '';
-    const exit = out.run?.code;
-    const isHtml = block.lang === 'html' ||
-      /^\s*(?:<!doctype\s+html|<html|<body|<head)/i.test(block.code);
-    strip.classList.remove('running');
-    strip.classList.add(stderr ? 'err' : 'ok');
-    const label = `Ran ${block.lang} · ${ms}ms · exit ${exit}${isHtml ? ' · HTML' : ''}`;
-    strip.querySelector('.code-strip-label').textContent = label;
-    strip.querySelector('.code-strip-bar').addEventListener('click', () => {
-      openCodeRunModal({ lang: block.lang, code: block.code, stdout, stderr, exit, ms, isHtml });
-    });
-    return { stdout, stderr, exit };
+    return {
+      stdout: out.run?.stdout || '',
+      stderr: out.run?.stderr || '',
+      exit: out.run?.code,
+    };
   } catch (e) {
-    strip.classList.remove('running');
-    strip.classList.add('err');
-    strip.querySelector('.code-strip-label').textContent = 'Execution error · tap for details';
-    strip.querySelector('.code-strip-bar').addEventListener('click', () => {
-      openCodeRunModal({ lang: block.lang, code: block.code, stdout: '', stderr: e.message, exit: -1, ms: 0, isHtml: false });
-    });
-    return { stdout: '', stderr: e.message, exit: -1 };
+    return { stdout: '', stderr: e.message || String(e), exit: -1 };
   }
 }
 

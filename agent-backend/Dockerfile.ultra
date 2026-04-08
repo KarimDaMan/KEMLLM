@@ -1,7 +1,8 @@
 # KEMLLM Agent Backend — ULTRA build
 #
-# The "everything" build. Ubuntu 24.04 LTS base, full XFCE4 desktop with
-# GNOME session as a fallback, every major language runtime, every cloud
+# The "everything" build. Latest Ubuntu release (ubuntu:rolling) base,
+# full XFCE4 desktop with GNOME session as a fallback, every major
+# language runtime, every cloud
 # CLI, all the ML/data tooling, full LibreOffice, Firefox + Chromium,
 # VS Code in the browser via code-server, Jupyter Lab, every media and
 # networking tool, rclone + s3fs-fuse + gcsfuse + blobfuse2 for cloud
@@ -47,7 +48,7 @@
 # commit, wait ~15-20 min for the first build (subsequent builds use cache
 # and are fast). Set any of the env vars above as Space secrets.
 
-FROM ubuntu:24.04
+FROM ubuntu:rolling
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
@@ -55,9 +56,16 @@ ENV DISPLAY=:0
 ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
-# 24.04 "Noble" is the current LTS (the next LTS, 26.04, isn't out yet).
-# Everything else in the file is release-agnostic — you can swap to
-# ubuntu:rolling or ubuntu:latest without touching anything below.
+# ubuntu:rolling is the canonical "latest stable Ubuntu" tag on Docker
+# Hub — it auto-advances to whatever the newest stable release is at
+# build time (interim releases included). No version bumps needed: when
+# a new Ubuntu ships, the next rebuild picks it up automatically.
+#
+# Pin alternatives if you want a specific release instead:
+#   ubuntu:latest  → latest LTS only
+#   ubuntu:devel   → in-development next release (bleeding edge)
+#   ubuntu:24.04   → Noble LTS pinned
+#   ubuntu:26.04   → once it ships (April 2026)
 
 # ========== Layer 1: core system + locales + build tools ==========
 # Split into focused layers so a single failing group names itself in

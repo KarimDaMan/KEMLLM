@@ -552,10 +552,17 @@ async function sendMessage() {
         // doesn't also render as inline <pre> in the message bubble —
         // ALL executed code lives ONLY in the dropdown strip below the
         // message. Any prose before/after the code block is preserved.
-        const withoutCode = visibleText.replace(/```(\w+)\n[\s\S]*?```/, '').trim();
+        // Handle \r\n line endings and missing closing fence.
+        const withoutCode = visibleText
+          .replace(/\r\n/g, '\n')
+          .replace(/```(\w+)?\n[\s\S]*?(?:\n```|$)/, '')
+          .trim();
         const aiEl = renderAIMessage(model, parseMarkdown(withoutCode || ' '));
         const analysisEl = await runAnalysisBlock(aiEl, runnable);
-        if (analysisEl && currentChatId === originatingChatId) {
+        // HTML artifacts are terminal — no follow-up. The rendered card
+        // IS the result. Don't ask Claude to "explain the empty output"
+        // because HTML doesn't run in Piston.
+        if (analysisEl && !analysisEl.isHtmlArtifact && currentChatId === originatingChatId) {
           const typing2 = renderTyping(model);
           try {
             const followup = [...messages, {
@@ -628,11 +635,24 @@ function stripAIMarkers(text) {
 }
 
 function extractFirstRunnableBlock(md) {
-  const re = /```(\w+)\n([\s\S]*?)```/g;
+  if (!md) return null;
+  // Normalize CRLF so the regex's \n actually matches Claude's output
+  md = md.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  // Match closed fence OR fence that runs to end of string (partial
+  // / still-streaming responses should still be detected as HTML).
+  const re = /```(\w+)?\n([\s\S]*?)(?:\n```|$)/g;
   let m;
   while ((m = re.exec(md)) !== null) {
     const lang = (m[1] || '').toLowerCase();
-    if (isRunnable(lang) || lang === 'html') return { lang, code: m[2] };
+    const code = m[2] || '';
+    if (isRunnable(lang) || lang === 'html' ||
+        /^\s*(?:<!doctype\s+html|<html|<body|<head)/i.test(code)) {
+      return { lang: lang || (/<html|<body|<!doctype/i.test(code) ? 'html' : ''), code };
+    }
+  }
+  // Raw HTML without any fence at all — treat the whole thing as an HTML artifact.
+  if (/^\s*(?:<!doctype\s+html|<html)/i.test(md)) {
+    return { lang: 'html', code: md };
   }
   return null;
 }

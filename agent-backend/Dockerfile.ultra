@@ -166,13 +166,20 @@ RUN (apt-get update && apt-get install -y --no-install-recommends --fix-missing 
  && rm -rf /var/lib/apt/lists/*) || echo "Layer 6 (XFCE) had package issues — continuing"
 
 # ========== Layer 7: GNOME fallback session ==========
-# Optional — XFCE is the default. gnome-tweaks has been known to be
-# renamed to gnome-tweak-tool and back, so wrap the whole layer.
+# DISABLED by default — gnome-shell's X11 backend crashes on Xvfb without
+# hardware acceleration, which causes the whole noVNC screen to stay
+# black. If you want GNOME, set XSESSION=gnome at runtime AND make sure
+# you're on GPU hardware. Nautilus stays (nice file manager).
 RUN (apt-get update && apt-get install -y --no-install-recommends --fix-missing \
-    gnome-session gnome-shell gnome-control-center \
-    gnome-terminal nautilus \
-    gnome-tweaks \
- && rm -rf /var/lib/apt/lists/*) || echo "Layer 7 (GNOME fallback) had package issues — continuing"
+    nautilus \
+ && rm -rf /var/lib/apt/lists/*) || echo "Layer 7 (nautilus) had package issues — continuing"
+# fluxbox — tiny backup window manager used by the entrypoint as a
+# fallback if xfce4-session doesn't light up the screen in time. Also
+# xterm as a guaranteed-spawnable terminal so a blank noVNC screen is
+# impossible — the fallback always puts SOMETHING in front of the user.
+RUN (apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    fluxbox xterm \
+ && rm -rf /var/lib/apt/lists/*) || echo "Layer 7 (fluxbox/xterm fallback) had issues — continuing"
 
 # ========== Layer 8: full LibreOffice + common desktop apps ==========
 # Biggest individual layer (~1.5 GB). krita in particular pulls a lot of
@@ -788,6 +795,12 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
   sleep 0.3
 done
 
+# Paint the root window dark gray IMMEDIATELY so whatever comes next,
+# the user never sees a pitch-black screen. If every single desktop
+# process crashes, they at least see a gray background + cursor and
+# know the VNC stream is working.
+xsetroot -solid '#2d2d2d' -display :0 2>/dev/null || true
+
 log "starting dbus session"
 eval "$(dbus-launch --sh-syntax)"
 export DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID
@@ -800,16 +813,46 @@ export PULSE_SERVER=unix:/tmp/pulse/native
 export PULSE_RUNTIME_PATH=/tmp/pulse
 pulseaudio -D --exit-idle-time=-1 --log-target=file:/tmp/pulseaudio.log 2>/tmp/pulse-startup.log || log "pulseaudio daemonize failed"
 
-# Default to XFCE. User can override with XSESSION=gnome before start.
+# Default to XFCE. User can override with XSESSION=gnome before start
+# (but only if you're on a GPU host — gnome-shell's X11 backend crashes
+# on software-rendered Xvfb, which is what was causing the black screen).
 SESSION="${XSESSION:-xfce}"
 if [ "$SESSION" = "gnome" ] && command -v gnome-session >/dev/null 2>&1; then
   log "starting gnome-session"
   gnome-session >/tmp/gnome.log 2>&1 &
 else
-  log "starting xfce4-session"
-  startxfce4 >/tmp/xfce.log 2>&1 &
+  # Use xfce4-session DIRECTLY instead of the startxfce4 wrapper. The
+  # wrapper runs its own dbus-launch and in a container where we've
+  # already set DBUS_SESSION_BUS_ADDRESS it can silently exit without
+  # ever spawning the session manager — which is exactly the black
+  # screen we saw. Calling xfce4-session directly skips the wrapper.
+  log "starting xfce4-session directly (skipping startxfce4 wrapper)"
+  xfwm4 --replace --display=:0 >/tmp/xfwm4.log 2>&1 &
+  sleep 0.5
+  xfce4-session --display=:0 >/tmp/xfce.log 2>&1 &
+  xfce4-panel --display=:0 >/tmp/xfce-panel.log 2>&1 &
+  xfdesktop --display=:0 >/tmp/xfdesktop.log 2>&1 &
 fi
-sleep 2
+sleep 3
+
+# Fallback guard. If xfce4-panel isn't actually running after 6 seconds,
+# assume the XFCE session is hosed and start fluxbox + xterm as a
+# minimal always-visible desktop. The user at least gets a shell they
+# can use to diagnose (tail /tmp/*.log) instead of staring at black.
+(
+  sleep 6
+  if ! pgrep -x xfce4-panel >/dev/null 2>&1 && ! pgrep -x gnome-shell >/dev/null 2>&1; then
+    log "XFCE didn't come up in 6s — starting fluxbox + xterm fallback"
+    xsetroot -solid '#2d2d2d' -display :0 2>/dev/null || true
+    fluxbox -display :0 >/tmp/fluxbox.log 2>&1 &
+    sleep 0.3
+    xterm -display :0 -geometry 120x40+40+40 -fa 'Monospace' -fs 11 \
+          -e "bash -c 'echo KEMLLM ultra fallback shell; echo; echo Logs:; ls -la /tmp/*.log; echo; bash'" \
+          >/tmp/xterm.log 2>&1 &
+  else
+    log "XFCE session came up OK (xfce4-panel or gnome-shell running)"
+  fi
+) &
 
 log "starting x11vnc on :5900"
 x11vnc -display :0 -forever -nopw -shared -rfbport 5900 \

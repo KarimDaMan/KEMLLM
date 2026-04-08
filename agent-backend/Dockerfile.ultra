@@ -453,11 +453,16 @@ RUN ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html || true
 
 # ========== Layer 19: nginx front door ==========
 # Same routing as Dockerfile.desktop, plus a /code/ route for code-server.
+# Writes pid / logs to /tmp because /run is tmpfs that gets wiped every
+# container start — the build-time chown on /run doesn't survive a restart
+# on HF Spaces, which is what was causing the "won't restart" loop.
 RUN cat > /etc/nginx/sites-available/kemllm.conf <<'NGINX'
 server {
   listen 7860 default_server;
   listen [::]:7860 default_server;
   client_max_body_size 500m;
+  access_log /tmp/nginx-access.log;
+  error_log /tmp/nginx-error.log;
 
   # noVNC WebSocket
   location /websockify {
@@ -512,7 +517,12 @@ NGINX
 
 RUN rm -f /etc/nginx/sites-enabled/default \
  && ln -sf /etc/nginx/sites-available/kemllm.conf /etc/nginx/sites-enabled/kemllm.conf \
- && sed -i 's|^user .*;|user agent;|' /etc/nginx/nginx.conf || true
+ && sed -i 's|^pid .*|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf || true \
+ && sed -i 's|^error_log .*|error_log /tmp/nginx-error.log;|' /etc/nginx/nginx.conf || true \
+ && sed -i 's|access_log .*|access_log /tmp/nginx-access.log;|' /etc/nginx/nginx.conf || true \
+ && sed -i 's|^user .*|user agent;|' /etc/nginx/nginx.conf || true \
+ && mkdir -p /etc/nginx/conf.d /var/lib/nginx/body /var/lib/nginx/proxy /var/lib/nginx/fastcgi /var/lib/nginx/uwsgi /var/lib/nginx/scgi \
+ && chown -R agent:agent /var/lib/nginx /etc/nginx
 
 # ========== Layer 20: XFCE pre-baked config (Yaru-dark + left dock) ==========
 # Same layout as Dockerfile.desktop — top bar + left vertical dock.
@@ -556,7 +566,9 @@ COPY app.py /app/app.py
 # persistent storage + any configured cloud bucket mounts.
 RUN cat > /app/start-ultra.sh <<'SH'
 #!/usr/bin/env bash
-set -u
+# No `set -u` — too strict; one unset env var would otherwise nuke
+# the whole container at boot. We want best-effort startup.
+# No `set -e` either — individual service failures shouldn't crash PID 1.
 export DISPLAY=:0
 export HOME=/home/agent
 export PORT=8000
@@ -845,8 +857,39 @@ for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
   sleep 0.4
 done
 
+# Runtime-only dirs that nginx needs. /run is tmpfs and gets wiped on
+# every container restart, so the build-time chown is useless — we have
+# to recreate these every boot. This is THE fix for the "won't restart"
+# crash loop we saw on HF Spaces.
+log "preparing nginx runtime dirs"
+mkdir -p /run/nginx /var/lib/nginx/body /var/lib/nginx/proxy \
+         /var/lib/nginx/fastcgi /var/lib/nginx/uwsgi /var/lib/nginx/scgi \
+         /tmp 2>/dev/null || true
+# If we're running as agent (we are — USER agent at the bottom of the
+# Dockerfile), sudo is configured NOPASSWD so this just works. If it
+# isn't available for some reason, ignore — nginx may still come up
+# because we moved pid + logs under /tmp which the agent user owns.
+sudo chown -R agent:agent /run/nginx /var/lib/nginx 2>/dev/null || true
+
+# Test the nginx config BEFORE exec so a syntax error shows up in the
+# container log instead of just a silent exit. -t validates /etc/nginx/nginx.conf.
+log "testing nginx config (nginx -t)"
+if ! nginx -t 2>&1 | while read L; do log "nginx: $L"; done; then
+  log "nginx config test failed — dumping effective config for debugging:"
+  cat /etc/nginx/nginx.conf | while read L; do log "nginx.conf: $L"; done
+  cat /etc/nginx/sites-enabled/kemllm.conf 2>/dev/null | while read L; do log "kemllm.conf: $L"; done
+fi
+
 log "launching nginx on :7860 (front door)"
-exec nginx -g 'daemon off;'
+# -g keeps it in the foreground so it's PID 1 and signals land on it.
+# If nginx DOES crash, trap into a sleep loop so the user can `docker
+# exec` (or HF Spaces Web terminal if enabled) and see the logs instead
+# of the container restarting in a tight loop forever.
+if ! exec nginx -g 'daemon off;'; then
+  log "nginx FAILED TO START — see /tmp/nginx-error.log, /tmp/flask.log, /tmp/xvfb.log"
+  log "sleeping forever so you can attach a terminal and inspect"
+  tail -f /tmp/*.log 2>/dev/null || sleep infinity
+fi
 SH
 
 RUN chmod +x /app/start-ultra.sh \

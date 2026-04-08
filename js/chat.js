@@ -402,6 +402,11 @@ async function sendMessage() {
   // background-resume logic on next load that this message needs an
   // answer. saveCurrentChat also assigns currentChatId if it was null.
   saveCurrentChat();
+  // Now that we definitely have a chat id, push the per-chat URL so
+  // this conversation has its own page from the very first message.
+  if (currentChatId && typeof setHashForPanel === 'function' && currentPanel === 'chat') {
+    setHashForPanel('chat', currentChatId);
+  }
 
   // CHAT SCOPING: capture the chat id this message belongs to BEFORE the
   // fetch starts. If the user navigates to a different chat (or to the
@@ -1381,7 +1386,7 @@ function setAgentLoopUI(running) {
   }
 }
 
-function newChat() {
+function newChat(skipHash) {
   // If an agent loop is running, stop it cleanly first
   if (agentLoopRunning) {
     agentLoopAbort = true;
@@ -1400,6 +1405,11 @@ function newChat() {
   if (typeof chatPreviewClose === 'function') chatPreviewClose();
   // Clear any stuck highlight on the old chat in the sidebar / history list
   if (typeof renderHistory === 'function') renderHistory();
+  // Push URL #/chat (no chat id) so back button returns to "new chat"
+  if (!skipHash && typeof setHashForPanel === 'function') {
+    setHashForPanel('chat', null);
+  }
+  document.title = 'KEMLLM · Chat';
 }
 
 // ===== Attachments =====

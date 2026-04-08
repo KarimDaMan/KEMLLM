@@ -4,20 +4,31 @@
 let currentPanel = 'chat';
 
 // ===== Hash-based router =====
-// Each panel gets its own URL so browser back/forward/reload work.
-// Routes: #/chat, #/code, #/models, #/settings
+// Each panel AND each chat gets its own URL so browser back/forward/reload
+// work and you can deep-link to a specific conversation.
+// Routes:
+//   #/chat              → home screen / new chat
+//   #/chat/<chatId>     → a specific chat by id
+//   #/code, #/models, #/settings → other panels
 // Legacy (no hash) → defaults to chat.
 const VALID_PANELS = ['chat', 'code', 'models', 'settings'];
 
-function panelFromHash() {
-  const h = (location.hash || '').replace(/^#\/?/, '').split('/')[0].toLowerCase();
-  return VALID_PANELS.includes(h) ? h : 'chat';
+function parseHash() {
+  const raw = (location.hash || '').replace(/^#\/?/, '');
+  const parts = raw.split('/').filter(Boolean);
+  const panel = VALID_PANELS.includes((parts[0] || '').toLowerCase()) ? parts[0].toLowerCase() : 'chat';
+  const chatId = (panel === 'chat' && parts[1]) ? parts[1] : null;
+  return { panel, chatId };
 }
 
-function setHashForPanel(panel) {
-  const want = '#/' + panel;
+function panelFromHash() { return parseHash().panel; }
+function chatIdFromHash() { return parseHash().chatId; }
+
+function setHashForPanel(panel, chatId) {
+  let want = '#/' + panel;
+  if (panel === 'chat' && chatId) want += '/' + chatId;
   if (location.hash !== want) {
-    history.pushState({ panel }, '', want);
+    history.pushState({ panel, chatId }, '', want);
   }
 }
 
@@ -36,23 +47,40 @@ function siNav(panel, skipHash) {
   if (tabs) tabs.classList.toggle('hidden', !(panel === 'chat' || panel === 'code'));
   closeDrawer();
   if (isMobile()) closeSidebar();
-  if (!skipHash) setHashForPanel(panel);
+  if (!skipHash) setHashForPanel(panel, panel === 'chat' ? currentChatId : null);
   // Update document title so it shows in browser history / tab bar
   const pretty = panel.charAt(0).toUpperCase() + panel.slice(1);
   document.title = 'KEMLLM · ' + pretty;
 }
 
+// Apply whatever the URL hash currently says: switch panel + load chat
+// if a chatId is present. Used by initRouter, popstate, and hashchange.
+function applyHashRoute() {
+  const { panel, chatId } = parseHash();
+  // Switch panel first (don't push the hash again — we're reading from it)
+  siNav(panel, true);
+  if (panel === 'chat') {
+    if (chatId) {
+      // Load the chat only if it's not already the active one
+      if (chatId !== currentChatId && typeof loadHistory === 'function') {
+        const exists = loadHistory().some(c => c.id === chatId);
+        if (exists && typeof loadChat === 'function') {
+          loadChat(chatId, true);
+        }
+      }
+    } else {
+      // Hash says #/chat with no id → home screen / new chat
+      if (currentChatId !== null && typeof newChat === 'function') {
+        newChat(true);
+      }
+    }
+  }
+}
+
 function initRouter() {
-  // On initial page load, honor the URL hash
-  siNav(panelFromHash(), true);
-  // Back/forward button support
-  window.addEventListener('popstate', () => {
-    siNav(panelFromHash(), true);
-  });
-  // Deep-link changes typed into the URL bar
-  window.addEventListener('hashchange', () => {
-    siNav(panelFromHash(), true);
-  });
+  applyHashRoute();
+  window.addEventListener('popstate', applyHashRoute);
+  window.addEventListener('hashchange', applyHashRoute);
 }
 
 function toggleDrawer() {

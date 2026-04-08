@@ -76,7 +76,7 @@ function renderHistory() {
     }
   }
 }
-function loadChat(id) {
+function loadChat(id, skipHash) {
   const list = loadHistory();
   const c = list.find(x => x.id === id);
   if (!c) return;
@@ -86,6 +86,13 @@ function loadChat(id) {
   const home = document.getElementById('home-screen');
   if (home) home.classList.add('hidden');
   if (window.termBootStop) window.termBootStop();
+  // Push per-chat URL so the chat has its own page (back/forward + reload)
+  if (!skipHash && typeof setHashForPanel === 'function') {
+    setHashForPanel('chat', id);
+  }
+  // Update browser title with the chat title for tab bar / history
+  const titleEl = c.title ? c.title.slice(0, 50) : 'Chat';
+  document.title = 'KEMLLM · ' + titleEl;
   messages.forEach(m => {
     if (m.role === 'user') {
       renderUserMessage(typeof m.content === 'string' ? m.content : '', m.attachments);
@@ -223,7 +230,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v97 · MEGA: (1) chat scoping — responses only render in their originating chat, never bleed into home/other chats; (2) aspect_ratio support in GENERATE_IMAGE/VIDEO/EDIT markers + Replicate input; (3) generate-vs-edit marker conflict resolved (EDIT wins); (4) non-image attachments (HTML/code/text/json/yaml/etc) decoded and embedded in the prompt for Anthropic + OpenAI; (5) mobile scroll fix (panels scroll natively on small screens); (6) system prompt forbids GENERATE_IMAGE when user has attachment.';
+const KEMLLM_BUILD = 'v98 · per-chat URLs — each chat is now its own page at #/chat/<chatId>. Browser back/forward navigates between chats. Reload restores the active chat. New chat = #/chat. Direct deep-links work. The router now parses chatId from the hash and loadChat/newChat push their own URL.';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

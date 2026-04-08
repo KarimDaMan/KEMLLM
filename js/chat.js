@@ -987,22 +987,40 @@ function processAIMarkers(text) {
     const prompt = (gv[1] || gv[2] || gv[3] || '').trim();
     if (prompt) handleVideoRequest(prompt);
   }
-  // [EDIT_IMAGE prompt="..."] — re-edit the most recent image in history
+  // [EDIT_IMAGE prompt="..."] — edit the most recent image. Looks in
+  // BOTH directions: (1) any image attachment on the most recent user
+  // message (this is how "attach a photo, say 'make it blue'" works),
+  // and (2) any generated/edited image embedded as markdown in the
+  // chat history (how "now change the sky" on a previously-generated
+  // image works). Attachments win — they're more recent.
   const editImgRe = /\[EDIT_IMAGE\s+prompt=(?:"([^"]+)"|'([^']+)'|([^\]]+))\]/i;
   const ei = text.match(editImgRe);
   if (ei) {
     const prompt = (ei[1] || ei[2] || ei[3] || '').trim();
-    // Find the most recent image URL in the message history
-    let lastImg = null;
+    let source = null;
+    // 1) Most recent attachment (data URL from a user upload)
     for (let i = messages.length - 1; i >= 0; i--) {
-      const c = messages[i].content;
-      if (typeof c === 'string') {
-        const im = c.match(/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/);
-        if (im) { lastImg = im[1]; break; }
+      const atts = messages[i].attachments || [];
+      const imgAtt = atts.find(a => a && (a.isImage || (a.mime || '').startsWith('image/')));
+      if (imgAtt && imgAtt.dataUrl) {
+        source = { dataUrl: imgAtt.dataUrl, isImage: true };
+        break;
       }
     }
-    if (prompt && lastImg) {
-      handleEditImageRequest(prompt, { url: lastImg, isImage: true });
+    // 2) Fallback: markdown image URL anywhere in the conversation
+    if (!source) {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const c = messages[i].content;
+        if (typeof c === 'string') {
+          const im = c.match(/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/);
+          if (im) { source = { url: im[1], isImage: true }; break; }
+        }
+      }
+    }
+    if (prompt && source) {
+      handleEditImageRequest(prompt, source);
+    } else if (prompt && !source) {
+      showToast('Edit requested but no image in the conversation to edit');
     }
   }
   // [REMEMBER fact="..."] — AI writes to its own persistent memory about

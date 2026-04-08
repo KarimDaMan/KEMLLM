@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v79 · remove `file` command from firefox step — not installed in ubuntu:22.04 base image, was aborting build with command-not-found';
+const KEMLLM_BUILD = 'v80 · EDIT_IMAGE marker now works on attached images (not just previously-generated markdown urls); system prompt tells the AI to always emit the marker on short edit requests like "make it blue"';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

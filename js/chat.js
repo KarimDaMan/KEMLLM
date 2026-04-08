@@ -636,11 +636,24 @@ function closeImageViewer() {
 }
 
 async function downloadImageFromViewer() {
-  if (!_imgViewerUrl) return;
+  if (!_imgViewerUrl || _imgViewerUrl === 'null' || _imgViewerUrl === 'undefined') {
+    showToast('No image to download (the generation may have failed)');
+    return;
+  }
   try {
     showToast('Downloading…');
-    // Fetch as blob so the Save-As dialog works cross-origin
     const res = await fetch(_imgViewerUrl);
+    if (!res.ok) {
+      showToast('Download failed: HTTP ' + res.status);
+      return;
+    }
+    const ct = (res.headers.get('Content-Type') || '').toLowerCase();
+    // Refuse to save anything that isn't actually an image — prevents
+    // saving the current page's HTML when the URL was bad/null.
+    if (!ct.startsWith('image/') && !ct.startsWith('application/octet-stream')) {
+      showToast('Download failed: server returned ' + (ct || 'unknown') + ' (not an image)');
+      return;
+    }
     const blob = await res.blob();
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');

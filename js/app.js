@@ -223,7 +223,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v95 · background AI responses — sendMessage saves user msg with pending=true BEFORE calling the model, so it survives tab close. On app reopen, resumePendingResponses scans every chat for pending msgs and re-fires the model. Browser notification when each background reply lands.';
+const KEMLLM_BUILD = 'v96 · fix broken image + HTML download bug — generateImage and editImage now POLL the prediction past Replicate Prefer:wait timeout (was returning null URL for slow models like Nano Banana Pro). New extractOutputUrl handles all output shapes (string, array, FileOutput object). downloadImageFromViewer refuses to save non-image content-types so it never writes HTML.';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

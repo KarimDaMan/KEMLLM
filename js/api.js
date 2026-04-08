@@ -820,12 +820,12 @@ async function editImage(prompt, sourceUrl) {
   // Helper to actually call one model. Returns the output URL on success,
   // or throws with a structured error on failure. Handles 422 schema
   // mismatches by retrying once with the generic union-of-keys body.
+  // Also polls the prediction if Replicate's Prefer:wait timed out
+  // server-side and returned status=processing.
   const tryOne = async (modelId, version) => {
     const input = buildImageEditInput(modelId, prompt, imageUrl);
     let res = await replicatePredict(modelId, input, apiKey, version);
     if (res.status === 422) {
-      // Schema mismatch — retry with the union body in case the per-model
-      // builder guessed wrong about the field name.
       const genericInput = {
         prompt,
         image: imageUrl,
@@ -841,15 +841,20 @@ async function editImage(prompt, sourceUrl) {
       err.canFallback = (res.status === 404 || res.status === 422 || res.status === 400);
       throw err;
     }
-    const data = await res.json();
-    let out = data.output;
-    if (Array.isArray(out)) out = out[0];
-    if (!out) {
-      const err = new Error('Model "' + modelId + '" returned no output');
+    let data = await res.json();
+    data = await awaitPrediction(data, apiKey);
+    if (data.status === 'failed' || data.status === 'canceled') {
+      const err = new Error('Model "' + modelId + '" ' + data.status + ': ' + (data.error || 'unknown'));
       err.canFallback = true;
       throw err;
     }
-    return out;
+    const url = extractOutputUrl(data.output);
+    if (!url) {
+      const err = new Error('Model "' + modelId + '" succeeded but returned no URL');
+      err.canFallback = true;
+      throw err;
+    }
+    return url;
   };
 
   // STEP 1: try the user's currently-selected image model. ANY model
@@ -883,6 +888,63 @@ async function editImage(prompt, sourceUrl) {
   }
 }
 
+// Drill into a Replicate prediction `output` field which can be:
+//   - a string (single URL)                  → return as-is
+//   - an array of strings                    → return first
+//   - an object with a `url` property        → return .url (FileOutput shape)
+//   - an array of FileOutput objects         → recurse into first
+//   - null / undefined                       → return null
+// Returns a usable URL string, or null if nothing valid was found.
+function extractOutputUrl(out) {
+  if (out == null) return null;
+  if (typeof out === 'string') return out;
+  if (Array.isArray(out)) {
+    for (const item of out) {
+      const u = extractOutputUrl(item);
+      if (u) return u;
+    }
+    return null;
+  }
+  if (typeof out === 'object') {
+    if (typeof out.url === 'string') return out.url;
+    if (typeof out.href === 'string') return out.href;
+  }
+  return null;
+}
+
+// Poll a Replicate prediction until it's done. The initial response from
+// `replicatePredict` may be in `processing` status (Prefer:wait times out
+// after 60s on the server). This function picks up the polling URL from
+// `data.urls.get` and waits until status === 'succeeded' (or fails).
+// Returns the final prediction data object.
+async function awaitPrediction(initialData, apiKey, maxSeconds) {
+  const max = maxSeconds || 300; // 5 min default
+  let data = initialData;
+  // Already done? Done.
+  if (data.status === 'succeeded' || data.status === 'failed' || data.status === 'canceled') {
+    return data;
+  }
+  const getUrl = data?.urls?.get;
+  if (!getUrl) return data; // nothing we can do
+  // Strip the Replicate origin so we go through the worker proxy
+  const proxyPath = getUrl.replace(/^https?:\/\/api\.replicate\.com/, '');
+  const start = Date.now();
+  while (Date.now() - start < max * 1000) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const r = await replicateFetch(proxyPath, {
+        headers: { 'Authorization': 'Bearer ' + apiKey },
+      });
+      if (!r.ok) continue;
+      data = await r.json();
+      if (data.status === 'succeeded' || data.status === 'failed' || data.status === 'canceled') {
+        return data;
+      }
+    } catch {}
+  }
+  throw new Error('Prediction timed out after ' + max + 's');
+}
+
 async function generateImage(prompt) {
   const apiKey = getRepKey();
   if (!apiKey) throw new Error('Add your Replicate key in Settings to generate images');
@@ -902,11 +964,21 @@ async function generateImage(prompt) {
         const t = await res.text();
         throw new Error('Image gen ' + res.status + ': ' + t.slice(0, 200));
       }
-      const data = await res.json();
-      let out = data.output;
-      if (Array.isArray(out)) out = out[0];
+      let data = await res.json();
+      // CRITICAL: poll if not yet done. Prefer:wait only blocks for 60s
+      // server-side; for slow models we get back status=processing with
+      // a polling URL, NOT the final output.
+      data = await awaitPrediction(data, apiKey);
+      if (data.status === 'failed' || data.status === 'canceled') {
+        throw new Error('Image generation ' + data.status + ': ' + (data.error || 'unknown'));
+      }
+      const url = extractOutputUrl(data.output);
+      if (!url) {
+        lastErr = new Error('Model "' + id + '" succeeded but returned no URL');
+        continue;
+      }
       if (id !== m.replicateId) showToast('Used fallback: ' + id);
-      return out;
+      return url;
     } catch (e) {
       lastErr = e;
       if (!String(e.message).includes('not found')) throw e;

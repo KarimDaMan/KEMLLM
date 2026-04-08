@@ -115,7 +115,11 @@ function loadChat(id, skipHash) {
   });
   renderHistory();
   closeDrawer();
-  siNav('chat');
+  // siNav('chat', true) — pass skipHash so siNav doesn't overwrite our
+  // per-chat URL with a plain '#/chat'. Without skipHash, the
+  // hash-update race caused the chat to fall back to the "new chat"
+  // home screen on sidebar click.
+  siNav('chat', true);
   // Refresh send/stop button — the new chat may have its own in-flight
   // response (or not), independent of the chat we just left.
   if (typeof refreshBusyUI === 'function') refreshBusyUI();
@@ -235,7 +239,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v108 · chat-preview is now a real split pane (HTML 50%, Desktop 75%) + GitHub avatar sync in sidebar profile';
+const KEMLLM_BUILD = 'v109 · topbar GitHub avatar button (click → profile modal) + fix click-chat-goes-to-new-chat (loadChat siNav race)';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -497,6 +501,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Avatar row
   document.getElementById('si-ava-row')?.addEventListener('click', openUserModal);
+  document.getElementById('tb-ava')?.addEventListener('click', openUserModal);
 
   // User modal
   document.getElementById('um-switch')?.addEventListener('click', switchProfile);

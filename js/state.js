@@ -153,6 +153,7 @@ function activateProfile(id) {
     }
   };
   setAva(document.getElementById('si-ava'), 30);
+  setAva(document.getElementById('tb-ava'), 32);
   const avaName = document.getElementById('si-ava-name');
   if (avaName) avaName.textContent = p.name;
   setAva(document.getElementById('um-ava'), 48);

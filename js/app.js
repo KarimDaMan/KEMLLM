@@ -121,76 +121,13 @@ function loadChat(id, skipHash) {
   if (typeof refreshBusyUI === 'function') refreshBusyUI();
   // Pause home-screen music since we're now in a chat
   if (typeof syncHomeMusic === 'function') syncHomeMusic();
-  // Add as an open tab and refresh the tab bar
-  openChatTab(id);
 }
 function deleteChat(id) {
   let list = loadHistory();
   list = list.filter(c => c.id !== id);
   profileSetJSON('history', list);
-  // Remove from open tabs as well
-  const tabs = loadOpenTabs().filter(tid => tid !== id);
-  saveOpenTabs(tabs);
   if (currentChatId === id) newChat();
   renderHistory();
-  renderChatTabs();
-}
-
-// ===== In-app chat tabs =====
-// Each open chat shows as a pill in the #chat-tabs bar. Click to switch,
-// × to close. Persists across reloads via localStorage so refresh
-// doesn't lose your workspace. Independent of the sidebar history.
-const OPEN_TABS_KEY = 'kemllm_open_tabs';
-function loadOpenTabs() {
-  try { return JSON.parse(localStorage.getItem(OPEN_TABS_KEY) || '[]'); }
-  catch { return []; }
-}
-function saveOpenTabs(ids) {
-  localStorage.setItem(OPEN_TABS_KEY, JSON.stringify(ids));
-}
-function openChatTab(chatId) {
-  if (!chatId) return;
-  const tabs = loadOpenTabs();
-  if (!tabs.includes(chatId)) {
-    tabs.push(chatId);
-    saveOpenTabs(tabs);
-  }
-  renderChatTabs();
-}
-function closeChatTab(chatId) {
-  let tabs = loadOpenTabs();
-  const wasActive = currentChatId === chatId;
-  tabs = tabs.filter(id => id !== chatId);
-  saveOpenTabs(tabs);
-  if (wasActive) {
-    // Switch to the next tab to the right, or the last one, or home
-    if (tabs.length) {
-      const next = tabs[tabs.length - 1];
-      if (typeof loadChat === 'function') loadChat(next);
-    } else {
-      if (typeof newChat === 'function') newChat();
-    }
-  }
-  renderChatTabs();
-}
-function renderChatTabs() {
-  const bar = document.getElementById('chat-tabs');
-  if (!bar) return;
-  const tabs = loadOpenTabs();
-  if (!tabs.length) {
-    bar.innerHTML = '';
-    return;
-  }
-  const history = typeof loadHistory === 'function' ? loadHistory() : [];
-  const validTabs = tabs.filter(id => history.some(c => c.id === id));
-  if (validTabs.length !== tabs.length) saveOpenTabs(validTabs);
-  bar.innerHTML = validTabs.map(id => {
-    const chat = history.find(c => c.id === id);
-    if (!chat) return '';
-    const title = (chat.title || 'Chat').slice(0, 30);
-    const isActive = currentChatId === id;
-    return `<div class="chat-tab${isActive ? ' active' : ''}" onclick="loadChat('${id}')" title="${escapeHTML(chat.title || '')}"><span class="chat-tab-title">${escapeHTML(title)}</span><button class="chat-tab-close" onclick="event.stopPropagation();closeChatTab('${id}')" title="Close tab">×</button></div>`;
-  }).join('');
 }
 
 // ===== Background response auto-resume =====
@@ -298,7 +235,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v101 · update home music URL to new track (7cMp97PPzxc)';
+const KEMLLM_BUILD = 'v102 · remove in-app chat tab bar (was added in v100 by mistake). URL-based #/chat/<id> routing stays.';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;
@@ -830,8 +767,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('login').classList.add('show');
   }
 
-  // Render the in-app chat tab bar (restores tabs across reloads)
-  if (typeof renderChatTabs === 'function') renderChatTabs();
 
   // Resume any pending background AI responses left over from a previous
   // tab session (tab was closed mid-response, laptop slept, etc). Runs

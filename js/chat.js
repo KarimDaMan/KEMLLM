@@ -416,13 +416,9 @@ async function sendMessage() {
   // answer. saveCurrentChat also assigns currentChatId if it was null.
   saveCurrentChat();
   // Now that we definitely have a chat id, push the per-chat URL so
-  // this conversation has its own page from the very first message,
-  // and register it as an open tab.
+  // this conversation has its own page from the very first message.
   if (currentChatId && typeof setHashForPanel === 'function' && currentPanel === 'chat') {
     setHashForPanel('chat', currentChatId);
-  }
-  if (currentChatId && typeof openChatTab === 'function') {
-    openChatTab(currentChatId);
   }
 
   // CHAT SCOPING: capture the chat id this message belongs to BEFORE the
@@ -1457,7 +1453,6 @@ function newChat(skipHash) {
   if (typeof chatPreviewClose === 'function') chatPreviewClose();
   // Clear any stuck highlight on the old chat in the sidebar / history list
   if (typeof renderHistory === 'function') renderHistory();
-  if (typeof renderChatTabs === 'function') renderChatTabs();
   // Push URL #/chat (no chat id) so back button returns to "new chat"
   if (!skipHash && typeof setHashForPanel === 'function') {
     setHashForPanel('chat', null);

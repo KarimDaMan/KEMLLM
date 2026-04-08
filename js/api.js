@@ -732,16 +732,11 @@ const IMAGE_FALLBACK_IDS = [
   'ideogram-ai/ideogram-v3-turbo',
 ];
 
-// Image-editing fallback chain — only used if the user's currently-selected
-// image model genuinely can't do img2img. Nano Banana Pro is the preferred
-// fallback per user request. Flux Kontext is at the bottom as a last resort.
-const IMAGE_EDIT_FALLBACK_IDS = [
-  'google/nano-banana-pro',
-  'google/nano-banana-2',
-  'google/nano-banana',
-  'black-forest-labs/flux-kontext-pro',
-  'black-forest-labs/flux-kontext-dev',
-];
+// The ONLY image-edit fallback. If the user's selected image model can't
+// do editing (404 / 422 / no output), we fall back to this and nothing
+// else. Per user requirement: "use what's selected, if no editing then
+// Nano Banana Pro".
+const NANO_BANANA_PRO_ID = 'google/nano-banana-pro';
 
 // Upload a data URL (base64) to Replicate's file storage and return the
 // https URL that can be passed as input to any model. Some models reject
@@ -822,63 +817,70 @@ async function editImage(prompt, sourceUrl) {
     if (!imageUrl) throw new Error('Replicate upload returned no URL');
   }
 
-  // Build the try-list. ALWAYS put the user's currently-selected image
-  // model first — even if it's not in the fallback list, we try it here.
-  // Fallbacks only run if the selected model genuinely can't do img2img.
-  const selected = findModel(selectedImage, 'image');
-  const idsToTry = [];
-  if (selected?.replicateId) idsToTry.push(selected.replicateId);
-  for (const id of IMAGE_EDIT_FALLBACK_IDS) {
-    if (id !== selected?.replicateId) idsToTry.push(id);
-  }
+  // Helper to actually call one model. Returns the output URL on success,
+  // or throws with a structured error on failure. Handles 422 schema
+  // mismatches by retrying once with the generic union-of-keys body.
+  const tryOne = async (modelId, version) => {
+    const input = buildImageEditInput(modelId, prompt, imageUrl);
+    let res = await replicatePredict(modelId, input, apiKey, version);
+    if (res.status === 422) {
+      // Schema mismatch — retry with the union body in case the per-model
+      // builder guessed wrong about the field name.
+      const genericInput = {
+        prompt,
+        image: imageUrl,
+        input_image: imageUrl,
+        image_input: [imageUrl],
+        source_image: imageUrl,
+      };
+      res = await replicatePredict(modelId, genericInput, apiKey, version);
+    }
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      const err = new Error('Edit ' + res.status + ' on ' + modelId + ': ' + t.slice(0, 200));
+      err.canFallback = (res.status === 404 || res.status === 422 || res.status === 400);
+      throw err;
+    }
+    const data = await res.json();
+    let out = data.output;
+    if (Array.isArray(out)) out = out[0];
+    if (!out) {
+      const err = new Error('Model "' + modelId + '" returned no output');
+      err.canFallback = true;
+      throw err;
+    }
+    return out;
+  };
 
-  let lastErr = null;
-  for (const id of idsToTry) {
+  // STEP 1: try the user's currently-selected image model. ANY model
+  // (including custom models with no preset). This is the primary path.
+  const selected = findModel(selectedImage, 'image');
+  const selectedId = selected?.replicateId;
+  if (selectedId) {
     try {
-      const input = buildImageEditInput(id, prompt, imageUrl);
-      const res = await replicatePredict(id, input, apiKey, selected?.version);
-      if (res.status === 404) {
-        lastErr = new Error('Model "' + id + '" not found on Replicate');
-        continue;
-      }
-      if (!res.ok) {
-        const t = await res.text();
-        lastErr = new Error('Edit ' + res.status + ' on ' + id + ': ' + t.slice(0, 200));
-        if (res.status === 422) {
-          // Schema mismatch — try once more with the generic union-of-keys
-          // body in case the per-model builder guessed wrong.
-          const genericInput = {
-            prompt,
-            image: imageUrl,
-            input_image: imageUrl,
-            image_input: [imageUrl],  // some models want an array
-            source_image: imageUrl,
-          };
-          const retry = await replicatePredict(id, genericInput, apiKey, selected?.version);
-          if (retry.ok) {
-            const d = await retry.json();
-            let o = d.output;
-            if (Array.isArray(o)) o = o[0];
-            if (o) return o;
-          }
-          continue;
-        }
-        throw lastErr;
-      }
-      const data = await res.json();
-      let out = data.output;
-      if (Array.isArray(out)) out = out[0];
-      if (!out) { lastErr = new Error('Model "' + id + '" returned no output'); continue; }
-      if (id !== selected?.replicateId && typeof showToast === 'function') {
-        showToast('Edited with fallback ' + id);
-      }
-      return out;
+      return await tryOne(selectedId, selected.version);
     } catch (e) {
-      lastErr = e;
-      if (!String(e.message || '').match(/not found|422/)) throw e;
+      // Only fall back if the model genuinely can't do edits — 404 (no
+      // such model), 422 (no image input), 400 (bad request). For any
+      // other error (network, auth, rate-limit), surface it instead of
+      // silently swapping to a different model.
+      if (!e.canFallback) throw e;
+      if (typeof showToast === 'function') {
+        showToast(`${selected.name || selectedId} can't edit — falling back to Nano Banana Pro`);
+      }
     }
   }
-  throw lastErr || new Error('All image-edit models failed');
+
+  // STEP 2: fall back to Nano Banana Pro. ONLY this. No other fallbacks.
+  if (selectedId === NANO_BANANA_PRO_ID) {
+    // Already tried it as the selected model and it failed — give up.
+    throw new Error('Nano Banana Pro failed and there is no further fallback');
+  }
+  try {
+    return await tryOne(NANO_BANANA_PRO_ID, null);
+  } catch (e) {
+    throw new Error('Both ' + (selectedId || 'selected model') + ' and Nano Banana Pro failed: ' + e.message);
+  }
 }
 
 async function generateImage(prompt) {

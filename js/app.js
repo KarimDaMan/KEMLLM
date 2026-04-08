@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v92 · image edit fallback chain reordered — Nano Banana Pro is now the priority fallback (was Flux Kontext); default selectedImage changed from flux-2-pro → nano-banana-pro; edit message shows actual editor name not hardcoded FLUX';
+const KEMLLM_BUILD = 'v93 · editImage rewritten — exactly two-step now: (1) try whatever model is selected in the topbar, including custom models, ANY model with a replicateId. (2) if that model fails with 404/422/400 (cant edit), fall back to ONLY Nano Banana Pro. No other models. Network/auth/rate-limit errors propagate instead of silently switching models.';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

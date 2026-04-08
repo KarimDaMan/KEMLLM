@@ -200,7 +200,7 @@ const VIDEO_MODELS = [
 ];
 
 let selectedChat  = 'claude-4.5-sonnet';
-let selectedImage = 'flux-2-pro';
+let selectedImage = 'nano-banana-pro';
 let selectedVideo = 'veo-3.1';
 
 function getCustomModels() {

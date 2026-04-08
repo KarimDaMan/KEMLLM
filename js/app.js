@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v91 · persist EVERYTHING in ~/ (entire .config/.mozilla/.thunderbird/.local/.ssh/.gnupg + dotfiles) — real Ubuntu desktop that saves full state across restarts. all keys working, clipboard working, file transfer working, both Dockerfile variants updated.';
+const KEMLLM_BUILD = 'v92 · image edit fallback chain reordered — Nano Banana Pro is now the priority fallback (was Flux Kontext); default selectedImage changed from flux-2-pro → nano-banana-pro; edit message shows actual editor name not hardcoded FLUX';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

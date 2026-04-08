@@ -774,14 +774,16 @@ async function handleImageRequest(prompt) {
   }
 }
 async function handleEditImageRequest(prompt, imageAttachment) {
-  const fakeModel = { name: 'Image Edit (FLUX Kontext)', provider: 'google' };
+  const sel = (typeof findModel === 'function') ? findModel(selectedImage, 'image') : null;
+  const editorName = sel?.name || 'Nano Banana Pro';
+  const fakeModel = { name: 'Image Edit (' + editorName + ')', provider: 'google' };
   const typingEl = renderTyping(fakeModel);
   try {
     // editImage now accepts either a data URL or a plain https URL
     const sourceUrl = imageAttachment.dataUrl || imageAttachment.url;
     const url = await editImage(prompt, sourceUrl);
     typingEl.remove();
-    const md = `Edited with FLUX Kontext:\n\n![edited](${url})`;
+    const md = `Edited with ${editorName}:\n\n![edited](${url})`;
     renderAIMessage(fakeModel, parseMarkdown(md), md);
     messages.push({ role: 'assistant', content: md });
     saveCurrentChat();

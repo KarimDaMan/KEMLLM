@@ -733,12 +733,14 @@ const IMAGE_FALLBACK_IDS = [
 ];
 
 // Image-editing fallback chain — only used if the user's currently-selected
-// image model fails or can't do img2img.
+// image model genuinely can't do img2img. Nano Banana Pro is the preferred
+// fallback per user request. Flux Kontext is at the bottom as a last resort.
 const IMAGE_EDIT_FALLBACK_IDS = [
+  'google/nano-banana-pro',
+  'google/nano-banana-2',
+  'google/nano-banana',
   'black-forest-labs/flux-kontext-pro',
   'black-forest-labs/flux-kontext-dev',
-  'google/nano-banana',
-  'black-forest-labs/flux-dev',
 ];
 
 // Upload a data URL (base64) to Replicate's file storage and return the

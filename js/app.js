@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v72 · add allow-same-origin to chat-preview iframe sandbox so noVNC UI can read localStorage (desktop stack is actually working)';
+const KEMLLM_BUILD = 'v73 · Dockerfile.desktop auto-configures XFCE4 with Yaru-dark theme, Ubuntu jellyfish wallpaper, top panel + left plank dock (Ubuntu-GNOME lookalike, pre-baked, zero user config)';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

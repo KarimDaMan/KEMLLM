@@ -33,11 +33,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo unzip zip tar xz-utils \
     nodejs npm \
     sqlite3 \
-    xvfb fluxbox x11vnc websockify novnc \
+    xvfb x11vnc websockify novnc \
     xterm scrot imagemagick xdotool \
     chromium-browser \
-    fonts-dejavu fonts-liberation \
+    fonts-dejavu fonts-liberation fonts-ubuntu \
     nginx \
+    dbus-x11 \
+    xfce4 xfce4-panel xfce4-session xfce4-settings \
+    xfwm4 xfdesktop4 xfconf \
+    yaru-theme-gtk yaru-theme-icon yaru-theme-sound \
+    ubuntu-wallpapers \
+    plank \
+    thunar \
  && rm -rf /var/lib/apt/lists/*
 
 RUN ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html || true
@@ -100,6 +107,157 @@ RUN rm -f /etc/nginx/sites-enabled/default \
  && ln -sf /etc/nginx/sites-available/kemllm.conf /etc/nginx/sites-enabled/kemllm.conf \
  && sed -i 's|^user .*;|user agent;|' /etc/nginx/nginx.conf || true
 
+# Pre-baked XFCE config: Yaru-dark theme, Ubuntu jellyfish wallpaper, single
+# top panel + vertical deskbar on the left (Ubuntu-Dock layout), Ubuntu fonts.
+# Applied to /home/agent automatically at container boot so the user never
+# has to configure anything.
+RUN mkdir -p /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml \
+ && mkdir -p /home/agent/.config/plank/dock1 \
+ && mkdir -p /home/agent/.config/autostart
+
+# xsettings = theme, icons, fonts, cursor
+RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xsettings" version="1.0">
+  <property name="Net" type="empty">
+    <property name="ThemeName" type="string" value="Yaru-dark"/>
+    <property name="IconThemeName" type="string" value="Yaru-dark"/>
+    <property name="DoubleClickTime" type="empty"/>
+    <property name="DoubleClickDistance" type="empty"/>
+    <property name="DndDragThreshold" type="empty"/>
+    <property name="CursorBlink" type="empty"/>
+    <property name="CursorBlinkTime" type="empty"/>
+    <property name="SoundThemeName" type="empty"/>
+    <property name="EnableEventSounds" type="empty"/>
+    <property name="EnableInputFeedbackSounds" type="empty"/>
+  </property>
+  <property name="Xft" type="empty">
+    <property name="DPI" type="int" value="96"/>
+    <property name="Antialias" type="int" value="1"/>
+    <property name="Hinting" type="int" value="1"/>
+    <property name="HintStyle" type="string" value="hintslight"/>
+    <property name="RGBA" type="string" value="rgb"/>
+  </property>
+  <property name="Gtk" type="empty">
+    <property name="CursorThemeName" type="string" value="Yaru"/>
+    <property name="FontName" type="string" value="Ubuntu 11"/>
+    <property name="MonospaceFontName" type="string" value="Ubuntu Mono 12"/>
+  </property>
+</channel>
+XML
+
+# xfwm4 = window manager: Yaru theme
+RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfwm4" version="1.0">
+  <property name="general" type="empty">
+    <property name="theme" type="string" value="Yaru-dark"/>
+    <property name="title_font" type="string" value="Ubuntu Bold 11"/>
+    <property name="button_layout" type="string" value="O|HMC"/>
+    <property name="button_offset" type="int" value="2"/>
+    <property name="click_to_focus" type="bool" value="true"/>
+    <property name="use_compositing" type="bool" value="true"/>
+  </property>
+</channel>
+XML
+
+# xfdesktop = wallpaper (Ubuntu jellyfish)
+RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-desktop" version="1.0">
+  <property name="backdrop" type="empty">
+    <property name="screen0" type="empty">
+      <property name="monitorscreen" type="empty">
+        <property name="workspace0" type="empty">
+          <property name="color-style" type="int" value="0"/>
+          <property name="image-style" type="int" value="5"/>
+          <property name="last-image" type="string" value="/usr/share/backgrounds/warty-final-ubuntu.png"/>
+        </property>
+      </property>
+    </property>
+  </property>
+</channel>
+XML
+
+# xfce4-panel = top bar (like GNOME's) - single horizontal strip
+RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-panel" version="1.0">
+  <property name="configver" type="int" value="2"/>
+  <property name="panels" type="array">
+    <value type="int" value="1"/>
+    <property name="panel-1" type="empty">
+      <property name="position" type="string" value="p=6;x=0;y=0"/>
+      <property name="length" type="uint" value="100"/>
+      <property name="position-locked" type="bool" value="true"/>
+      <property name="size" type="uint" value="28"/>
+      <property name="plugin-ids" type="array">
+        <value type="int" value="1"/>
+        <value type="int" value="2"/>
+        <value type="int" value="3"/>
+        <value type="int" value="4"/>
+      </property>
+      <property name="background-style" type="uint" value="1"/>
+      <property name="background-rgba" type="array">
+        <value type="double" value="0.1"/>
+        <value type="double" value="0.1"/>
+        <value type="double" value="0.1"/>
+        <value type="double" value="0.95"/>
+      </property>
+    </property>
+  </property>
+  <property name="plugins" type="empty">
+    <property name="plugin-1" type="string" value="applicationsmenu">
+      <property name="button-title" type="string" value="Activities"/>
+      <property name="show-button-title" type="bool" value="true"/>
+      <property name="show-button-icon" type="bool" value="false"/>
+    </property>
+    <property name="plugin-2" type="string" value="separator">
+      <property name="expand" type="bool" value="true"/>
+      <property name="style" type="uint" value="0"/>
+    </property>
+    <property name="plugin-3" type="string" value="clock">
+      <property name="mode" type="uint" value="2"/>
+      <property name="digital-format" type="string" value="%d %b  %H:%M"/>
+    </property>
+    <property name="plugin-4" type="string" value="systray"/>
+  </property>
+</channel>
+XML
+
+# plank dock — vertical, left side, like Ubuntu's dock
+RUN cat > /home/agent/.config/plank/dock1/settings <<'INI'
+[PlankDockPreferences]
+Alignment=CENTER
+AutoPinLaunchers=true
+CurrentWorkspaceOnly=false
+DockItems=
+HideMode=0
+IconSize=40
+ItemsAlignment=CENTER
+LockItems=false
+Monitor=
+Offset=0
+PinnedOnly=false
+Position=LEFT
+PressureReveal=false
+ShowDockItem=false
+Theme=Transparent
+TooltipsEnabled=true
+UnhideDelay=0
+ZoomEnabled=false
+ZoomPercent=150
+INI
+
+# Autostart plank so the dock appears with the session
+RUN cat > /home/agent/.config/autostart/plank.desktop <<'DESKTOP'
+[Desktop Entry]
+Type=Application
+Name=Plank
+Exec=plank
+X-GNOME-Autostart-enabled=true
+DESKTOP
+
 WORKDIR /app
 COPY app.py /app/app.py
 
@@ -112,6 +270,9 @@ set -u
 export DISPLAY=:0
 export HOME=/home/agent
 export PORT=8000
+export XDG_RUNTIME_DIR=/tmp/runtime-agent
+export XDG_CONFIG_HOME=/home/agent/.config
+mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
 cd "$HOME"
 log(){ echo "[start-desktop] $*" >&2; }
 
@@ -122,8 +283,19 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
   sleep 0.3
 done
 
-log "starting fluxbox"
-fluxbox >/tmp/fluxbox.log 2>&1 &
+log "starting dbus session"
+eval "$(dbus-launch --sh-syntax)"
+export DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID
+
+log "starting xfce4-session (Yaru-dark + Ubuntu wallpaper)"
+startxfce4 >/tmp/xfce.log 2>&1 &
+
+# Give XFCE a moment to settle before VNC starts streaming, otherwise
+# the first frame captures a half-painted desktop.
+sleep 2
+
+log "starting plank dock"
+(sleep 1 && DISPLAY=:0 plank >/tmp/plank.log 2>&1) &
 
 log "starting x11vnc on :5900"
 x11vnc -display :0 -forever -nopw -shared -rfbport 5900 -quiet >/tmp/x11vnc.log 2>&1 &

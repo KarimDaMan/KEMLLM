@@ -300,12 +300,10 @@ RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml <
         <value type="string" value="+logout-dialog"/>
       </property>
     </property>
-    <property name="plugin-27" type="string" value="applicationsmenu">
-      <property name="button-title" type="string" value=""/>
-      <property name="button-icon" type="string" value="view-app-grid-symbolic"/>
-      <property name="show-button-title" type="bool" value="false"/>
-      <property name="show-button-icon" type="bool" value="true"/>
-      <property name="show-menu-icons" type="bool" value="true"/>
+    <property name="plugin-27" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="xfce4-appfinder.desktop"/>
+      </property>
     </property>
     <property name="plugin-20" type="string" value="launcher">
       <property name="items" type="array">
@@ -372,6 +370,47 @@ log "starting dbus session"
 eval "$(dbus-launch --sh-syntax)"
 export DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID
 
+# HF Persistent Storage: if /data is mounted, symlink everything in
+# $HOME except caches/runtime dirs so a bucket-backed Space retains the
+# entire user profile across restarts.
+setup_persistent_storage() {
+  local DATA=/data
+  if [ ! -d "$DATA" ] || ! touch "$DATA/.kemllm_write_test" 2>/dev/null; then
+    log "persistent storage: /data not available"
+    return 0
+  fi
+  rm -f "$DATA/.kemllm_write_test"
+  local ROOT="$DATA/agent-home"
+  mkdir -p "$ROOT"
+  link_item() {
+    local rel="$1"
+    local src="$HOME/$rel"
+    local dst="$ROOT/$rel"
+    mkdir -p "$(dirname "$dst")"
+    if [ -L "$src" ]; then return 0; fi
+    if [ -e "$src" ]; then
+      if [ -d "$src" ]; then
+        mkdir -p "$dst"
+        cp -a "$src/." "$dst/" 2>/dev/null || true
+      else
+        cp -a "$src" "$dst" 2>/dev/null || true
+      fi
+      rm -rf "$src"
+    else
+      [ -d "$dst" ] || mkdir -p "$dst"
+    fi
+    ln -sf "$dst" "$src"
+  }
+  for item in Documents Downloads Desktop Pictures Videos Music Projects Templates Public \
+              .mozilla .thunderbird .config .local/share .local/bin .ssh .gnupg \
+              .bash_history .bashrc .bash_profile .profile .zshrc .zsh_history \
+              .gitconfig .npmrc .vimrc .lesshst; do
+    link_item "$item"
+  done
+  log "persistent storage: all user data → $ROOT"
+}
+setup_persistent_storage
+
 log "starting xfce4-session (Yaru-dark, lite)"
 startxfce4 >/tmp/xfce.log 2>&1 &
 sleep 2
@@ -382,13 +421,12 @@ if [ -n "$WP" ]; then
   (sleep 1 && xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitorscreen/workspace0/last-image -s "$WP" 2>/dev/null) &
 fi
 
-log "starting x11vnc on :5900 (low-fps lite mode)"
-# -defer 30 -wait 30 caps at ~33 FPS max which halves CPU usage vs the
-# full Dockerfile.desktop settings. NO -noxkb — that flag breaks Shift.
+log "starting x11vnc on :5900 (low-fps lite, full keyboard)"
+# Full keyboard (XKB fwd), clipboard, file transfer — all enabled.
 x11vnc -display :0 -forever -nopw -shared -rfbport 5900 \
        -threads -ncache 0 \
        -defer 30 -wait 30 \
-       -noxrecord -noxfixes -noxdamage \
+       -permitfiletransfer \
        -quiet >/tmp/x11vnc.log 2>&1 &
 
 log "starting websockify 6080 -> 5900 (noVNC)"

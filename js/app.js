@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v90 · remove -noxkb from x11vnc in both Dockerfile.desktop and Dockerfile.lite — that flag disabled XKB forwarding, breaking Shift + any key (no caps, no symbols). Desktop typing now works.';
+const KEMLLM_BUILD = 'v91 · persist EVERYTHING in ~/ (entire .config/.mozilla/.thunderbird/.local/.ssh/.gnupg + dotfiles) — real Ubuntu desktop that saves full state across restarts. all keys working, clipboard working, file transfer working, both Dockerfile variants updated.';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

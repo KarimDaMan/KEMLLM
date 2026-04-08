@@ -552,48 +552,73 @@ pulseaudio -D --exit-idle-time=-1 --log-target=file:/tmp/pulseaudio.log 2>/tmp/p
 setup_persistent_storage() {
   local DATA=/data
   if [ ! -d "$DATA" ] || ! touch "$DATA/.kemllm_write_test" 2>/dev/null; then
-    log "persistent storage: /data not available (install HF Space → Settings → Persistent Storage to persist files)"
+    log "persistent storage: /data not available — mount an HF Storage Bucket at /data"
     return 0
   fi
   rm -f "$DATA/.kemllm_write_test"
-  log "persistent storage: /data is writable — linking user dirs"
+  log "persistent storage: /data writable — linking EVERYTHING in \$HOME except caches"
 
   local ROOT="$DATA/agent-home"
-  mkdir -p "$ROOT"/{Documents,Downloads,Desktop,Pictures,Videos,Music,Projects}
-  mkdir -p "$ROOT/.mozilla/firefox"
-  mkdir -p "$ROOT/.thunderbird"
-  mkdir -p "$ROOT/.config/libreoffice"
-  mkdir -p "$ROOT/.ssh"
-  mkdir -p "$ROOT/.local/share"
+  mkdir -p "$ROOT"
 
-  # Helper: replace a directory under $HOME with a symlink into $ROOT.
-  # If the $HOME dir already exists with content, merge it into $ROOT first.
-  link_dir() {
+  # Helper: replace a $HOME item (dir or file) with a symlink into $ROOT.
+  # If the item already has content, merge it into $ROOT first so nothing
+  # gets lost. Idempotent — safe to call on an already-linked item.
+  link_item() {
     local rel="$1"
     local src="$HOME/$rel"
     local dst="$ROOT/$rel"
     mkdir -p "$(dirname "$dst")"
     if [ -L "$src" ]; then return 0; fi
-    if [ -d "$src" ]; then
-      cp -a "$src/." "$dst/" 2>/dev/null || true
+    if [ -e "$src" ]; then
+      if [ -d "$src" ]; then
+        mkdir -p "$dst"
+        cp -a "$src/." "$dst/" 2>/dev/null || true
+      else
+        cp -a "$src" "$dst" 2>/dev/null || true
+      fi
       rm -rf "$src"
+    else
+      [ -d "$dst" ] || mkdir -p "$dst"
     fi
     ln -sf "$dst" "$src"
   }
 
-  link_dir Documents
-  link_dir Downloads
-  link_dir Desktop
-  link_dir Pictures
-  link_dir Videos
-  link_dir Music
-  link_dir Projects
-  link_dir .mozilla/firefox
-  link_dir .thunderbird
-  link_dir .config/libreoffice
-  link_dir .ssh
+  # Standard user content
+  link_item Documents
+  link_item Downloads
+  link_item Desktop
+  link_item Pictures
+  link_item Videos
+  link_item Music
+  link_item Projects
+  link_item Templates
+  link_item Public
 
-  log "persistent storage: user dirs linked → $ROOT"
+  # Full application state — entire profile dirs, not just subfolders.
+  # Bookmarks, logins, history, emails, recent files, panel layout,
+  # theme tweaks, whisker menu, terminal history — all survive restart.
+  link_item .mozilla
+  link_item .thunderbird
+  link_item .config
+  link_item .local/share
+  link_item .local/bin
+  link_item .ssh
+  link_item .gnupg
+
+  # Dotfiles that hold shell history, git config, tool state
+  link_item .bash_history
+  link_item .bashrc
+  link_item .bash_profile
+  link_item .profile
+  link_item .zshrc
+  link_item .zsh_history
+  link_item .gitconfig
+  link_item .npmrc
+  link_item .vimrc
+  link_item .lesshst
+
+  log "persistent storage: all user data → $ROOT (everything in ~/ persists except .cache / .dbus / runtime sockets)"
 }
 setup_persistent_storage
 
@@ -621,13 +646,14 @@ if [ -n "$WP" ]; then
   (sleep 1 && xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitorscreen/workspace0/last-image -s "$WP" 2>/dev/null) &
 fi
 
-log "starting x11vnc on :5900 (high-fps, multi-threaded, tight-jpeg)"
-# Aggressive tuning for HF Pro hardware — -defer 2 -wait 2 targets
-# ~60 FPS. HF Pro has plenty of CPU so we can push frame rate high.
+log "starting x11vnc on :5900 (full keyboard + clipboard + all inputs)"
+# Everything enabled: XKB forwarding for Shift/symbols/caps, clipboard
+# sync both directions, file transfer, all events. User explicitly wants
+# "all keys, all inputs, all outputs".
 x11vnc -display :0 -forever -nopw -shared -rfbport 5900 \
        -threads -ncache 0 \
        -defer 2 -wait 2 \
-       -noxrecord -noxfixes -noxdamage -noxkb \
+       -permitfiletransfer \
        -quiet >/tmp/x11vnc.log 2>&1 &
 
 log "starting websockify 6080 -> 5900 (noVNC)"

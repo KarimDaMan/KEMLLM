@@ -384,11 +384,11 @@ fi
 
 log "starting x11vnc on :5900 (low-fps lite mode)"
 # -defer 30 -wait 30 caps at ~33 FPS max which halves CPU usage vs the
-# full Dockerfile.desktop settings. Still responsive enough for real work.
+# full Dockerfile.desktop settings. NO -noxkb — that flag breaks Shift.
 x11vnc -display :0 -forever -nopw -shared -rfbport 5900 \
        -threads -ncache 0 \
        -defer 30 -wait 30 \
-       -noxrecord -noxfixes -noxdamage -noxkb \
+       -noxrecord -noxfixes -noxdamage \
        -quiet >/tmp/x11vnc.log 2>&1 &
 
 log "starting websockify 6080 -> 5900 (noVNC)"

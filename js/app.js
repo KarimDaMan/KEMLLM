@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v89 · pulseaudio rewrite with default.pa config file + client.conf; dock icon back to xfce4-appfinder launcher (search dialog, not menu); noVNC quality 9→6 for 3-4x smaller frames; install xfce4-power-manager + notifyd + statusnotifier-plugin for settings';
+const KEMLLM_BUILD = 'v90 · remove -noxkb from x11vnc in both Dockerfile.desktop and Dockerfile.lite — that flag disabled XKB forwarding, breaking Shift + any key (no caps, no symbols). Desktop typing now works.';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

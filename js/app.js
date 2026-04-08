@@ -239,7 +239,28 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v111 · remove Chat/Code topbar tabs, Web button actually toggles sandbox-web now and mirrors Settings';
+const KEMLLM_BUILD = 'v112 · stale HTML auto-reload + user modal cleanup';
+
+// On first load: if the HTML file cached by the browser/GitHub Pages CDN
+// is older than the JS bundle, force a hard reload so index.html updates.
+// Detected by comparing the build marker on <body data-kemllm-build="N">
+// against the version embedded in KEMLLM_BUILD. sessionStorage prevents
+// infinite reload loops if something goes wrong.
+(function autoReloadStaleHTML() {
+  try {
+    const jsBuild = (KEMLLM_BUILD.match(/v(\d+)/) || [])[1];
+    const htmlBuild = document.body?.dataset?.kemllmBuild;
+    if (!jsBuild || !htmlBuild) return;
+    if (htmlBuild === jsBuild) return;
+    const attempted = sessionStorage.getItem('kemllm_reload_attempt');
+    if (attempted === jsBuild) return; // already tried this version
+    sessionStorage.setItem('kemllm_reload_attempt', jsBuild);
+    // Force a cache-busted reload
+    const u = new URL(location.href);
+    u.searchParams.set('_r', Date.now());
+    location.replace(u.toString());
+  } catch {}
+})();
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

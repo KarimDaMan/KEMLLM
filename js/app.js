@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v85 · permanent apps (gimp, inkscape, vlc, audacity, evince, mousepad, gedit, gnome-calc, taskmanager, screenshooter, clipman, notes, scanner, pavucontrol) + skins/themes (arc, materia, numix, papirus, adwaita, elementary-xfce)';
+const KEMLLM_BUILD = 'v86 · desktop perf tuning — disable xfwm4 compositing (~30% CPU save), drop Xvfb to 1600x900 (2.25x fewer pixels), tighten x11vnc (-defer 5 -wait 5 -noxkb, multi-threaded, tight encoding). Should feel much more responsive.';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

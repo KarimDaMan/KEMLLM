@@ -23,8 +23,16 @@ function logDebugRequest(entry) {
   window.__kemllm_fetch_patched = true;
   const origFetch = window.fetch.bind(window);
   window.fetch = async function(input, init) {
-    const method = (init && init.method) || (typeof input !== 'string' && input.method) || 'GET';
-    const url = typeof input === 'string' ? input : input.url;
+    const method = (init && init.method) || (typeof input !== 'string' && input && input.method) || 'GET';
+    // Coerce url to a safe string — input can be a string, a URL object,
+    // a Request, or something exotic. Default to '(unknown)' so the
+    // debug log renderer never hits `undefined.length`.
+    let url;
+    if (typeof input === 'string') url = input;
+    else if (input instanceof URL) url = input.href;
+    else if (input && typeof input.url === 'string') url = input.url;
+    else if (input && typeof input.toString === 'function') url = String(input);
+    else url = '(unknown)';
     const t0 = Date.now();
     try {
       const res = await origFetch(input, init);

@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v80 · EDIT_IMAGE marker now works on attached images (not just previously-generated markdown urls); system prompt tells the AI to always emit the marker on short edit requests like "make it blue"';
+const KEMLLM_BUILD = 'v81 · fix undefined e.url.length crash in debug log — coerce fetch input to a safe string (URL object, Request, or other) and defensive null-check in renderDebugLog';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

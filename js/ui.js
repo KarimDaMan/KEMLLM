@@ -475,8 +475,9 @@ function renderDebugLog() {
   el.innerHTML = DEBUG_LOG.map(e => {
     const statusClass = e.ok ? 'dbg-ok' : 'dbg-err';
     const time = new Date(e.ts).toLocaleTimeString();
-    const short = e.url.length > 70 ? e.url.slice(0, 70) + '…' : e.url;
-    return `<div class="dbg-row"><span class="dbg-ts">${time}</span><span class="dbg-method">${e.method}</span><span class="dbg-status ${statusClass}">${e.status || '∅'}</span><span class="dbg-ms">${e.ms}ms</span><span class="dbg-url" title="${escapeHTML(e.url)}">${escapeHTML(short)}</span></div>`;
+    const u = typeof e.url === 'string' ? e.url : String(e.url || '');
+    const short = u.length > 70 ? u.slice(0, 70) + '…' : u;
+    return `<div class="dbg-row"><span class="dbg-ts">${time}</span><span class="dbg-method">${e.method || '?'}</span><span class="dbg-status ${statusClass}">${e.status || '∅'}</span><span class="dbg-ms">${e.ms}ms</span><span class="dbg-url" title="${escapeHTML(u)}">${escapeHTML(short)}</span></div>`;
   }).join('');
 }
 function clearDebugLog() {

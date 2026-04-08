@@ -458,6 +458,60 @@ pulseaudio --start \
 # Point apps at the null sink as default
 (sleep 1 && pactl set-default-sink kemllm_sink 2>/dev/null) &
 
+# HF Persistent Storage integration. If the Space has the paid Persistent
+# Storage add-on enabled, /data is a writable volume that survives across
+# rebuilds, restarts and sleeps. Symlink the user's content directories
+# (Documents, Downloads, Firefox profile, etc.) onto it so everything
+# the user and AI create sticks around. Silently no-op if /data is
+# missing or read-only.
+setup_persistent_storage() {
+  local DATA=/data
+  if [ ! -d "$DATA" ] || ! touch "$DATA/.kemllm_write_test" 2>/dev/null; then
+    log "persistent storage: /data not available (install HF Space → Settings → Persistent Storage to persist files)"
+    return 0
+  fi
+  rm -f "$DATA/.kemllm_write_test"
+  log "persistent storage: /data is writable — linking user dirs"
+
+  local ROOT="$DATA/agent-home"
+  mkdir -p "$ROOT"/{Documents,Downloads,Desktop,Pictures,Videos,Music,Projects}
+  mkdir -p "$ROOT/.mozilla/firefox"
+  mkdir -p "$ROOT/.thunderbird"
+  mkdir -p "$ROOT/.config/libreoffice"
+  mkdir -p "$ROOT/.ssh"
+  mkdir -p "$ROOT/.local/share"
+
+  # Helper: replace a directory under $HOME with a symlink into $ROOT.
+  # If the $HOME dir already exists with content, merge it into $ROOT first.
+  link_dir() {
+    local rel="$1"
+    local src="$HOME/$rel"
+    local dst="$ROOT/$rel"
+    mkdir -p "$(dirname "$dst")"
+    if [ -L "$src" ]; then return 0; fi
+    if [ -d "$src" ]; then
+      cp -a "$src/." "$dst/" 2>/dev/null || true
+      rm -rf "$src"
+    fi
+    ln -sf "$dst" "$src"
+  }
+
+  link_dir Documents
+  link_dir Downloads
+  link_dir Desktop
+  link_dir Pictures
+  link_dir Videos
+  link_dir Music
+  link_dir Projects
+  link_dir .mozilla/firefox
+  link_dir .thunderbird
+  link_dir .config/libreoffice
+  link_dir .ssh
+
+  log "persistent storage: user dirs linked → $ROOT"
+}
+setup_persistent_storage
+
 log "starting xfce4-session (Yaru-dark + Ubuntu wallpaper)"
 startxfce4 >/tmp/xfce.log 2>&1 &
 

@@ -259,6 +259,12 @@ function getSystemPrompt(model) {
   } else {
     lines.push('- NETWORK: ON. Code execution can reach the internet.');
   }
+  // HF Persistent Storage note. Files under ~/Documents, ~/Downloads,
+  // ~/Desktop, ~/Pictures, ~/Videos, ~/Music, ~/Projects, the Firefox
+  // profile, Thunderbird data and LibreOffice config are symlinked to
+  // /data on the HF Space when Persistent Storage is enabled. Tell the
+  // AI so it saves things in the right place.
+  lines.push('- PERSISTENT FILES (Agent mode). If the user has HF Persistent Storage enabled on their Space, these directories survive restarts: ~/Documents, ~/Downloads, ~/Desktop, ~/Pictures, ~/Videos, ~/Music, ~/Projects, plus Firefox/Thunderbird profiles. Save user files there. Everything else (/tmp, ~/.cache, system dirs) is wiped on restart. If the user asks "does this save?" and the space has storage enabled, yes. If not, tell them to enable it in Space → Settings → Persistent Storage.');
 
   // Optional user persona.
   const persona = (profileGet('persona') || '').trim();

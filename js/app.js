@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v82 · desktop audio — pulseaudio null sink + ffmpeg mp3 stream to /audio endpoint, 🔇/🔊 toggle in preview pane';
+const KEMLLM_BUILD = 'v83 · HF Persistent Storage integration — Documents/Downloads/Desktop/Pictures/Videos/Music/Projects + Firefox/Thunderbird/LibreOffice profiles symlinked to /data/agent-home when /data is writable; system prompt tells AI what persists';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

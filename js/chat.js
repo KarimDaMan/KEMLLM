@@ -923,12 +923,50 @@ function chatPreviewShow(url, title) {
   if (title && titleEl) titleEl.textContent = title;
   frame.src = url;
   pane.classList.add('show');
+  // Reveal the audio toggle only for the AI Desktop preview. Browsers
+  // won't autoplay without a user gesture, so the button starts muted
+  // and the user taps to enable.
+  const audioBtn = document.getElementById('chat-preview-audio');
+  if (audioBtn) audioBtn.style.display = (title === 'AI Desktop') ? '' : 'none';
 }
 function chatPreviewClose() {
   const pane = document.getElementById('chat-preview');
   const frame = document.getElementById('chat-preview-frame');
   if (pane) { pane.classList.remove('show'); pane.classList.remove('fullscreen'); }
   if (frame) frame.src = 'about:blank';
+  // Tear down any running audio stream so ffmpeg on the backend can exit.
+  const audioEl = document.getElementById('chat-preview-audio-el');
+  const audioBtn = document.getElementById('chat-preview-audio');
+  if (audioEl) { audioEl.pause(); audioEl.src = ''; audioEl.removeAttribute('src'); }
+  if (audioBtn) { audioBtn.textContent = '🔇'; audioBtn.dataset.on = '0'; audioBtn.style.display = 'none'; }
+}
+
+// Toggle desktop audio streaming. First click starts an <audio> element
+// pointed at /api/audio (ffmpeg → mp3) which plays through the browser.
+function togglePreviewAudio() {
+  const btn = document.getElementById('chat-preview-audio');
+  const el = document.getElementById('chat-preview-audio-el');
+  if (!btn || !el) return;
+  const base = typeof getHfBackendUrl === 'function' ? getHfBackendUrl() : '';
+  const tok = typeof getHfBackendToken === 'function' ? getHfBackendToken() : '';
+  if (!base) { showToast('No HF backend configured'); return; }
+  if (btn.dataset.on === '1') {
+    el.pause();
+    el.src = '';
+    el.removeAttribute('src');
+    btn.textContent = '🔇';
+    btn.dataset.on = '0';
+    btn.title = 'Enable audio';
+  } else {
+    el.src = `${base}/api/audio?token=${encodeURIComponent(tok)}`;
+    el.play().then(() => {
+      btn.textContent = '🔊';
+      btn.dataset.on = '1';
+      btn.title = 'Disable audio';
+    }).catch((e) => {
+      showToast('Audio failed: ' + (e.message || e));
+    });
+  }
 }
 function chatPreviewReload() {
   const frame = document.getElementById('chat-preview-frame');

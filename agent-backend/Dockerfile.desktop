@@ -40,7 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     sqlite3 \
  && rm -rf /var/lib/apt/lists/*
 
-# X server + VNC stack + nginx
+# X server + VNC stack + nginx + audio streaming (pulseaudio + ffmpeg)
 RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     xvfb x11vnc websockify novnc \
     xterm scrot imagemagick xdotool \
@@ -48,6 +48,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     libgtk-3-0 libdbus-glib-1-2 libxt6 libasound2 libx11-xcb1 \
     nginx \
     dbus-x11 \
+    pulseaudio pulseaudio-utils \
+    ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 
 # XFCE4 desktop environment
@@ -436,6 +438,25 @@ done
 log "starting dbus session"
 eval "$(dbus-launch --sh-syntax)"
 export DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID
+
+log "starting pulseaudio (user daemon, null sink as default)"
+# Run pulseaudio in non-daemon user mode with a single virtual sink so
+# everything XFCE launches (Firefox, Rhythmbox, beeps) ends up on a
+# monitor source we can stream to the browser.
+mkdir -p /tmp/pulse
+export PULSE_SERVER=unix:/tmp/pulse/native
+export PULSE_RUNTIME_PATH=/tmp/pulse
+pulseaudio --start \
+  --exit-idle-time=-1 \
+  --disallow-exit=true \
+  --fail=false \
+  --log-target=file:/tmp/pulseaudio.log \
+  -L "module-native-protocol-unix socket=/tmp/pulse/native auth-anonymous=1" \
+  -L "module-null-sink sink_name=kemllm_sink sink_properties=device.description=KEMLLM-Speaker" \
+  -L "module-always-sink" \
+  2>/tmp/pulse-startup.log || log "pulseaudio start failed (non-fatal)"
+# Point apps at the null sink as default
+(sleep 1 && pactl set-default-sink kemllm_sink 2>/dev/null) &
 
 log "starting xfce4-session (Yaru-dark + Ubuntu wallpaper)"
 startxfce4 >/tmp/xfce.log 2>&1 &

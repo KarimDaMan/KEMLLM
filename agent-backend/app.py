@@ -293,6 +293,71 @@ def desktop_proxy(rest=""):
     return resp
 
 
+@app.route("/audio", methods=["GET", "OPTIONS"])
+def audio_stream():
+    """Stream the PulseAudio default sink's monitor as a continuous MP3.
+    Browser <audio> element plays this URL directly. Uses ffmpeg as a
+    one-shot encoder — Flask keeps the HTTP connection open and pipes
+    stdout out in chunks until the client disconnects.
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    if AGENT_TOKEN:
+        tok = request.args.get("token", "")
+        if tok != AGENT_TOKEN:
+            return jsonify({"error": "invalid token"}), 401
+
+    import subprocess as _sp
+    # The null sink created by start-desktop.sh exposes a monitor source
+    # called "kemllm_sink.monitor". ffmpeg reads from it via the PulseAudio
+    # input and encodes to MP3 at 128 kbps stereo 44.1 kHz.
+    env = {
+        "PULSE_SERVER": "unix:/tmp/pulse/native",
+        "PULSE_RUNTIME_PATH": "/tmp/pulse",
+        "HOME": "/home/agent",
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+    }
+    cmd = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error",
+        "-f", "pulse",
+        "-i", "kemllm_sink.monitor",
+        "-ac", "2",
+        "-ar", "44100",
+        "-c:a", "libmp3lame",
+        "-b:a", "128k",
+        "-f", "mp3",
+        "-",
+    ]
+    try:
+        proc = _sp.Popen(cmd, stdout=_sp.PIPE, stderr=_sp.DEVNULL, env=env, bufsize=0)
+    except FileNotFoundError:
+        return jsonify({"error": "ffmpeg not installed"}), 500
+    except Exception as e:
+        return jsonify({"error": "failed to start audio stream: " + str(e)}), 500
+
+    def generate():
+        try:
+            while True:
+                chunk = proc.stdout.read(4096)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            try: proc.terminate()
+            except Exception: pass
+            try: proc.wait(timeout=2)
+            except Exception:
+                try: proc.kill()
+                except Exception: pass
+
+    resp = Response(generate(), mimetype="audio/mpeg")
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
+
+
 @app.route("/sessions/<sid>/files/<path:filepath>", methods=["GET", "OPTIONS"])
 def serve_file(sid, filepath):
     """Serve a file from the session directory so iframes can load it.

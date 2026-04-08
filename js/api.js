@@ -291,11 +291,20 @@ function getSystemPrompt(model) {
   }
 
   // Sandbox web access — a real constraint the AI needs to know about.
-  // Web access defaults ON — only off if user explicitly set to '0'
+  // Web access defaults ON — only off if user explicitly set to '0'.
+  // When ON we ALSO tell the AI exactly HOW to fetch URLs in each runtime,
+  // because the in-browser sandboxes don't support `requests`/`urllib` over
+  // raw sockets — Pyodide needs `pyodide.http.pyfetch`, the JS iframe needs
+  // `fetch()`, and the remote Linux sandbox uses `curl`/`wget`. Without
+  // these instructions the AI tries `import requests` and silently fails.
   if (profileGet('sandbox-web') === '0') {
     lines.push('- NETWORK: OFF. Code execution has no internet access. Do not attempt HTTP requests in code.');
   } else {
-    lines.push('- NETWORK: ON. Code execution can reach the internet.');
+    lines.push('- WEB ACCESS / NETWORK: ON. You CAN fetch live data from the internet. Use it whenever the user asks for current information, news, prices, sports scores, weather, web pages, APIs, or anything time-sensitive — DO NOT say you can\'t browse the web. How to actually fetch a URL in each runtime:');
+    lines.push('  • Python (Pyodide, browser): `requests` and `urllib` do NOT work (no raw sockets). Use `pyodide.http.pyfetch` with top-level await:\n    ```python\n    from pyodide.http import pyfetch\n    r = await pyfetch("https://example.com/api.json")\n    data = await r.json()       # or: text = await r.string()\n    print(data)\n    ```');
+    lines.push('  • JavaScript (sandboxed iframe): use `fetch()` with await:\n    ```javascript\n    const r = await fetch("https://example.com/api.json");\n    const data = await r.json();\n    console.log(data);\n    ```');
+    lines.push('  • Bash / shell (only when an HF Agent backend is configured): use `curl -s` or `wget -qO-`.');
+    lines.push('  CORS: most public JSON APIs and many sites work. If a site blocks CORS, try a different source or a CORS-friendly mirror — do NOT give up after one failure. For web search specifically, prefer the DuckDuckGo HTML endpoint (`https://html.duckduckgo.com/html/?q=...`) or Wikipedia\'s REST API.');
   }
   // HF Persistent Storage note. Files under ~/Documents, ~/Downloads,
   // ~/Desktop, ~/Pictures, ~/Videos, ~/Music, ~/Projects, the Firefox
@@ -489,14 +498,30 @@ async function callAnthropicDirect(model, messages, apiKey, onChunk) {
   const anthropicMax = getUserMaxTokens() || 8192;
 
   const useComputer = shouldEnableComputerUse(model);
-  const tools = useComputer ? [{
-    type: 'computer_20241022',
-    name: 'computer',
-    // Must match the Xvfb :0 resolution in start-desktop.sh (1920x1080 since v88)
-    display_width_px: 1920,
-    display_height_px: 1080,
-    display_number: 0,
-  }] : undefined;
+  // Web search — Anthropic's native server-side tool. Enabled whenever the
+  // user has the Web toggle on (sandbox-web !== '0'). It's a server-side
+  // tool, so the model handles the loop internally and we still get back
+  // a normal text response — no client-side tool plumbing needed.
+  const useWebSearch = profileGet('sandbox-web') !== '0';
+  const tools = [];
+  if (useComputer) {
+    tools.push({
+      type: 'computer_20241022',
+      name: 'computer',
+      // Must match the Xvfb :0 resolution in start-desktop.sh (1920x1080 since v88)
+      display_width_px: 1920,
+      display_height_px: 1080,
+      display_number: 0,
+    });
+  }
+  if (useWebSearch) {
+    tools.push({
+      type: 'web_search_20250305',
+      name: 'web_search',
+      max_uses: 5,
+    });
+  }
+  const toolsParam = tools.length ? tools : undefined;
 
   const headers = {
     'Content-Type': 'application/json',
@@ -509,16 +534,19 @@ async function callAnthropicDirect(model, messages, apiKey, onChunk) {
   }
 
   // If computer-use is NOT enabled, do the simple single-shot call.
+  // Web search is server-side so it works fine in this single-shot path.
   if (!useComputer) {
+    const body = {
+      model: model.apiId,
+      max_tokens: anthropicMax,
+      system: sys,
+      messages: msgs,
+    };
+    if (toolsParam) body.tools = toolsParam;
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        model: model.apiId,
-        max_tokens: anthropicMax,
-        system: sys,
-        messages: msgs,
-      }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error('Anthropic API error: ' + res.status + ' ' + (await res.text()).slice(0, 200));
     const data = await res.json();
@@ -541,7 +569,7 @@ async function callAnthropicDirect(model, messages, apiKey, onChunk) {
         model: model.apiId,
         max_tokens: anthropicMax,
         system: sys,
-        tools,
+        tools: toolsParam,
         messages: convo,
       }),
     });

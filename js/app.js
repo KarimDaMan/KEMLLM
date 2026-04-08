@@ -348,7 +348,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v114 · + menu with direct image/video gen, Projects, Kling v3, music stops on tab blur';
+const KEMLLM_BUILD = 'v115 · plus menu fix (was off-screen), web access actually works (Anthropic web_search + pyfetch/fetch how-to in system prompt)';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.

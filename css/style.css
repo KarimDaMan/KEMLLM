@@ -17,7 +17,11 @@
 .chat-ctx-item:hover{background:var(--bg3);}
 
 /* Plus button popover menu */
-.plus-menu{position:absolute;bottom:calc(100% + 8px);left:24px;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:6px;min-width:220px;box-shadow:0 12px 32px rgba(0,0,0,.6);z-index:60;display:none;animation:plusMenuIn .18s var(--ease-out);}
+/* Position is set by JS via getBoundingClientRect on the plus button when
+   the menu opens. position:fixed means the menu is not affected by ANY
+   ancestor's overflow / transform / containing-block weirdness — it always
+   appears anchored to the button on screen, period. */
+.plus-menu{position:fixed;left:0;top:0;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:6px;min-width:220px;box-shadow:0 12px 32px rgba(0,0,0,.6);z-index:9999;display:none;animation:plusMenuIn .18s var(--ease-out);}
 .plus-menu.open{display:block;}
 @keyframes plusMenuIn{from{transform:translateY(6px);opacity:0;}to{transform:translateY(0);opacity:1;}}
 .plus-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;background:none;border:none;color:var(--text);font-size:13px;font-family:inherit;cursor:pointer;border-radius:8px;text-align:left;transition:background .12s;}

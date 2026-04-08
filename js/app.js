@@ -348,7 +348,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v116 · UNIVERSAL web search — every model (Claude/GPT/Gemini/Grok/Llama/Mistral/etc) can now emit [WEB_SEARCH query="..."] and the frontend runs DDG via the worker (Wikipedia + DDG-IA fallback) and feeds results back automatically';
+const KEMLLM_BUILD = 'v117 · plus menu rebuilt with position:fixed at <body> level (immune to any layout); web search now uses Jina Reader as primary source (CORS, no key, no worker deploy needed); much stronger system prompt so every model actually emits [WEB_SEARCH]';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.
@@ -594,16 +594,60 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('sb-toggle')?.addEventListener('click', toggleSidebar);
   document.getElementById('sb-backdrop')?.addEventListener('click', closeSidebar);
 
-  // Plus button — opens a menu with Attach / Image / Video / Mode
+  // Plus button — opens a menu with Attach / Image / Video / Mode.
+  // The menu lives at <body> level with position:fixed so no parent's
+  // overflow / transform / stacking context can hide it. We compute its
+  // on-screen coordinates from the plus button's bounding rect each time
+  // it opens, then size-clamp so it never spills off the viewport.
+  function positionPlusMenu() {
+    const btn = document.getElementById('plus-btn');
+    const menu = document.getElementById('plus-menu');
+    if (!btn || !menu) return;
+    // Make the menu temporarily measurable even when display:none
+    const wasOpen = menu.classList.contains('open');
+    if (!wasOpen) {
+      menu.style.visibility = 'hidden';
+      menu.style.display = 'block';
+    }
+    const btnRect = btn.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    // Default: pop UP from the button, left-aligned with it
+    let left = btnRect.left;
+    let top = btnRect.top - menuRect.height - 8;
+    // If the menu would go off the top, drop it BELOW the button instead
+    if (top < 8) top = btnRect.bottom + 8;
+    // Clamp horizontally so the right edge stays on-screen
+    const maxLeft = window.innerWidth - menuRect.width - 8;
+    if (left > maxLeft) left = Math.max(8, maxLeft);
+    if (left < 8) left = 8;
+    menu.style.left = Math.round(left) + 'px';
+    menu.style.top = Math.round(top) + 'px';
+    if (!wasOpen) {
+      menu.style.display = '';
+      menu.style.visibility = '';
+    }
+  }
   document.getElementById('plus-btn')?.addEventListener('click', (e) => {
     e.stopPropagation();
+    e.preventDefault();
     const menu = document.getElementById('plus-menu');
     if (!menu) return;
     // Mark the currently-active mode so the user sees their selection
     menu.querySelectorAll('.plus-mode').forEach(el => {
       el.classList.toggle('active', el.dataset.mode === chatMode);
     });
-    menu.classList.toggle('open');
+    const willOpen = !menu.classList.contains('open');
+    if (willOpen) {
+      positionPlusMenu();
+      menu.classList.add('open');
+    } else {
+      menu.classList.remove('open');
+    }
+  });
+  // Reposition on window resize / scroll while the menu is open
+  window.addEventListener('resize', () => {
+    const menu = document.getElementById('plus-menu');
+    if (menu && menu.classList.contains('open')) positionPlusMenu();
   });
   // Dismiss menu on outside click
   document.addEventListener('click', (e) => {

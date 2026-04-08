@@ -306,7 +306,30 @@ function getSystemPrompt(model) {
   if (profileGet('sandbox-web') === '0') {
     lines.push('- NETWORK: OFF. Code execution has no internet access. Do not attempt HTTP requests in code.');
   } else {
-    lines.push('- WEB SEARCH. To search the live web for ANY current information — news, prices, scores, weather, recent events, anything time-sensitive or factual you are unsure about — emit `[WEB_SEARCH query="your search terms"]`. The frontend will run the search and feed the results back to you as the next turn so you can answer with up-to-date information. Use it FREELY whenever it helps. NEVER say "I can\'t browse the web" or "my training cuts off in" — you have web search via this marker. One marker per response. After you receive the results, write your answer in plain prose and cite the sources.');
+    // STRONG instruction. Smaller / non-frontier models won\'t emit the
+    // marker without explicit, repeated, unambiguous direction. We tell
+    // the model exactly when to use it AND give a worked example.
+    lines.push('- WEB SEARCH. YOU HAVE LIVE WEB SEARCH. To use it, emit this marker EXACTLY (on its own line) anywhere in your reply:');
+    lines.push('    [WEB_SEARCH query="your search terms here"]');
+    lines.push('  The KEMLLM frontend will intercept the marker, run a real search engine query (Jina Reader / DuckDuckGo / Wikipedia), and feed the results back to you as the NEXT user turn. You then answer the original question using those fresh results.');
+    lines.push('  WHEN to use it (REQUIRED — do NOT skip this):');
+    lines.push('    • The user asks about ANYTHING after your training cutoff date');
+    lines.push('    • Current events, news, today\'s weather, sports scores, stock/crypto prices');
+    lines.push('    • "Latest", "newest", "current", "recent", "right now", "today", "this week"');
+    lines.push('    • Real people / companies / products you might be out of date on');
+    lines.push('    • Specific facts you are not 100% sure about');
+    lines.push('    • Anything where being wrong would be worse than admitting you searched');
+    lines.push('  WHAT NEVER TO SAY (these are forbidden when web search is on):');
+    lines.push('    • "I can\'t browse the internet"  → WRONG, you can, use the marker');
+    lines.push('    • "My training data only goes up to..."  → WRONG, search instead');
+    lines.push('    • "I don\'t have access to real-time information"  → WRONG, you do');
+    lines.push('    • "You should check a search engine"  → WRONG, YOU are the search engine, emit the marker');
+    lines.push('  HOW it works (worked example):');
+    lines.push('    User: "what\'s the current price of Bitcoin"');
+    lines.push('    You (turn 1): "Let me check the current price.\\n[WEB_SEARCH query="current Bitcoin price USD"]"');
+    lines.push('    System feeds you the search results as a follow-up turn.');
+    lines.push('    You (turn 2): "Bitcoin is currently trading at $X (source: ...)."');
+    lines.push('  Rules: emit at most ONE marker per response. After receiving results, write a normal prose answer and cite source URLs when relevant. Do not emit a second marker unless the first results are truly insufficient.');
     lines.push('- WEB FETCH (raw): you can also fetch a specific URL directly via code execution when you need raw HTML/JSON instead of search results:');
     lines.push('  • Python (Pyodide, browser): `requests` and `urllib` do NOT work (no raw sockets). Use `pyodide.http.pyfetch` with top-level await:\n    ```python\n    from pyodide.http import pyfetch\n    r = await pyfetch("https://example.com/api.json")\n    data = await r.json()       # or: text = await r.string()\n    print(data)\n    ```');
     lines.push('  • JavaScript (sandboxed iframe): use `fetch()` with await:\n    ```javascript\n    const r = await fetch("https://example.com/api.json");\n    const data = await r.json();\n    console.log(data);\n    ```');
@@ -1278,7 +1301,56 @@ async function runWebSearch(query) {
 
   const sources = [];
 
-  // Source 1: KEMLLM worker /search → DuckDuckGo HTML proxy
+  // Source 1: Jina Reader search — `https://s.jina.ai/<query>` returns
+  // real Google-style search results in plain text/markdown, with
+  // permissive CORS (Access-Control-Allow-Origin: *) so it works
+  // directly from the browser. No API key required for the free tier.
+  // This is the PRIMARY source because it works for every user without
+  // any setup (worker not deployed, no API keys, etc).
+  try {
+    const r = await fetch('https://s.jina.ai/' + encodeURIComponent(q), {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        // Ask Jina for the structured-JSON response so we can format it
+        // ourselves rather than dumping a giant markdown blob into the
+        // model's context.
+        'X-Respond-With': 'no-content',
+      },
+    });
+    if (r.ok) {
+      const ct = r.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        const j = await r.json();
+        const items = (j && (j.data || j.results)) || [];
+        if (Array.isArray(items) && items.length) {
+          const lines = [`Web search results for "${q}" (Jina Reader):`, ''];
+          items.slice(0, 8).forEach((res, i) => {
+            const title = (res.title || res.url || '').trim();
+            const url = (res.url || '').trim();
+            const snip = (res.description || res.snippet || res.content || '').toString().trim().slice(0, 400);
+            lines.push(`${i + 1}. ${title}`);
+            if (url) lines.push(`   ${url}`);
+            if (snip) lines.push(`   ${snip}`);
+            lines.push('');
+          });
+          return lines.join('\n').trim();
+        }
+      } else {
+        // Plain text/markdown fallback — Jina returned a flat document.
+        const txt = await r.text();
+        if (txt && txt.trim().length > 40) {
+          return `Web search results for "${q}" (Jina Reader):\n\n` + txt.trim().slice(0, 6000);
+        }
+      }
+    }
+  } catch (e) {
+    sources.push('jina: ' + (e.message || String(e)));
+  }
+
+  // Source 2: KEMLLM worker /search → DuckDuckGo HTML proxy.
+  // Used when Jina is rate-limited or down. Requires the user to have
+  // deployed the updated cloudflare-worker/kemllmbackend.js.
   try {
     const r = await fetch(SEARCH_BASE + '?q=' + encodeURIComponent(q), {
       method: 'GET',

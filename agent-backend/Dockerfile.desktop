@@ -30,39 +30,55 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq tree ripgrep fd-find bat \
     htop procps net-tools iputils-ping dnsutils \
     ca-certificates gnupg lsb-release \
-    sudo unzip zip tar xz-utils \
+    sudo unzip zip tar xz-utils bzip2 \
     nodejs npm \
     sqlite3 \
     xvfb x11vnc websockify novnc \
     xterm scrot imagemagick xdotool \
     fonts-dejavu fonts-liberation fonts-ubuntu \
+    libgtk-3-0 libdbus-glib-1-2 libxt6 libasound2 libx11-xcb1 \
     nginx \
     dbus-x11 \
     xfce4 xfce4-panel xfce4-session xfce4-settings xfce4-appfinder \
     xfwm4 xfdesktop4 xfconf \
     yaru-theme-gtk yaru-theme-icon yaru-theme-sound \
-    ubuntu-wallpapers \
-    plank \
+    ubuntu-wallpapers ubuntu-wallpapers-focal \
     thunar gvfs gvfs-backends \
-    firefox \
     thunderbird \
     rhythmbox \
     libreoffice-impress libreoffice-gtk3 \
-    gnome-software \
     yelp \
  && rm -rf /var/lib/apt/lists/*
 
-# Fetch the Focal Fossa "What a Beauty" cougar wallpaper (red/purple
-# gradient with the cougar outline) since ubuntu-wallpapers-focal isn't
-# always available on Ubuntu 22.04 base images. Fall back gracefully
-# if the fetch fails — xfdesktop will use whatever's in /usr/share/backgrounds.
-RUN mkdir -p /usr/share/backgrounds/kemllm \
- && (wget -q -O /usr/share/backgrounds/kemllm/focal-cougar.png \
-     'https://people.canonical.com/~dx-team/wallpapers/focal/ubuntu-Background-2.png' \
-     || wget -q -O /usr/share/backgrounds/kemllm/focal-cougar.png \
-     'https://www.gnome-look.org/CONTENT/content-pre3/1380236-3.jpg' \
-     || echo "wallpaper fetch failed, xfdesktop will pick a default") \
- || true
+# gnome-software is intentionally NOT installed — it requires snapd or
+# PackageKit daemons that don't run inside a non-systemd HF Space, so it
+# opens to a blank window. Users install apps via `apt` from terminal
+# or via Agent mode instead.
+
+# Ubuntu 22.04's apt "firefox" package is a snap stub that doesn't work in
+# a non-systemd container. Pull the real Firefox tarball directly from
+# Mozilla and install to /opt. One launcher + a symlink and Firefox works
+# the same as on a normal Ubuntu desktop.
+RUN mkdir -p /opt/firefox \
+ && wget -qO /tmp/firefox.tar.bz2 \
+      "https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US" \
+ && tar -xjf /tmp/firefox.tar.bz2 -C /opt/ \
+ && rm /tmp/firefox.tar.bz2 \
+ && ln -sf /opt/firefox/firefox /usr/local/bin/firefox \
+ && cat > /usr/share/applications/firefox.desktop <<'DESKTOP'
+[Desktop Entry]
+Version=1.0
+Name=Firefox Web Browser
+Comment=Browse the World Wide Web
+GenericName=Web Browser
+Exec=/opt/firefox/firefox %u
+Terminal=false
+Type=Application
+Icon=/opt/firefox/browser/chrome/icons/default/default128.png
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;application/xml;application/vnd.mozilla.xul+xml;application/rss+xml;application/rdf+xml;image/gif;image/jpeg;image/png;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
+DESKTOP
 
 RUN ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html || true
 RUN pip3 install --no-cache-dir flask flask-cors gunicorn requests
@@ -178,7 +194,9 @@ RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml <<'XML'
 </channel>
 XML
 
-# xfdesktop = wallpaper (Focal Fossa cougar) + desktop icons (home + trash)
+# xfdesktop = wallpaper (Focal Fossa "Feren" cougar from ubuntu-wallpapers-focal)
+# + desktop icons (home + trash). The focal package installs the cougar to
+# /usr/share/backgrounds/canonical-backgrounds/ or /usr/share/backgrounds/.
 RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfce4-desktop" version="1.0">
@@ -188,7 +206,7 @@ RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
         <property name="workspace0" type="empty">
           <property name="color-style" type="int" value="0"/>
           <property name="image-style" type="int" value="5"/>
-          <property name="last-image" type="string" value="/usr/share/backgrounds/kemllm/focal-cougar.png"/>
+          <property name="last-image" type="string" value="/usr/share/backgrounds/Feathers_by_Elena_Stravoravdi.jpg"/>
         </property>
       </property>
     </property>
@@ -220,22 +238,27 @@ RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
 </channel>
 XML
 
-# xfce4-panel = single dark top bar, GNOME-style (Activities left, clock
-# center, system tray + power indicator right). Thin, transparent, Ubuntu font.
+# xfce4-panel: TWO panels
+#   panel-1 = thin dark top bar (Activities menu + clock + systray)
+#   panel-2 = left vertical dock with 8 launcher icons (deskbar mode)
+# Plank was unreliable because it prefers dconf/gsettings over the ini
+# file — so we do the whole dock with xfce4-panel which DOES read XML.
 RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfce4-panel" version="1.0">
   <property name="configver" type="int" value="2"/>
   <property name="panels" type="array">
     <value type="int" value="1"/>
+    <value type="int" value="2"/>
     <property name="dark-mode" type="bool" value="true"/>
+    <!-- TOP BAR -->
     <property name="panel-1" type="empty">
       <property name="position" type="string" value="p=6;x=0;y=0"/>
       <property name="length" type="uint" value="100"/>
       <property name="length-adjust" type="bool" value="true"/>
       <property name="position-locked" type="bool" value="true"/>
       <property name="icon-size" type="uint" value="16"/>
-      <property name="size" type="uint" value="26"/>
+      <property name="size" type="uint" value="28"/>
       <property name="nrows" type="uint" value="1"/>
       <property name="plugin-ids" type="array">
         <value type="int" value="1"/>
@@ -248,23 +271,49 @@ RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml <
       </property>
       <property name="background-style" type="uint" value="1"/>
       <property name="background-rgba" type="array">
-        <value type="double" value="0.153"/>
-        <value type="double" value="0.137"/>
-        <value type="double" value="0.137"/>
+        <value type="double" value="0.15"/>
+        <value type="double" value="0.14"/>
+        <value type="double" value="0.14"/>
         <value type="double" value="1.0"/>
       </property>
-      <property name="enter-opacity" type="uint" value="100"/>
-      <property name="leave-opacity" type="uint" value="100"/>
+    </property>
+    <!-- LEFT DOCK (deskbar vertical) -->
+    <property name="panel-2" type="empty">
+      <property name="position" type="string" value="p=5;x=0;y=540"/>
+      <property name="length" type="uint" value="0"/>
+      <property name="length-adjust" type="bool" value="false"/>
+      <property name="position-locked" type="bool" value="true"/>
+      <property name="autohide-behavior" type="uint" value="0"/>
+      <property name="size" type="uint" value="56"/>
+      <property name="icon-size" type="uint" value="42"/>
+      <property name="mode" type="uint" value="1"/>
+      <property name="nrows" type="uint" value="1"/>
+      <property name="plugin-ids" type="array">
+        <value type="int" value="20"/>
+        <value type="int" value="21"/>
+        <value type="int" value="22"/>
+        <value type="int" value="23"/>
+        <value type="int" value="24"/>
+        <value type="int" value="25"/>
+        <value type="int" value="26"/>
+        <value type="int" value="27"/>
+      </property>
+      <property name="background-style" type="uint" value="1"/>
+      <property name="background-rgba" type="array">
+        <value type="double" value="0.15"/>
+        <value type="double" value="0.14"/>
+        <value type="double" value="0.14"/>
+        <value type="double" value="0.93"/>
+      </property>
     </property>
   </property>
   <property name="plugins" type="empty">
+    <!-- TOP BAR plugins -->
     <property name="plugin-1" type="string" value="applicationsmenu">
       <property name="button-title" type="string" value="Activities"/>
       <property name="show-button-title" type="bool" value="true"/>
       <property name="show-button-icon" type="bool" value="false"/>
       <property name="show-menu-icons" type="bool" value="true"/>
-      <property name="show-generic-names" type="bool" value="false"/>
-      <property name="show-tooltips" type="bool" value="false"/>
     </property>
     <property name="plugin-2" type="string" value="separator">
       <property name="expand" type="bool" value="true"/>
@@ -274,7 +323,6 @@ RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml <
       <property name="mode" type="uint" value="2"/>
       <property name="digital-format" type="string" value="%d %b  %H:%M"/>
       <property name="show-frame" type="bool" value="false"/>
-      <property name="tooltip-format" type="string" value="%A %d %B %Y"/>
     </property>
     <property name="plugin-4" type="string" value="separator">
       <property name="expand" type="bool" value="true"/>
@@ -286,7 +334,6 @@ RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml <
     </property>
     <property name="plugin-6" type="string" value="pulseaudio">
       <property name="enable-keyboard-shortcuts" type="bool" value="true"/>
-      <property name="show-notifications" type="bool" value="true"/>
     </property>
     <property name="plugin-7" type="string" value="actions">
       <property name="appearance" type="uint" value="0"/>
@@ -294,99 +341,52 @@ RUN cat > /home/agent/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml <
         <value type="string" value="+logout-dialog"/>
       </property>
     </property>
+    <!-- LEFT DOCK plugins — each is a launcher pointing at one .desktop -->
+    <property name="plugin-20" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="firefox.desktop"/>
+      </property>
+    </property>
+    <property name="plugin-21" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="thunderbird.desktop"/>
+      </property>
+    </property>
+    <property name="plugin-22" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="thunar.desktop"/>
+      </property>
+    </property>
+    <property name="plugin-23" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="rhythmbox.desktop"/>
+      </property>
+    </property>
+    <property name="plugin-24" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="libreoffice-impress.desktop"/>
+      </property>
+    </property>
+    <property name="plugin-25" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="yelp.desktop"/>
+      </property>
+    </property>
+    <property name="plugin-26" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="xfce4-terminal.desktop"/>
+      </property>
+    </property>
+    <property name="plugin-27" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="xfce4-appfinder.desktop"/>
+      </property>
+    </property>
   </property>
 </channel>
 XML
 
-# plank dock — vertical, left side, 48px Ubuntu-Dock layout
-RUN mkdir -p /home/agent/.config/plank/dock1/launchers \
- && cat > /home/agent/.config/plank/dock1/settings <<'INI'
-[PlankDockPreferences]
-Alignment=START
-AutoPinLaunchers=false
-CurrentWorkspaceOnly=false
-DockItems=firefox.dockitem;;thunderbird.dockitem;;files.dockitem;;rhythmbox.dockitem;;libreoffice-impress.dockitem;;ubuntu-software.dockitem;;yelp.dockitem;;appgrid.dockitem
-HideMode=0
-IconSize=48
-ItemsAlignment=START
-LockItems=true
-Monitor=
-Offset=0
-PinnedOnly=true
-Position=LEFT
-PressureReveal=false
-ShowDockItem=false
-Theme=Transparent
-TooltipsEnabled=true
-UnhideDelay=0
-ZoomEnabled=false
-ZoomPercent=150
-INI
-
-# Dockitem files. Each one points at an existing /usr/share/applications
-# .desktop entry. plank reads these at startup.
-RUN cat > /home/agent/.config/plank/dock1/launchers/firefox.dockitem <<'ITEM'
-[PlankDockItemPreferences]
-Launcher=file:///usr/share/applications/firefox.desktop
-ITEM
-
-RUN cat > /home/agent/.config/plank/dock1/launchers/thunderbird.dockitem <<'ITEM'
-[PlankDockItemPreferences]
-Launcher=file:///usr/share/applications/thunderbird.desktop
-ITEM
-
-RUN cat > /home/agent/.config/plank/dock1/launchers/files.dockitem <<'ITEM'
-[PlankDockItemPreferences]
-Launcher=file:///usr/share/applications/thunar.desktop
-ITEM
-
-RUN cat > /home/agent/.config/plank/dock1/launchers/rhythmbox.dockitem <<'ITEM'
-[PlankDockItemPreferences]
-Launcher=file:///usr/share/applications/org.gnome.Rhythmbox3.desktop
-ITEM
-
-RUN cat > /home/agent/.config/plank/dock1/launchers/libreoffice-impress.dockitem <<'ITEM'
-[PlankDockItemPreferences]
-Launcher=file:///usr/share/applications/libreoffice-impress.desktop
-ITEM
-
-RUN cat > /home/agent/.config/plank/dock1/launchers/ubuntu-software.dockitem <<'ITEM'
-[PlankDockItemPreferences]
-Launcher=file:///usr/share/applications/org.gnome.Software.desktop
-ITEM
-
-RUN cat > /home/agent/.config/plank/dock1/launchers/yelp.dockitem <<'ITEM'
-[PlankDockItemPreferences]
-Launcher=file:///usr/share/applications/yelp.desktop
-ITEM
-
-# App grid launcher — there's no "Show Applications" entry like GNOME's,
-# so we create a custom .desktop that opens xfce4-appfinder (which is
-# XFCE's equivalent of the GNOME app overview).
-RUN cat > /usr/share/applications/kemllm-appgrid.desktop <<'DESKTOP'
-[Desktop Entry]
-Type=Application
-Name=Show Applications
-Comment=Browse all installed applications
-Exec=xfce4-appfinder
-Icon=view-app-grid-symbolic
-Terminal=false
-Categories=System;
-DESKTOP
-
-RUN cat > /home/agent/.config/plank/dock1/launchers/appgrid.dockitem <<'ITEM'
-[PlankDockItemPreferences]
-Launcher=file:///usr/share/applications/kemllm-appgrid.desktop
-ITEM
-
-# Autostart plank so the dock appears with the session
-RUN cat > /home/agent/.config/autostart/plank.desktop <<'DESKTOP'
-[Desktop Entry]
-Type=Application
-Name=Plank
-Exec=plank
-X-GNOME-Autostart-enabled=true
-DESKTOP
+# No plank config needed — the left dock is now panel-2 in xfce4-panel.xml above.
 
 WORKDIR /app
 COPY app.py /app/app.py
@@ -420,15 +420,32 @@ export DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID
 log "starting xfce4-session (Yaru-dark + Ubuntu wallpaper)"
 startxfce4 >/tmp/xfce.log 2>&1 &
 
-# Give XFCE a moment to settle before VNC starts streaming, otherwise
-# the first frame captures a half-painted desktop.
+# Give XFCE a moment to settle.
 sleep 2
 
-log "starting plank dock"
-(sleep 1 && DISPLAY=:0 plank >/tmp/plank.log 2>&1) &
+# Dynamically find the best available wallpaper since package file paths
+# vary between Ubuntu releases. Prefer focal-fossa / fossa / cougar, fall
+# back to any Ubuntu wallpaper, then any wallpaper in the backgrounds dir.
+log "picking wallpaper"
+WP=""
+for pattern in "focal*" "fossa*" "cougar*" "Fossa*" "Focal*" "warty*" "*ubuntu*"; do
+  WP=$(find /usr/share/backgrounds -maxdepth 3 -type f \( -iname "$pattern.jpg" -o -iname "$pattern.png" \) 2>/dev/null | head -1)
+  [ -n "$WP" ] && break
+done
+if [ -z "$WP" ]; then
+  WP=$(find /usr/share/backgrounds -maxdepth 3 -type f \( -iname "*.jpg" -o -iname "*.png" \) 2>/dev/null | head -1)
+fi
+if [ -n "$WP" ]; then
+  log "wallpaper: $WP"
+  # xfconf-query to override the XML value with the actually-existing file
+  (sleep 1 && xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitorscreen/workspace0/last-image -s "$WP" 2>/dev/null) &
+fi
 
-log "starting x11vnc on :5900"
-x11vnc -display :0 -forever -nopw -shared -rfbport 5900 -quiet >/tmp/x11vnc.log 2>&1 &
+log "starting x11vnc on :5900 (multi-threaded, tuned for low lag)"
+x11vnc -display :0 -forever -nopw -shared -rfbport 5900 \
+       -threads -defer 30 -wait 30 \
+       -noxrecord -noxfixes -noxdamage \
+       -quiet >/tmp/x11vnc.log 2>&1 &
 
 log "starting websockify 6080 -> 5900 (noVNC)"
 websockify --web=/usr/share/novnc 6080 localhost:5900 >/tmp/websockify.log 2>&1 &

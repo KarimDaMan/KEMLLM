@@ -1027,13 +1027,17 @@ let _desktopProbedOnce = false;
 //   OLD layout  = Flask at root, noVNC (if any) proxied via /desktop/*
 // Returns { path, layout } where path is the iframe URL to load.
 async function detectDesktopLayout(base) {
+  // quality=9 compression=2 = max visual quality with mild CPU-cheap
+  // compression; resize=scale fits iframe; reconnect=1 auto-reconnects.
+  const NEW_PARAMS = 'autoconnect=1&resize=scale&reconnect=1&quality=9&compression=2';
+  const OLD_PARAMS = 'path=desktop/websockify&autoconnect=1&resize=scale&quality=9&compression=2';
   // Try NEW layout first — noVNC at the root.
   try {
     const r = await fetch(base + '/vnc.html', { method: 'GET' });
     if (r.ok) {
       const body = await r.text().catch(() => '');
       if (body.includes('noVNC') || body.includes('novnc') || body.includes('vnc_canvas')) {
-        return { layout: 'new', path: '/vnc.html?autoconnect=1&resize=scale&reconnect=1' };
+        return { layout: 'new', path: '/vnc.html?' + NEW_PARAMS };
       }
     }
   } catch {}
@@ -1043,7 +1047,7 @@ async function detectDesktopLayout(base) {
     if (r.ok) {
       const body = await r.text().catch(() => '');
       if (body.includes('noVNC') || body.includes('novnc') || body.includes('vnc_canvas')) {
-        return { layout: 'old', path: '/desktop/vnc.html?path=desktop/websockify&autoconnect=1&resize=scale' };
+        return { layout: 'old', path: '/desktop/vnc.html?' + OLD_PARAMS };
       }
     }
   } catch {}

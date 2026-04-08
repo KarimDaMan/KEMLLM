@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v74 · Dockerfile.desktop fully mimics Ubuntu GNOME — 1920x1080, Focal cougar wallpaper, Yaru-dark theme, GNOME-style top bar (Activities + clock + systray + audio), vertical left dock with Firefox/Thunderbird/Files/Rhythmbox/Impress/Software/Help/AppGrid at 48px, desktop icons (home+trash) enabled';
+const KEMLLM_BUILD = 'v75 · desktop fixes: real Firefox from Mozilla tarball (not apt snap stub), xfce4-panel replaces plank for reliable left dock, drop broken gnome-software, ubuntu-wallpapers-focal + dynamic wallpaper picker, multi-threaded x11vnc (-threads -defer 30), noVNC quality=9 compression=2';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

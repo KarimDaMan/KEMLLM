@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v76 · drop ubuntu-wallpapers-focal from apt list (package was dropped in Jammy repos and broke the build). Dynamic wallpaper picker still finds whatever ubuntu-wallpapers installs.';
+const KEMLLM_BUILD = 'v77 · Dockerfile.desktop: split the 40-package apt install into 4 focused groups so failures point at exactly which group broke; tolerate firefox download failure; add xfce4-terminal; fix-missing on apt';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

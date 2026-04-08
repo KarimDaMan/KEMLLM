@@ -23,7 +23,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV DISPLAY=:0
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Split the install into focused groups. If any single group fails, the
+# error message points at exactly that group instead of a 40-package
+# haystack. Also: --fix-missing tolerates transient mirror flakes.
+
+# Core system tools
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     python3 python3-pip python3-venv \
     curl wget git vim nano \
     build-essential pkg-config \
@@ -33,39 +38,58 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo unzip zip tar xz-utils bzip2 \
     nodejs npm \
     sqlite3 \
+ && rm -rf /var/lib/apt/lists/*
+
+# X server + VNC stack + nginx
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     xvfb x11vnc websockify novnc \
     xterm scrot imagemagick xdotool \
     fonts-dejavu fonts-liberation fonts-ubuntu \
     libgtk-3-0 libdbus-glib-1-2 libxt6 libasound2 libx11-xcb1 \
     nginx \
     dbus-x11 \
-    xfce4 xfce4-panel xfce4-session xfce4-settings xfce4-appfinder \
+ && rm -rf /var/lib/apt/lists/*
+
+# XFCE4 desktop environment
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    xfce4 xfce4-panel xfce4-session xfce4-settings xfce4-appfinder xfce4-terminal \
     xfwm4 xfdesktop4 xfconf \
     yaru-theme-gtk yaru-theme-icon yaru-theme-sound \
     ubuntu-wallpapers \
     thunar gvfs gvfs-backends \
+ && rm -rf /var/lib/apt/lists/*
+
+# Apps that show up in the dock. These are big (LibreOffice is ~400MB) so
+# they get their own layer — if this fails the core desktop still builds.
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     thunderbird \
     rhythmbox \
     libreoffice-impress libreoffice-gtk3 \
     yelp \
  && rm -rf /var/lib/apt/lists/*
 
-# gnome-software is intentionally NOT installed — it requires snapd or
-# PackageKit daemons that don't run inside a non-systemd HF Space, so it
-# opens to a blank window. Users install apps via `apt` from terminal
-# or via Agent mode instead.
+# Real Firefox from Mozilla (Ubuntu 22.04's apt firefox is a snap stub).
+# Tolerant: if the download fails, the build still succeeds and xfce4
+# just won't have a firefox launcher — the user can install it later.
+RUN set -e \
+ && mkdir -p /opt \
+ && (wget -qO /tmp/firefox.tar.bz2 \
+       "https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US" \
+     || wget -qO /tmp/firefox.tar.bz2 \
+       "https://ftp.mozilla.org/pub/firefox/releases/latest/linux-x86_64/en-US/firefox-latest.tar.bz2" \
+     || echo "firefox download failed, continuing without it") \
+ && if [ -s /tmp/firefox.tar.bz2 ] && file /tmp/firefox.tar.bz2 | grep -q bzip2; then \
+      tar -xjf /tmp/firefox.tar.bz2 -C /opt/ \
+      && ln -sf /opt/firefox/firefox /usr/local/bin/firefox \
+      && echo "firefox installed to /opt/firefox"; \
+    else \
+      echo "firefox tarball missing or invalid, skipping"; \
+    fi \
+ && rm -f /tmp/firefox.tar.bz2
 
-# Ubuntu 22.04's apt "firefox" package is a snap stub that doesn't work in
-# a non-systemd container. Pull the real Firefox tarball directly from
-# Mozilla and install to /opt. One launcher + a symlink and Firefox works
-# the same as on a normal Ubuntu desktop.
-RUN mkdir -p /opt/firefox \
- && wget -qO /tmp/firefox.tar.bz2 \
-      "https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US" \
- && tar -xjf /tmp/firefox.tar.bz2 -C /opt/ \
- && rm /tmp/firefox.tar.bz2 \
- && ln -sf /opt/firefox/firefox /usr/local/bin/firefox \
- && cat > /usr/share/applications/firefox.desktop <<'DESKTOP'
+# Firefox .desktop entry (points at /opt/firefox if present, otherwise
+# clicking the launcher just no-ops harmlessly).
+RUN cat > /usr/share/applications/firefox.desktop <<'DESKTOP'
 [Desktop Entry]
 Version=1.0
 Name=Firefox Web Browser
@@ -76,7 +100,7 @@ Terminal=false
 Type=Application
 Icon=/opt/firefox/browser/chrome/icons/default/default128.png
 Categories=Network;WebBrowser;
-MimeType=text/html;text/xml;application/xhtml+xml;application/xml;application/vnd.mozilla.xul+xml;application/rss+xml;application/rdf+xml;image/gif;image/jpeg;image/png;x-scheme-handler/http;x-scheme-handler/https;
+MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;
 StartupNotify=true
 DESKTOP
 

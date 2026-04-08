@@ -76,16 +76,12 @@ RUN set -e \
  && mkdir -p /opt \
  && wget -qO /tmp/firefox.tar \
        "https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US" \
- && if [ ! -s /tmp/firefox.tar ]; then \
-      echo "ERROR: firefox download returned empty file"; exit 1; \
-    fi \
- && ls -lh /tmp/firefox.tar \
- && file /tmp/firefox.tar \
+ && test -s /tmp/firefox.tar \
  && tar -xaf /tmp/firefox.tar -C /opt/ \
  && rm /tmp/firefox.tar \
  && ln -sf /opt/firefox/firefox /usr/local/bin/firefox \
- && echo "firefox installed to /opt/firefox" \
- && ls /opt/firefox/firefox
+ && test -x /opt/firefox/firefox \
+ && echo "firefox installed to /opt/firefox"
 
 # Firefox .desktop entry (points at /opt/firefox if present, otherwise
 # clicking the launcher just no-ops harmlessly).

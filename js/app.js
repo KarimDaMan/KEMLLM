@@ -112,7 +112,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v78 · fix firefox install — Mozilla switched to .tar.xz (not .tar.bz2) in FF122+. Use tar -xaf to auto-detect compression. Fail loudly on empty download.';
+const KEMLLM_BUILD = 'v79 · remove `file` command from firefox step — not installed in ubuntu:22.04 base image, was aborting build with command-not-found';
 
 // ===== Terminal Boot Animation =====
 let bootRunning = false;

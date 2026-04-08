@@ -928,7 +928,7 @@ async function editImage(prompt, sourceUrl, aspectRatio) {
   // Also polls the prediction if Replicate's Prefer:wait timed out
   // server-side and returned status=processing.
   const tryOne = async (modelId, version) => {
-    const input = addAspectRatioToInput(buildImageEditInput(modelId, prompt, imageUrl), aspectRatio);
+    const input = addAspectRatioToInput(buildImageEditInput(modelId, prompt, imageUrl), aspectRatio, modelId);
     let res = await replicatePredict(modelId, input, apiKey, version);
     if (res.status === 422) {
       const genericInput = {
@@ -1031,21 +1031,40 @@ function normalizeAspectRatio(ar) {
   return s;
 }
 
+// Convert an aspect_ratio (numeric or word) into Sora's word form.
+function aspectRatioToWord(ar) {
+  const s = (ar || '').toLowerCase();
+  if (s === 'portrait' || s === '9:16' || s === '3:4' || s === '2:3' || s === 'tall' || s === 'phone') return 'portrait';
+  if (s === 'square' || s === '1:1') return 'square';
+  return 'landscape';
+}
+
+// Some models REQUIRE word form for aspect_ratio (Sora), others REQUIRE
+// numeric ("16:9") (most Flux/Nano/Kling variants). Detect by model id.
+function modelNeedsWordAspectRatio(modelId) {
+  return /sora|openai\//i.test(modelId || '');
+}
+
 // Add aspect_ratio + width/height to a Replicate input dict in-place if
-// the caller passed an aspectRatio. Also adds the ORIGINAL word form
-// ("portrait"/"landscape") under a second key so Sora-style models that
-// expect words instead of numbers still work.
-function addAspectRatioToInput(input, aspectRatio) {
+// the caller passed an aspectRatio. Dispatches the right format based
+// on the target model's requirements.
+function addAspectRatioToInput(input, aspectRatio, modelId) {
   if (!aspectRatio) return input;
   const normalized = normalizeAspectRatio(aspectRatio);
-  input.aspect_ratio = normalized;
-  // Sora uses words: send both the numeric and the word form if applicable
-  if (/^\d+:\d+$/.test(normalized)) {
-    if (normalized === '9:16') input.orientation = 'portrait';
-    else if (normalized === '16:9') input.orientation = 'landscape';
-    else if (normalized === '1:1') input.orientation = 'square';
+  if (modelNeedsWordAspectRatio(modelId)) {
+    // Sora-style: aspect_ratio must be "portrait" / "landscape" / "square"
+    input.aspect_ratio = aspectRatioToWord(normalized);
   } else {
-    input.orientation = normalized;
+    // Numeric path (most models)
+    input.aspect_ratio = normalized;
+    // Also set orientation word as a secondary hint
+    if (/^\d+:\d+$/.test(normalized)) {
+      if (normalized === '9:16') input.orientation = 'portrait';
+      else if (normalized === '16:9') input.orientation = 'landscape';
+      else if (normalized === '1:1') input.orientation = 'square';
+    } else {
+      input.orientation = normalized;
+    }
   }
   const wh = aspectRatioToWH(normalized);
   if (wh) {
@@ -1122,7 +1141,7 @@ async function generateImage(prompt, aspectRatio) {
   let lastErr = null;
   for (const id of idsToTry) {
     try {
-      const input = addAspectRatioToInput({ prompt }, aspectRatio);
+      const input = addAspectRatioToInput({ prompt }, aspectRatio, id);
       const res = await replicatePredict(id, input, apiKey);
       if (res.status === 404) {
         lastErr = new Error('Model "' + id + '" not found on Replicate');
@@ -1173,7 +1192,7 @@ async function generateVideo(prompt, aspectRatio) {
   if (!apiKey) throw new Error('Add your Replicate key in Settings to generate videos');
   const m = findModel(selectedVideo, 'video');
   if (!m) throw new Error('No video model selected');
-  const vidInput = addAspectRatioToInput({ prompt }, aspectRatio);
+  const vidInput = addAspectRatioToInput({ prompt }, aspectRatio, m.replicateId);
   let res = await replicateFetch(`/v1/models/${m.replicateId}/predictions`, {
     method: 'POST',
     headers: {

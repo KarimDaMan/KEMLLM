@@ -521,6 +521,38 @@ async function runComputerAction(input) {
   return { data: j.data, media_type: j.media_type || 'image/png', text: j.text };
 }
 
+// Pick the right computer-use tool version + beta header for the model.
+// Claude 3.5 / 3.7 use computer_20241022 (the v1 spec). Claude 4.x rejects
+// that with 400 "does not support tool types: computer_20241022" — they
+// need computer_20250124 (the v2 spec) with a different beta header.
+function computerToolForModel(model) {
+  const id = (model?.apiId || '').toLowerCase();
+  // Claude 4.x family — Sonnet 4 / Sonnet 4.5 / Sonnet 4.6 / Opus 4 / Opus 4.5 / Opus 4.6
+  if (/claude-(sonnet|opus|haiku)-4|claude-4/.test(id)) {
+    return {
+      tool: {
+        type: 'computer_20250124',
+        name: 'computer',
+        display_width_px: 1920,
+        display_height_px: 1080,
+        display_number: 0,
+      },
+      beta: 'computer-use-2025-01-24',
+    };
+  }
+  // Claude 3.5 / 3.7 (the original v1 computer use tool)
+  return {
+    tool: {
+      type: 'computer_20241022',
+      name: 'computer',
+      display_width_px: 1920,
+      display_height_px: 1080,
+      display_number: 0,
+    },
+    beta: 'computer-use-2024-10-22',
+  };
+}
+
 async function callAnthropicDirect(model, messages, apiKey, onChunk) {
   const sys = messages.find(m => m.role === 'system')?.content || '';
   const msgs = messages.filter(m => m.role !== 'system').map(anthropicMessageFrom);
@@ -533,15 +565,15 @@ async function callAnthropicDirect(model, messages, apiKey, onChunk) {
   // a normal text response — no client-side tool plumbing needed.
   const useWebSearch = profileGet('sandbox-web') !== '0';
   const tools = [];
+  // Computer-use tool — version + beta header are model-family-specific.
+  // Claude 3.5/3.7 → computer_20241022. Claude 4.x → computer_20250124.
+  // Sending the wrong one to the wrong model gives:
+  //   400 "does not support tool types: computer_20241022"
+  let computerBeta = null;
   if (useComputer) {
-    tools.push({
-      type: 'computer_20241022',
-      name: 'computer',
-      // Must match the Xvfb :0 resolution in start-desktop.sh (1920x1080 since v88)
-      display_width_px: 1920,
-      display_height_px: 1080,
-      display_number: 0,
-    });
+    const cu = computerToolForModel(model);
+    tools.push(cu.tool);
+    computerBeta = cu.beta;
   }
   if (useWebSearch) {
     tools.push({
@@ -558,8 +590,8 @@ async function callAnthropicDirect(model, messages, apiKey, onChunk) {
     'anthropic-version': '2023-06-01',
     'anthropic-dangerous-direct-browser-access': 'true',
   };
-  if (useComputer) {
-    headers['anthropic-beta'] = 'computer-use-2024-10-22';
+  if (computerBeta) {
+    headers['anthropic-beta'] = computerBeta;
   }
 
   // If computer-use is NOT enabled, do the simple single-shot call.

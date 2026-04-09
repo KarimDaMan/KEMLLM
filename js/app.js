@@ -348,7 +348,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v119 · gen chips coerce schema types (fixes Replicate 422 "Expected integer, given string"), file fields render as + upload buttons (first/last frame), generic image inputs come from chat attachments, image-mode + attachment routes to image-edit, video-mode + attachment uploads as start frame. New Kling: v3 Omni / v3 Video / v3 Motion Control / v2.6 / v2.6 Motion Control / v2.5 Turbo Pro / O1 / Avatar v2.';
+const KEMLLM_BUILD = 'v120 · Anthropic computer-use tool version is now per-model (Claude 4.x → computer_20250124, Claude 3.5/3.7 → computer_20241022) so Sonnet 4.6 stops 400-ing in Agent mode. Dockerfile.ultra rebuilt as Dockerfile.desktop + ultra extras layered on top so the desktop actually renders.';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.

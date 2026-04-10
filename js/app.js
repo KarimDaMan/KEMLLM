@@ -348,7 +348,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v121 · x11vnc tuned for max FPS (zero delay, ncache 10, noxdamage, multi-thread), noVNC switched to quality=9 compression=0, PulseAudio kemllm_sink.monitor verified on boot with manual fallback loader, Claude 4.x computer_20250124 tool';
+const KEMLLM_BUILD = 'v122 · x11vnc ncache REMOVED (broke noVNC viewport — squished to vertical strip), noxdamage REMOVED (polled 11x-larger framebuffer = lag), noVNC quality=9, PulseAudio monitor verified on boot';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.

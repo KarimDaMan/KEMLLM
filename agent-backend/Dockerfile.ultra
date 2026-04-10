@@ -1037,29 +1037,24 @@ if [ -n "$WP" ]; then
   (sleep 1 && xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitorscreen/workspace0/last-image -s "$WP" 2>/dev/null) &
 fi
 
-log "starting x11vnc on :5900 (TUNED FOR MAX FPS ON L4)"
-# Max performance settings for Nvidia L4 tier:
-# -defer 0 -wait 0     = zero delay between frames (max throughput)
-# -ncache 10 -ncache_cr = client-side pixel cache (HUGE win for window
-#                         moves, scrolling, panel redraws — the client
-#                         stores decoded pixmaps and replays them on
-#                         coordinates-only updates instead of re-decoding
-#                         fresh JPEG every time)
-# -clip xinerama0      = capture only the first logical screen (faster
-#                         than scanning all monitors when there's only one)
-# -noxdamage            = poll the full framebuffer instead of XDamage
-#                         change rects. Counter-intuitive, but for
-#                         full-screen video playback and fast desktop
-#                         animations, polling is faster than merging
-#                         thousands of tiny damage rectangles per second.
-# -threads              = multi-threaded JPEG encoding (uses all 48 vCPUs)
-# -fs 1.0               = skip duplicate frames (frameskip threshold 100%)
+log "starting x11vnc on :5900 (tuned for noVNC on L4)"
+# IMPORTANT: do NOT use -ncache with noVNC. ncache extends the virtual
+# framebuffer vertically by N extra screens for a pixel cache. Native VNC
+# clients (TigerVNC) understand the extension, but noVNC does NOT — it
+# sees a 1920x11880 canvas and squishes it into the viewport, producing
+# the narrow vertical strip we saw. Keep it off.
+#
+# Also do NOT use -noxdamage: without XDamage, x11vnc polls the ENTIRE
+# framebuffer every frame, which on 1920x1080x24 at 60+ fps is ~6 GB/s
+# of memcpy. With XDamage, it only reads the changed rectangles.
+#
+# The real performance wins for noVNC on L4:
+#   -threads           multi-threaded JPEG encoding (all 48 vCPUs)
+#   -defer 1 -wait 1   1ms floor (effectively uncapped FPS)
+#   -fs 1.0            skip duplicate frames when desktop is idle
 x11vnc -display :0 -forever -nopw -shared -rfbport 5900 \
        -threads \
-       -defer 0 -wait 0 \
-       -ncache 10 -ncache_cr \
-       -noxdamage \
-       -clip xinerama0 \
+       -defer 1 -wait 1 \
        -fs 1.0 \
        -permitfiletransfer \
        -quiet >/tmp/x11vnc.log 2>&1 &

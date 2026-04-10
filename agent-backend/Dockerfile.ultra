@@ -821,8 +821,27 @@ export PULSE_RUNTIME_PATH=/tmp/pulse
 # so any startup error actually shows in the log instead of silently
 # being swallowed.
 pulseaudio -D --exit-idle-time=-1 --log-target=file:/tmp/pulseaudio.log 2>/tmp/pulse-startup.log || log "pulseaudio daemonize failed — see /tmp/pulseaudio.log"
-# Verify: if pactl info works the daemon is alive and talking
-(sleep 1 && pactl info 2>&1 | head -5 | while read L; do log "pulse: $L"; done) &
+# Wait for the daemon to come up, then verify the null sink + monitor
+# source exist. The /api/audio endpoint in app.py reads from
+# kemllm_sink.monitor — if that source doesn't show up in pactl, audio
+# will silently fail with "connection refused" in ffmpeg.
+(
+  sleep 2
+  # Force the default sink so apps route audio through our null sink
+  pactl set-default-sink kemllm_sink 2>/dev/null || true
+  # Log what we see
+  log "pulse: default sink = $(pactl get-default-sink 2>/dev/null)"
+  log "pulse: sources = $(pactl list sources short 2>/dev/null | tr '\n' ' ')"
+  log "pulse: sinks = $(pactl list sinks short 2>/dev/null | tr '\n' ' ')"
+  # If kemllm_sink.monitor isn't showing up, the default.pa didn't load
+  # the null sink. Try loading it manually as a fallback.
+  if ! pactl list sources short 2>/dev/null | grep -q kemllm_sink; then
+    log "pulse: kemllm_sink.monitor missing — loading null sink manually"
+    pactl load-module module-null-sink sink_name=kemllm_sink sink_properties=device.description="KEMLLM_Virtual_Speaker" 2>/dev/null || true
+    pactl set-default-sink kemllm_sink 2>/dev/null || true
+    log "pulse: sources after fix = $(pactl list sources short 2>/dev/null | tr '\n' ' ')"
+  fi
+) &
 
 # HF Persistent Storage integration. If the Space has the paid Persistent
 # Storage add-on enabled, /data is a writable volume that survives across
@@ -1018,13 +1037,30 @@ if [ -n "$WP" ]; then
   (sleep 1 && xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitorscreen/workspace0/last-image -s "$WP" 2>/dev/null) &
 fi
 
-log "starting x11vnc on :5900 (full keyboard + clipboard + all inputs)"
-# Everything enabled: XKB forwarding for Shift/symbols/caps, clipboard
-# sync both directions, file transfer, all events. User explicitly wants
-# "all keys, all inputs, all outputs".
+log "starting x11vnc on :5900 (TUNED FOR MAX FPS ON L4)"
+# Max performance settings for Nvidia L4 tier:
+# -defer 0 -wait 0     = zero delay between frames (max throughput)
+# -ncache 10 -ncache_cr = client-side pixel cache (HUGE win for window
+#                         moves, scrolling, panel redraws — the client
+#                         stores decoded pixmaps and replays them on
+#                         coordinates-only updates instead of re-decoding
+#                         fresh JPEG every time)
+# -clip xinerama0      = capture only the first logical screen (faster
+#                         than scanning all monitors when there's only one)
+# -noxdamage            = poll the full framebuffer instead of XDamage
+#                         change rects. Counter-intuitive, but for
+#                         full-screen video playback and fast desktop
+#                         animations, polling is faster than merging
+#                         thousands of tiny damage rectangles per second.
+# -threads              = multi-threaded JPEG encoding (uses all 48 vCPUs)
+# -fs 1.0               = skip duplicate frames (frameskip threshold 100%)
 x11vnc -display :0 -forever -nopw -shared -rfbport 5900 \
-       -threads -ncache 0 \
-       -defer 2 -wait 2 \
+       -threads \
+       -defer 0 -wait 0 \
+       -ncache 10 -ncache_cr \
+       -noxdamage \
+       -clip xinerama0 \
+       -fs 1.0 \
        -permitfiletransfer \
        -quiet >/tmp/x11vnc.log 2>&1 &
 

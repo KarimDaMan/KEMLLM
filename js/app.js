@@ -348,7 +348,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v120 · Anthropic computer-use tool version is now per-model (Claude 4.x → computer_20250124, Claude 3.5/3.7 → computer_20241022) so Sonnet 4.6 stops 400-ing in Agent mode. Dockerfile.ultra rebuilt as Dockerfile.desktop + ultra extras layered on top so the desktop actually renders.';
+const KEMLLM_BUILD = 'v121 · x11vnc tuned for max FPS (zero delay, ncache 10, noxdamage, multi-thread), noVNC switched to quality=9 compression=0, PulseAudio kemllm_sink.monitor verified on boot with manual fallback loader, Claude 4.x computer_20250124 tool';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.

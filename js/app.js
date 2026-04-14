@@ -348,7 +348,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v125 · Skins — reskin the app to look like ChatGPT, Claude, Gemini, Grok, Meta AI, DeepSeek, Qwen, Llama, Perplexity';
+const KEMLLM_BUILD = 'v126 · Palettes — keep KEMLLM branding on every skin, scope signature animations so they no longer bleed across skins';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.

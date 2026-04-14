@@ -50,8 +50,7 @@ function siNav(panel, skipHash) {
   if (!skipHash) setHashForPanel(panel, panel === 'chat' ? currentChatId : null);
   // Update document title so it shows in browser history / tab bar
   const pretty = panel.charAt(0).toUpperCase() + panel.slice(1);
-  const brand = (typeof KEMLLM_SKINS !== 'undefined' && KEMLLM_SKINS.find(s => s.id === document.body.dataset.skin)?.wordmark) || 'KEMLLM';
-  document.title = brand + ' · ' + pretty;
+  document.title = 'KEMLLM · ' + pretty;
   if (typeof syncHomeMusic === 'function') syncHomeMusic();
   if (panel === 'media' && typeof renderMediaGrid === 'function') renderMediaGrid();
 }
@@ -697,92 +696,28 @@ function setAccent(color) {
 }
 
 // ===== Skins =====
-// Each skin reskins the whole app to imitate another AI chat product. The
-// heavy lifting is done via CSS custom-property overrides in style.css
-// under `body[data-skin="..."]` — this module just swaps the wordmark, the
-// logo glyph SVG, and the browser tab title. Picked skin persists in the
-// active profile so it syncs across devices.
-//
-// SVGs are intentionally generic geometric shapes, not the real brand
-// marks, to avoid trademark issues while still evoking each product.
+// A skin is a palette + typography theme layered over the KEMLLM identity.
+// The KEMLLM name and triangle logo stay on every skin — only the CSS
+// custom properties (--bg / --text / --accent / --font) and a handful of
+// shape/rounding rules change, driven by body[data-skin="..."] selectors
+// in style.css. Picked skin persists per-profile and syncs across devices.
 const KEMLLM_SKINS = [
-  {
-    id: 'kemllm', name: 'KEMLLM', wordmark: 'KEMLLM', swA: '#f87171', swB: '#000',
-    logo: '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"><path d="M50 14 L86 34 L50 54 L14 34 Z"/><path d="M14 50 L50 70 L86 50"/><path d="M14 66 L50 86 L86 66"/></svg>',
-  },
-  {
-    id: 'chatgpt', name: 'ChatGPT', wordmark: 'ChatGPT', swA: '#10a37f', swB: '#212121',
-    // 6-lobe rosette, similar silhouette to the ChatGPT knot but not identical
-    logo: '<svg viewBox="0 0 100 100" fill="currentColor"><path d="M50 8c-10 0-18 5-23 12-8-1-17 3-22 11-5 9-3 20 3 27-3 8-1 18 6 24 7 7 18 8 26 3 5 7 14 11 23 11s18-5 23-12c8 1 17-3 22-11 5-9 3-20-3-27 3-8 1-18-6-24-7-7-18-8-26-3-5-7-14-11-23-11Zm0 14c8 0 15 5 18 12l-18 10V22Zm-20 8c5-3 11-4 17-2L35 40l-12-7c2-6 6-10 7-3Zm46 2c5 5 7 13 5 20l-18-10 18-10Zm-58 20 18-10v20l-18 10c-3-6-3-13 0-20Zm70 20-18 10V62l18-10c3 6 3 13 0 20Zm-51 4 18-10 18 10c-3 7-11 12-18 12s-15-5-18-12Z"/></svg>',
-  },
-  {
-    id: 'claude', name: 'Claude', wordmark: 'Claude', swA: '#c96442', swB: '#f5f4ee',
-    // Asterisk / burst — evokes Anthropic's star mark
-    logo: '<svg viewBox="0 0 100 100" fill="currentColor"><g transform="translate(50 50)"><rect x="-5" y="-44" width="10" height="88" rx="5"/><rect x="-5" y="-44" width="10" height="88" rx="5" transform="rotate(45)"/><rect x="-5" y="-44" width="10" height="88" rx="5" transform="rotate(90)"/><rect x="-5" y="-44" width="10" height="88" rx="5" transform="rotate(135)"/></g></svg>',
-  },
-  {
-    id: 'gemini', name: 'Gemini', wordmark: 'Gemini', swA: '#4285f4', swB: '#d96570',
-    // 4-point sparkle
-    logo: '<svg viewBox="0 0 100 100" fill="currentColor"><path d="M50 6c2 20 22 40 42 42-20 2-40 22-42 42-2-20-22-40-42-42 20-2 40-22 42-42Z"/></svg>',
-  },
-  {
-    id: 'grok', name: 'Grok', wordmark: 'Grok', swA: '#fff', swB: '#000',
-    // Slanted X
-    logo: '<svg viewBox="0 0 100 100" fill="currentColor"><path d="M18 14h18l24 32 20-32h18L66 58l30 42H78L52 64 28 100H8l36-46L12 14h6Z"/></svg>',
-  },
-  {
-    id: 'meta', name: 'Meta AI', wordmark: 'Meta AI', swA: '#0866ff', swB: '#ff3d96',
-    // Infinity-ish overlap
-    logo: '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round"><path d="M15 50c0-14 10-24 22-24s18 8 28 24c10 16 17 24 28 24s22-10 22-24-10-24-22-24-18 8-28 24c-10 16-17 24-28 24S15 64 15 50Z" transform="scale(.85) translate(8 8)"/></svg>',
-  },
-  {
-    id: 'deepseek', name: 'DeepSeek', wordmark: 'DeepSeek', swA: '#4d6bfe', swB: '#0f172a',
-    // Whale/wave silhouette
-    logo: '<svg viewBox="0 0 100 100" fill="currentColor"><path d="M12 58c14-22 38-28 60-18 8 4 14 10 16 20 0 4-2 6-6 6-6-10-18-16-30-14-14 2-26 10-30 20-2 4-6 4-8 0-4-4-4-10-2-14Zm52-28c4 0 7 3 7 7s-3 7-7 7-7-3-7-7 3-7 7-7Z"/></svg>',
-  },
-  {
-    id: 'qwen', name: 'Qwen', wordmark: 'Qwen', swA: '#a855f7', swB: '#ec4899',
-    // Stylized Q
-    logo: '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9"><circle cx="50" cy="50" r="34"/><path d="M66 66l18 18" stroke-linecap="round"/></svg>',
-  },
-  {
-    id: 'llama', name: 'Llama', wordmark: 'Llama', swA: '#ff7a3c', swB: '#050e1a',
-    // Simple llama head silhouette
-    logo: '<svg viewBox="0 0 100 100" fill="currentColor"><path d="M30 10c-4 0-6 4-6 10v18l-8 8c-4 4-6 10-6 16v24c0 6 4 10 10 10h14v-14c0-4 2-8 6-10l14-8c4-2 6-6 6-10V18c0-6-4-10-10-10h-2v18c-4 0-8-4-8-8v-8h-10Z"/></svg>',
-  },
-  {
-    id: 'perplexity', name: 'Perplexity', wordmark: 'Perplexity', swA: '#20b8cd', swB: '#202222',
-    // Bracketed infinity / search spiral
-    logo: '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"><path d="M30 18v64M70 18v64M18 50H50L30 30M82 50H50l20 20"/></svg>',
-  },
+  { id: 'kemllm',     name: 'KEMLLM',     swA: '#f87171', swB: '#000'    },
+  { id: 'chatgpt',    name: 'GPT mode',   swA: '#10a37f', swB: '#212121' },
+  { id: 'claude',     name: 'Paper',      swA: '#c96442', swB: '#f5f4ee' },
+  { id: 'gemini',     name: 'Prism',      swA: '#4285f4', swB: '#d96570' },
+  { id: 'grok',       name: 'Monochrome', swA: '#fff',    swB: '#000'    },
+  { id: 'meta',       name: 'Neon',       swA: '#0866ff', swB: '#ff3d96' },
+  { id: 'deepseek',   name: 'Abyss',      swA: '#4d6bfe', swB: '#0f172a' },
+  { id: 'qwen',       name: 'Orchid',     swA: '#a855f7', swB: '#ec4899' },
+  { id: 'llama',      name: 'Dusk',       swA: '#ff7a3c', swB: '#050e1a' },
+  { id: 'perplexity', name: 'Teal',       swA: '#20b8cd', swB: '#202222' },
 ];
 
 function applySkin(id) {
   const skin = KEMLLM_SKINS.find(s => s.id === id) || KEMLLM_SKINS[0];
   document.body.dataset.skin = skin.id;
-  // Swap every brand-logo SVG + wordmark wherever they appear (login,
-  // sidebar, home-screen). Uses outerHTML on the svg so we can carry over
-  // whatever classes/attrs were already on it via a bit of surgery.
-  document.querySelectorAll('[data-brand-logo]').forEach(el => {
-    const parent = el.parentNode;
-    if (!parent) return;
-    // Preserve the classes on the old <svg> so layout rules keep matching.
-    const oldClass = el.getAttribute('class') || '';
-    const tmp = document.createElement('div');
-    tmp.innerHTML = skin.logo;
-    const fresh = tmp.firstElementChild;
-    if (!fresh) return;
-    fresh.setAttribute('data-brand-logo', '');
-    if (oldClass) fresh.setAttribute('class', oldClass);
-    parent.replaceChild(fresh, el);
-  });
-  document.querySelectorAll('[data-brand-name]').forEach(el => {
-    el.textContent = skin.wordmark;
-  });
-  // Tab title — keep it short, match current panel if we're not on chat.
-  const pretty = (currentPanel && currentPanel !== 'chat') ? (currentPanel.charAt(0).toUpperCase() + currentPanel.slice(1)) : '';
-  document.title = pretty ? `${skin.wordmark} · ${pretty}` : skin.wordmark;
-  // Sync the picker tiles
+  // Sync the picker tiles' selected state
   document.querySelectorAll('.sp-skin').forEach(t => t.classList.toggle('sel', t.dataset.skin === skin.id));
 }
 

@@ -318,8 +318,14 @@ input,textarea{font-family:inherit;color:inherit;}
 /* ====== HOME / TERMINAL BOOT ====== */
 #home-screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;z-index:10;padding-bottom:18vh;}
 #home-screen.hidden{display:none;}
-.hs-logo{font-family:var(--kode);font-size:38px;font-weight:600;letter-spacing:2.5px;color:var(--text);display:flex;align-items:center;gap:14px;text-shadow:0 0 32px rgba(0,0,0,.9),0 0 14px rgba(0,0,0,.95);white-space:nowrap;}
-.hs-logo svg{width:40px;height:40px;flex-shrink:0;filter:drop-shadow(0 0 16px rgba(0,0,0,.9));}
+.hs-logo{font-family:var(--kode);font-size:38px;font-weight:600;letter-spacing:2.5px;color:var(--text);display:flex;align-items:center;gap:14px;white-space:nowrap;}
+.hs-logo svg{width:40px;height:40px;flex-shrink:0;}
+/* Atmospheric dark halo — KEMLLM-signature, scoped so it doesn't muddy
+   other skins (especially the light Claude one). */
+body[data-skin="kemllm"] .hs-logo,
+body:not([data-skin]) .hs-logo{text-shadow:0 0 32px rgba(0,0,0,.9),0 0 14px rgba(0,0,0,.95);}
+body[data-skin="kemllm"] .hs-logo svg,
+body:not([data-skin]) .hs-logo svg{filter:drop-shadow(0 0 16px rgba(0,0,0,.9));}
 #term-boot{position:absolute;inset:0;font-family:var(--kode);font-size:12px;line-height:1.9;color:var(--text2);padding:28px 40px;opacity:.18;transition:opacity .35s;overflow:hidden;pointer-events:none;z-index:2;}
 #term-boot.fade{opacity:0;}
 .tb-line{white-space:pre;min-height:1.9em;}
@@ -631,16 +637,24 @@ input,textarea{font-family:inherit;color:inherit;}
 
 /* Send button press */
 #send-btn{transition:transform .18s var(--ease),box-shadow .22s var(--ease),opacity .2s;}
-#send-btn:hover{transform:scale(1.08);box-shadow:0 0 24px rgba(74,158,255,.45);}
 #send-btn:active{transform:scale(.94);}
+/* Blue halo on hover is a KEMLLM-signature flourish — scoped so it doesn't
+   bleed into every skin. Other skins can define their own hover shadow. */
+body[data-skin="kemllm"] #send-btn:hover,
+body:not([data-skin]) #send-btn:hover{transform:scale(1.08);box-shadow:0 0 24px rgba(74,158,255,.45);}
+body:not([data-skin="kemllm"]) #send-btn:hover{transform:scale(1.06);}
 
-/* Home screen logo — subtle breathing */
-.hs-logo{animation:breathe 5s ease-in-out infinite;}
+/* Home screen logo — breathing + slow spin are KEMLLM-signature effects,
+   scoped so they only fire on the default KEMLLM skin. Other skins get a
+   calm, static wordmark appropriate to their look. */
+body[data-skin="kemllm"] .hs-logo,
+body:not([data-skin]) .hs-logo{animation:breathe 5s ease-in-out infinite;}
 @keyframes breathe{
   0%,100%{transform:scale(1);opacity:.95;}
   50%{transform:scale(1.015);opacity:1;}
 }
-.hs-logo svg{animation:spin-slow 18s linear infinite;}
+body[data-skin="kemllm"] .hs-logo svg,
+body:not([data-skin]) .hs-logo svg{animation:spin-slow 18s linear infinite;}
 @keyframes spin-slow{
   0%,100%{transform:rotate(0deg);}
   50%{transform:rotate(4deg);}
@@ -681,8 +695,13 @@ input,textarea{font-family:inherit;color:inherit;}
 /* Smooth history drawer scrollbar */
 .sb-chats,.hist-list,#chat-area,#mdrop,#img-drop,#vid-drop{scroll-behavior:smooth;}
 
-/* Ripple effect on sidebar items (tiny accent line) */
-.si::after,.sb-chat::after{content:'';position:absolute;left:0;top:0;width:100%;height:100%;border-radius:inherit;background:radial-gradient(circle,rgba(74,158,255,.18) 0%,transparent 70%);opacity:0;transform:scale(.6);transition:all .4s var(--ease-out);pointer-events:none;}
+/* Ripple effect on sidebar items (tiny accent line) — the blue radial
+   ripple is a KEMLLM-signature flourish, scoped to its skin. Other skins
+   get a neutral tap feedback below. */
+body[data-skin="kemllm"] .si::after,
+body[data-skin="kemllm"] .sb-chat::after,
+body:not([data-skin]) .si::after,
+body:not([data-skin]) .sb-chat::after{content:'';position:absolute;left:0;top:0;width:100%;height:100%;border-radius:inherit;background:radial-gradient(circle,rgba(74,158,255,.18) 0%,transparent 70%);opacity:0;transform:scale(.6);transition:all .4s var(--ease-out);pointer-events:none;}
 .si:active::after,.sb-chat:active::after{opacity:1;transform:scale(1);transition:all 0s;}
 
 /* Reduced motion support */

@@ -11,7 +11,7 @@ let currentPanel = 'chat';
 //   #/chat/<chatId>     → a specific chat by id
 //   #/code, #/models, #/settings → other panels
 // Legacy (no hash) → defaults to chat.
-const VALID_PANELS = ['chat', 'media', 'studio', 'settings'];
+const VALID_PANELS = ['chat', 'media', 'settings'];
 
 function parseHash() {
   const raw = (location.hash || '').replace(/^#\/?/, '');
@@ -53,7 +53,6 @@ function siNav(panel, skipHash) {
   document.title = 'KEMLLM · ' + pretty;
   if (typeof syncHomeMusic === 'function') syncHomeMusic();
   if (panel === 'media' && typeof renderMediaGrid === 'function') renderMediaGrid();
-  if (panel === 'studio' && typeof studioOnPanelShow === 'function') studioOnPanelShow();
 }
 
 // ===== Media panel =====

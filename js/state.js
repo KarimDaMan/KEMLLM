@@ -268,13 +268,6 @@ const SYNC_KEYS = [
   'music-on',
   'music-url',
   'music-vol',
-  // Studio page — characters, published posts, saved + liked lists.
-  // All of these are profile-scoped JSON blobs written through
-  // profileSet so sync piggybacks on the existing pushSync path.
-  'studio_characters',
-  'studio_posts',
-  'studio_saved',
-  'studio_liked',
 ];
 const SYNC_POLL_INTERVAL_MS = 30 * 1000; // re-pull every 30s while open
 let _syncPollTimer = null;

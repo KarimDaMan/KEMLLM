@@ -10,11 +10,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=123">
+<link rel="stylesheet" href="css/style.css?v=124">
 <!-- KaTeX for math rendering (lazy-loaded by chat.js when first math is detected) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" media="print" onload="this.media='all'">
 </head>
-<body data-kemllm-build="123">
+<body data-kemllm-build="124">
 
 <!-- Plus button popover menu — sits at the top of <body> on purpose so it
      uses position:fixed against the viewport and is never affected by any
@@ -68,10 +68,6 @@
       <div class="si" data-panel="media">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         <span class="si-lbl">Media</span>
-      </div>
-      <div class="si" data-panel="studio">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/><circle cx="8" cy="12" r="2.2"/></svg>
-        <span class="si-lbl">Studio</span>
       </div>
       <div class="si" data-panel="settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -267,121 +263,6 @@
           <button class="media-tab" data-media-tab="video">Videos</button>
         </div>
         <div id="media-grid" class="media-grid"></div>
-      </div>
-    </div>
-
-    <!-- STUDIO PANEL — Sora-style creation + social feed.
-         Tabs: Feed (published posts, like/comment/share/save)
-               Create (compose new image/video, pick characters, publish)
-               Characters (create/manage characters and cameos)
-               Saved (posts the user has saved)
-         All state lives in profile-scoped localStorage via js/studio.js. -->
-    <div id="studio-panel" class="panel">
-      <div class="studio-wrap">
-        <div class="studio-head">
-          <div class="studio-titlebar">
-            <div class="studio-title">Studio</div>
-            <button id="studio-compose-btn" class="studio-compose-btn" title="Create a new post">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>Create</span>
-            </button>
-          </div>
-          <div class="studio-sub">Build cameos and characters, generate cinematic images and videos with them, then publish to your feed. Like, comment, save, share.</div>
-        </div>
-        <div class="studio-tabs">
-          <button class="studio-tab active" data-studio-tab="feed">Feed</button>
-          <button class="studio-tab" data-studio-tab="create">Create</button>
-          <button class="studio-tab" data-studio-tab="characters">Characters</button>
-          <button class="studio-tab" data-studio-tab="saved">Saved</button>
-        </div>
-
-        <!-- FEED VIEW -->
-        <div id="studio-view-feed" class="studio-view active">
-          <div id="studio-feed" class="studio-feed"></div>
-        </div>
-
-        <!-- CREATE VIEW — composer for image/video posts -->
-        <div id="studio-view-create" class="studio-view">
-          <div class="studio-composer">
-            <div class="studio-composer-head">
-              <div class="studio-kind-row">
-                <button class="studio-kind-btn active" data-studio-kind="image">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                  Image
-                </button>
-                <button class="studio-kind-btn" data-studio-kind="video">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                  Video
-                </button>
-              </div>
-              <select id="studio-aspect" class="studio-select">
-                <option value="9:16">Portrait 9:16</option>
-                <option value="16:9" selected>Landscape 16:9</option>
-                <option value="1:1">Square 1:1</option>
-                <option value="21:9">Cinematic 21:9</option>
-                <option value="4:3">Standard 4:3</option>
-              </select>
-            </div>
-            <textarea id="studio-prompt" class="studio-prompt" rows="4" placeholder="Describe your shot. A cinematic close-up, a sunset beach cameo of Alex, a neon-soaked city with a talking cat..."></textarea>
-            <div class="studio-characters-picker">
-              <div class="studio-picker-h">Cast - tap a character or cameo to feature them</div>
-              <div id="studio-cast-row" class="studio-cast-row"></div>
-            </div>
-            <input id="studio-caption" class="studio-caption" placeholder="Caption (optional)">
-            <div class="studio-composer-foot">
-              <div id="studio-gen-status" class="studio-gen-status"></div>
-              <div class="studio-foot-actions">
-                <button id="studio-generate-btn" class="studio-btn studio-btn-primary">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                  Generate
-                </button>
-                <button id="studio-publish-btn" class="studio-btn studio-btn-publish" disabled>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                  Publish
-                </button>
-              </div>
-            </div>
-            <div id="studio-preview" class="studio-preview"></div>
-          </div>
-        </div>
-
-        <!-- CHARACTERS VIEW -->
-        <div id="studio-view-characters" class="studio-view">
-          <div class="studio-char-head">
-            <div class="studio-char-actions">
-              <button class="studio-kind-btn active" data-studio-charkind="character">Character</button>
-              <button class="studio-kind-btn" data-studio-charkind="cameo">Cameo</button>
-            </div>
-            <div class="studio-sub" style="margin:8px 0 14px;">
-              Upload a reference image (or generate one from a prompt). The model will keep the face and style consistent whenever this character is cast in a post.
-            </div>
-            <div class="studio-char-form">
-              <div class="studio-char-drop" id="studio-char-drop">
-                <input id="studio-char-file" type="file" accept="image/*" style="display:none">
-                <div class="studio-char-drop-inner">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  <span>Drop or tap to upload a reference image</span>
-                </div>
-              </div>
-              <div class="studio-char-fields">
-                <input id="studio-char-name" class="studio-caption" placeholder="Name (e.g. Alex, Nova, Dr. Rhea)">
-                <textarea id="studio-char-desc" class="studio-prompt" rows="3" placeholder="Description. Hair, style, vibe, age, outfit, personality - anything the model should know."></textarea>
-                <div class="studio-char-gen-row">
-                  <input id="studio-char-genprompt" class="studio-caption" placeholder="Or describe a new character and we'll generate an image...">
-                  <button id="studio-char-genbtn" class="studio-btn studio-btn-secondary">Generate image</button>
-                </div>
-                <button id="studio-char-save" class="studio-btn studio-btn-primary" disabled>Save character</button>
-              </div>
-            </div>
-          </div>
-          <div class="studio-char-listh">Your characters &amp; cameos</div>
-          <div id="studio-char-list" class="studio-char-list"></div>
-        </div>
-
-        <!-- SAVED VIEW -->
-        <div id="studio-view-saved" class="studio-view">
-          <div id="studio-saved-feed" class="studio-feed"></div>
-        </div>
       </div>
     </div>
 
@@ -661,14 +542,13 @@
 
 <div id="toast"></div>
 
-<script src="js/state.js?v=123"></script>
-<script src="js/models.js?v=123"></script>
-<script src="js/api.js?v=123"></script>
-<script src="js/chat.js?v=123"></script>
-<script src="js/code.js?v=123"></script>
-<script src="js/agent.js?v=123"></script>
-<script src="js/ui.js?v=123"></script>
-<script src="js/studio.js?v=123"></script>
-<script src="js/app.js?v=123"></script>
+<script src="js/state.js?v=124"></script>
+<script src="js/models.js?v=124"></script>
+<script src="js/api.js?v=124"></script>
+<script src="js/chat.js?v=124"></script>
+<script src="js/code.js?v=124"></script>
+<script src="js/agent.js?v=124"></script>
+<script src="js/ui.js?v=124"></script>
+<script src="js/app.js?v=124"></script>
 </body>
 </html>

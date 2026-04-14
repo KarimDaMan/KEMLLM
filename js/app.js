@@ -348,7 +348,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v123 · Studio mode — Sora-style full page: feed, composer, characters/cameos with reference-image persistence, like/save/share/comment';
+const KEMLLM_BUILD = 'v124 · Remove Studio page and all related characters/posts/feed state';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.

@@ -270,41 +270,110 @@
       </div>
     </div>
 
-    <!-- STUDIO PANEL — Sora-style creation + social feed.
-         Tabs: Feed (published posts, like/comment/share/save)
-               Create (compose new image/video, pick characters, publish)
-               Characters (create/manage characters and cameos)
-               Saved (posts the user has saved)
-         All state lives in profile-scoped localStorage via js/studio.js. -->
+    <!-- STUDIO PANEL — Sora-style creator surface.
+         Layout: an inner rail (Home / Drafts / Profile) + main workspace.
+         - Home    : welcome header + grid of all published posts (yours and others)
+         - Drafts  : grid of unpublished generations (watch / publish / edit title &
+                     prompt / delete) — no banner, no share
+         - Profile : banner + avatar + stats + grid of YOUR posts (and liked tab)
+         A floating Create button opens the generation overlay on top of any page,
+         with a visual model picker, cast (characters/cameos), voice, and aspect. -->
     <div id="studio-panel" class="panel">
-      <div class="studio-wrap">
-        <div class="studio-head">
-          <div class="studio-titlebar">
-            <div class="studio-title">Studio</div>
-            <button id="studio-compose-btn" class="studio-compose-btn" title="Create a new post">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>Create</span>
+      <div class="studio-layout">
+        <!-- Inner rail: Sora-style secondary sidebar -->
+        <aside class="studio-rail">
+          <button id="studio-rail-create" class="studio-rail-create" title="Create">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Create</span>
+          </button>
+          <nav class="studio-rail-nav">
+            <button class="studio-rail-btn active" data-studio-page="home" title="Home">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9.5L12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1V9.5z"/></svg>
+              <span>Home</span>
+            </button>
+            <button class="studio-rail-btn" data-studio-page="drafts" title="Drafts">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+              <span>Drafts</span>
+            </button>
+            <button class="studio-rail-btn" data-studio-page="profile" title="Profile">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span>Profile</span>
+            </button>
+          </nav>
+        </aside>
+
+        <!-- Main area -->
+        <main class="studio-main">
+          <!-- HOME -->
+          <section class="studio-page active" data-studio-page="home">
+            <header class="studio-home-head">
+              <h1 class="studio-welcome">Welcome to Studio</h1>
+              <p class="studio-welcome-sub">Make images and videos. Star in your own feed. See what everyone is making today.</p>
+            </header>
+            <div id="studio-home-grid" class="studio-grid"></div>
+          </section>
+
+          <!-- DRAFTS -->
+          <section class="studio-page" data-studio-page="drafts">
+            <header class="studio-page-head">
+              <h1>Drafts</h1>
+              <p>Only you can see these. Watch them, change the title or prompt, post them, or delete.</p>
+            </header>
+            <div id="studio-drafts-grid" class="studio-grid studio-grid-drafts"></div>
+          </section>
+
+          <!-- PROFILE -->
+          <section class="studio-page" data-studio-page="profile">
+            <div class="studio-profile-banner">
+              <div class="studio-profile-bannerbg"></div>
+              <div class="studio-profile-id">
+                <div id="studio-profile-ava" class="studio-profile-ava">Y</div>
+                <div class="studio-profile-info">
+                  <h1 id="studio-profile-name">You</h1>
+                  <div class="studio-profile-stats">
+                    <span><b id="studio-profile-nposts">0</b> posts</span>
+                    <span><b id="studio-profile-nlikes">0</b> likes</span>
+                    <span><b id="studio-profile-nchars">0</b> characters</span>
+                  </div>
+                </div>
+                <button id="studio-profile-share" class="studio-profile-share" title="Share profile">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                  Share
+                </button>
+              </div>
+            </div>
+            <div class="studio-profile-tabs">
+              <button class="studio-profile-tab active" data-studio-ptab="posts">Posts</button>
+              <button class="studio-profile-tab" data-studio-ptab="liked">Liked</button>
+              <button class="studio-profile-tab" data-studio-ptab="characters">Characters</button>
+            </div>
+            <div id="studio-profile-grid" class="studio-grid"></div>
+          </section>
+        </main>
+      </div>
+
+      <!-- VIEWER — fullscreen post/draft player -->
+      <div id="studio-viewer" class="studio-viewer" hidden>
+        <button id="studio-viewer-close" class="studio-viewer-close" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <div id="studio-viewer-body" class="studio-viewer-body"></div>
+      </div>
+
+      <!-- CREATE OVERLAY — the thing that used to be a whole tab is now a modal -->
+      <div id="studio-create" class="studio-create" hidden>
+        <div class="studio-create-scrim" data-studio-close-create></div>
+        <div class="studio-create-sheet">
+          <div class="studio-create-head">
+            <div class="studio-create-title">Create</div>
+            <button class="studio-create-x" data-studio-close-create title="Close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
-          <div class="studio-sub">Build cameos and characters, generate cinematic images and videos with them, then publish to your feed. Like, comment, save, share.</div>
-        </div>
-        <div class="studio-tabs">
-          <button class="studio-tab active" data-studio-tab="feed">Feed</button>
-          <button class="studio-tab" data-studio-tab="create">Create</button>
-          <button class="studio-tab" data-studio-tab="characters">Characters</button>
-          <button class="studio-tab" data-studio-tab="saved">Saved</button>
-        </div>
-
-        <!-- FEED VIEW -->
-        <div id="studio-view-feed" class="studio-view active">
-          <div id="studio-feed" class="studio-feed"></div>
-        </div>
-
-        <!-- CREATE VIEW — composer for image/video posts -->
-        <div id="studio-view-create" class="studio-view">
-          <div class="studio-composer">
-            <div class="studio-composer-head">
-              <div class="studio-kind-row">
+          <div class="studio-create-body">
+            <!-- Type + model + aspect row -->
+            <div class="studio-create-typerow">
+              <div class="studio-kind-seg">
                 <button class="studio-kind-btn active" data-studio-kind="image">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                   Image
@@ -314,73 +383,109 @@
                   Video
                 </button>
               </div>
+              <!-- MODEL SCANNER — visual picker (proper scan) -->
+              <button id="studio-model-btn" class="studio-model-btn" type="button">
+                <span class="studio-model-dot"></span>
+                <span class="studio-model-label">Pick model</span>
+                <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
               <select id="studio-aspect" class="studio-select">
-                <option value="9:16">Portrait 9:16</option>
-                <option value="16:9" selected>Landscape 16:9</option>
-                <option value="1:1">Square 1:1</option>
-                <option value="21:9">Cinematic 21:9</option>
-                <option value="4:3">Standard 4:3</option>
+                <option value="9:16">9:16 Portrait</option>
+                <option value="16:9" selected>16:9 Landscape</option>
+                <option value="1:1">1:1 Square</option>
+                <option value="21:9">21:9 Cinematic</option>
+                <option value="4:3">4:3 Standard</option>
               </select>
             </div>
-            <textarea id="studio-prompt" class="studio-prompt" rows="4" placeholder="Describe your shot. A cinematic close-up, a sunset beach cameo of Alex, a neon-soaked city with a talking cat..."></textarea>
-            <div class="studio-characters-picker">
-              <div class="studio-picker-h">Cast - tap a character or cameo to feature them</div>
+
+            <!-- Model scanner dropdown (hidden unless opened) -->
+            <div id="studio-model-scanner" class="studio-model-scanner" hidden></div>
+
+            <!-- Prompt -->
+            <textarea id="studio-prompt" class="studio-prompt" rows="4" placeholder="Describe your shot. A cinematic close-up, a cameo of Alex on a neon rooftop, a talking cat in Tokyo..."></textarea>
+
+            <!-- Cast row -->
+            <div class="studio-field">
+              <div class="studio-field-h">
+                <span>Cast</span>
+                <button id="studio-cast-add" type="button" class="studio-field-add">+ New character</button>
+              </div>
               <div id="studio-cast-row" class="studio-cast-row"></div>
             </div>
-            <input id="studio-caption" class="studio-caption" placeholder="Caption (optional)">
-            <div class="studio-composer-foot">
+
+            <!-- Voice (for video) -->
+            <div class="studio-field studio-voice-field">
+              <div class="studio-field-h"><span>Voice (video)</span><span class="studio-field-hint">What they sound like &amp; say</span></div>
+              <input id="studio-voice" class="studio-input" placeholder="e.g. warm baritone, British accent, says 'Let's move.'">
+            </div>
+
+            <!-- Title / caption -->
+            <div class="studio-field">
+              <div class="studio-field-h"><span>Title</span><span class="studio-field-hint">Shown on your profile</span></div>
+              <input id="studio-title" class="studio-input" placeholder="Untitled">
+            </div>
+
+            <!-- Preview -->
+            <div id="studio-preview" class="studio-preview"></div>
+
+            <!-- Status / actions -->
+            <div class="studio-create-foot">
               <div id="studio-gen-status" class="studio-gen-status"></div>
               <div class="studio-foot-actions">
-                <button id="studio-generate-btn" class="studio-btn studio-btn-primary">
+                <button id="studio-generate-btn" class="studio-btn studio-btn-primary" type="button">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                   Generate
                 </button>
-                <button id="studio-publish-btn" class="studio-btn studio-btn-publish" disabled>
+                <button id="studio-save-draft-btn" class="studio-btn" type="button" disabled>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  Save draft
+                </button>
+                <button id="studio-publish-btn" class="studio-btn studio-btn-publish" type="button" disabled>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                  Publish
+                  Post
                 </button>
               </div>
             </div>
-            <div id="studio-preview" class="studio-preview"></div>
           </div>
         </div>
+      </div>
 
-        <!-- CHARACTERS VIEW -->
-        <div id="studio-view-characters" class="studio-view">
-          <div class="studio-char-head">
-            <div class="studio-char-actions">
+      <!-- CHARACTER EDITOR OVERLAY -->
+      <div id="studio-charmodal" class="studio-create" hidden>
+        <div class="studio-create-scrim" data-studio-close-char></div>
+        <div class="studio-create-sheet studio-create-sheet-sm">
+          <div class="studio-create-head">
+            <div class="studio-create-title">New character</div>
+            <button class="studio-create-x" data-studio-close-char title="Close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="studio-create-body">
+            <div class="studio-kind-seg">
               <button class="studio-kind-btn active" data-studio-charkind="character">Character</button>
               <button class="studio-kind-btn" data-studio-charkind="cameo">Cameo</button>
             </div>
-            <div class="studio-sub" style="margin:8px 0 14px;">
-              Upload a reference image (or generate one from a prompt). The model will keep the face and style consistent whenever this character is cast in a post.
-            </div>
             <div class="studio-char-form">
               <div class="studio-char-drop" id="studio-char-drop">
-                <input id="studio-char-file" type="file" accept="image/*" style="display:none">
+                <input id="studio-char-file" type="file" accept="image/*,video/*" style="display:none">
                 <div class="studio-char-drop-inner">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  <span>Drop or tap to upload a reference image</span>
+                  <span>Drop or tap to upload an image or video reference</span>
                 </div>
+                <video id="studio-char-vid" class="studio-char-vid" muted playsinline loop></video>
               </div>
               <div class="studio-char-fields">
-                <input id="studio-char-name" class="studio-caption" placeholder="Name (e.g. Alex, Nova, Dr. Rhea)">
-                <textarea id="studio-char-desc" class="studio-prompt" rows="3" placeholder="Description. Hair, style, vibe, age, outfit, personality - anything the model should know."></textarea>
+                <input id="studio-char-name" class="studio-input" placeholder="Name (e.g. Alex, Nova, Dr. Rhea)">
+                <textarea id="studio-char-desc" class="studio-prompt" rows="3" placeholder="Description. Hair, style, vibe, age, outfit, personality."></textarea>
+                <input id="studio-char-voice" class="studio-input" placeholder="Voice (optional) — warm baritone, British accent">
                 <div class="studio-char-gen-row">
-                  <input id="studio-char-genprompt" class="studio-caption" placeholder="Or describe a new character and we'll generate an image...">
-                  <button id="studio-char-genbtn" class="studio-btn studio-btn-secondary">Generate image</button>
+                  <input id="studio-char-genprompt" class="studio-input" placeholder="Or describe them and we'll generate a reference...">
+                  <button id="studio-char-genbtn" class="studio-btn" type="button">Generate</button>
                 </div>
-                <button id="studio-char-save" class="studio-btn studio-btn-primary" disabled>Save character</button>
+                <button id="studio-char-save" class="studio-btn studio-btn-primary" type="button" disabled>Save character</button>
               </div>
             </div>
           </div>
-          <div class="studio-char-listh">Your characters &amp; cameos</div>
-          <div id="studio-char-list" class="studio-char-list"></div>
-        </div>
-
-        <!-- SAVED VIEW -->
-        <div id="studio-view-saved" class="studio-view">
-          <div id="studio-saved-feed" class="studio-feed"></div>
         </div>
       </div>
     </div>

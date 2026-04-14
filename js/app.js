@@ -348,7 +348,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v126 · Palettes — keep KEMLLM branding on every skin, scope signature animations so they no longer bleed across skins';
+const KEMLLM_BUILD = 'v127 · Skins use real product names as labels, KEMLLM logo recolors to skin accent, background boot-code scoped to KEMLLM skin only';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.
@@ -377,6 +377,11 @@ let bootTimeouts = [];
 function termBootStart() {
   const term = document.getElementById('term-boot');
   if (!term) return;
+  // The background boot-code animation is a KEMLLM-skin signature.
+  // Skip it entirely on other skins to avoid the "fake brand + KEMLLM
+  // terminal text bleeding through" look.
+  const skin = document.body.dataset.skin;
+  if (skin && skin !== 'kemllm') return;
   bootRunning = true;
   runBootCycle();
 }

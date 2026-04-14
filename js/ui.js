@@ -697,26 +697,35 @@ function setAccent(color) {
 
 // ===== Skins =====
 // A skin is a palette + typography theme layered over the KEMLLM identity.
-// The KEMLLM name and triangle logo stay on every skin — only the CSS
-// custom properties (--bg / --text / --accent / --font) and a handful of
-// shape/rounding rules change, driven by body[data-skin="..."] selectors
-// in style.css. Picked skin persists per-profile and syncs across devices.
+// The KEMLLM name and triangle logo stay on every skin — the logo just
+// gets recolored to match the skin's accent via CSS. Tile labels reference
+// the AI product each palette is inspired by; no logos or UIs are copied.
+// Picked skin persists per-profile and syncs across devices.
 const KEMLLM_SKINS = [
   { id: 'kemllm',     name: 'KEMLLM',     swA: '#f87171', swB: '#000'    },
-  { id: 'chatgpt',    name: 'GPT mode',   swA: '#10a37f', swB: '#212121' },
-  { id: 'claude',     name: 'Paper',      swA: '#c96442', swB: '#f5f4ee' },
-  { id: 'gemini',     name: 'Prism',      swA: '#4285f4', swB: '#d96570' },
-  { id: 'grok',       name: 'Monochrome', swA: '#fff',    swB: '#000'    },
-  { id: 'meta',       name: 'Neon',       swA: '#0866ff', swB: '#ff3d96' },
-  { id: 'deepseek',   name: 'Abyss',      swA: '#4d6bfe', swB: '#0f172a' },
-  { id: 'qwen',       name: 'Orchid',     swA: '#a855f7', swB: '#ec4899' },
-  { id: 'llama',      name: 'Dusk',       swA: '#ff7a3c', swB: '#050e1a' },
-  { id: 'perplexity', name: 'Teal',       swA: '#20b8cd', swB: '#202222' },
+  { id: 'chatgpt',    name: 'ChatGPT',    swA: '#10a37f', swB: '#212121' },
+  { id: 'claude',     name: 'Claude',     swA: '#c96442', swB: '#f5f4ee' },
+  { id: 'gemini',     name: 'Gemini',     swA: '#4285f4', swB: '#d96570' },
+  { id: 'grok',       name: 'Grok',       swA: '#fff',    swB: '#000'    },
+  { id: 'meta',       name: 'Meta AI',    swA: '#0866ff', swB: '#ff3d96' },
+  { id: 'deepseek',   name: 'DeepSeek',   swA: '#4d6bfe', swB: '#0f172a' },
+  { id: 'qwen',       name: 'Qwen',       swA: '#a855f7', swB: '#ec4899' },
+  { id: 'llama',      name: 'Llama',      swA: '#ff7a3c', swB: '#050e1a' },
+  { id: 'perplexity', name: 'Perplexity', swA: '#20b8cd', swB: '#202222' },
 ];
 
 function applySkin(id) {
   const skin = KEMLLM_SKINS.find(s => s.id === id) || KEMLLM_SKINS[0];
+  const prev = document.body.dataset.skin;
   document.body.dataset.skin = skin.id;
+  // Start/stop the KEMLLM background boot-code effect to match. CSS hides
+  // the node under non-KEMLLM skins, but we also stop the timers so it
+  // doesn't waste CPU, and restart them on the way back.
+  if (skin.id === 'kemllm' && prev !== 'kemllm' && typeof window.termBootStart === 'function') {
+    window.termBootStart();
+  } else if (skin.id !== 'kemllm' && typeof window.termBootStop === 'function') {
+    window.termBootStop();
+  }
   // Sync the picker tiles' selected state
   document.querySelectorAll('.sp-skin').forEach(t => t.classList.toggle('sel', t.dataset.skin === skin.id));
 }

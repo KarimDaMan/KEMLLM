@@ -1150,6 +1150,17 @@ body:not([data-skin]) .sb-chat::after{content:'';position:absolute;left:0;top:0;
    level overrides below each block tune bubble/input shape and handle a
    few hard-coded legacy colors that don't use variables. */
 
+/* KEMLLM triangle logo follows the skin's accent on every non-default skin.
+   The inline SVGs all stroke="currentColor", so a CSS color override
+   recolors the logo everywhere it appears (login, sidebar, home screen)
+   without touching the wordmark text next to it. */
+body:not([data-skin="kemllm"]):not([data-skin=""]) .brand-logo{color:var(--accent);}
+
+/* Hide the animated boot-code background — it's a KEMLLM signature and
+   has no business showing up under a different skin. Also stopped from
+   starting in js/app.js when a non-default skin is active. */
+body:not([data-skin="kemllm"]):not([data-skin=""]) #term-boot{display:none !important;}
+
 /* ----- ChatGPT ----- */
 body[data-skin="chatgpt"]{
   --bg:#212121;--bg2:#171717;--bg3:#2f2f2f;--bg4:#404040;

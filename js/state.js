@@ -171,6 +171,7 @@ function activateProfile(id) {
   loadMCPState();
   applyTheme(profileGet('theme') || 'dark');
   applyAccent(profileGet('accent') || '#4a9eff');
+  if (typeof applySkin === 'function') applySkin(profileGet('skin') || 'kemllm');
   // Check if HF backend supports the desktop stack → reveal the floating button
   if (typeof probeDesktopSupport === 'function') probeDesktopSupport();
   // Pull synced data from the cloud (chats/settings/custom models from
@@ -244,6 +245,7 @@ const SYNC_KEYS = [
   'mcp_connected',
   'theme',
   'accent',
+  'skin',
   // Model defaults
   'temp',
   'max-tokens',
@@ -354,6 +356,8 @@ async function pullSync(opts) {
     if (typeof renderAIMemory === 'function') renderAIMemory();
     const accent = profileGet('accent');
     if (accent && typeof applyAccent === 'function') applyAccent(accent);
+    const skin = profileGet('skin');
+    if (skin && typeof applySkin === 'function') applySkin(skin);
   } catch (e) {
     if (!silent) console.warn('[KEMLLM] sync pull error:', e);
   }

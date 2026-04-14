@@ -10,11 +10,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=124">
+<link rel="stylesheet" href="css/style.css?v=125">
 <!-- KaTeX for math rendering (lazy-loaded by chat.js when first math is detected) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" media="print" onload="this.media='all'">
 </head>
-<body data-kemllm-build="124">
+<body data-kemllm-build="125">
 
 <!-- Plus button popover menu — sits at the top of <body> on purpose so it
      uses position:fixed against the viewport and is never affected by any
@@ -37,8 +37,8 @@
 <div id="login" class="show">
   <div class="login-box">
     <div class="login-logo">
-      <svg class="km-logo" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"><path d="M50 14 L86 34 L50 54 L14 34 Z"/><path d="M14 50 L50 70 L86 50"/><path d="M14 66 L50 86 L86 66"/></svg>
-      <span>KEMLLM</span>
+      <svg class="km-logo brand-logo" data-brand-logo viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"><path d="M50 14 L86 34 L50 54 L14 34 Z"/><path d="M14 50 L50 70 L86 50"/><path d="M14 66 L50 86 L86 66"/></svg>
+      <span data-brand-name>KEMLLM</span>
     </div>
     <div class="login-tag">Every model. One workspace.</div>
     <button id="btn-github" class="lbtn lbtn-gh">
@@ -56,8 +56,8 @@
   <!-- SIDEBAR -->
   <div id="sb-icons">
     <div id="si-logo" class="si-logo">
-      <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"><path d="M50 14 L86 34 L50 54 L14 34 Z"/><path d="M14 50 L50 70 L86 50"/><path d="M14 66 L50 86 L86 66"/></svg>
-      <span>KEMLLM</span>
+      <svg class="brand-logo" data-brand-logo viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"><path d="M50 14 L86 34 L50 54 L14 34 Z"/><path d="M14 50 L50 70 L86 50"/><path d="M14 66 L50 86 L86 66"/></svg>
+      <span data-brand-name>KEMLLM</span>
     </div>
 
     <div class="sb-nav">
@@ -170,8 +170,8 @@
         <div id="term-boot"></div>
         <div id="home-screen">
           <div class="hs-logo">
-            <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"><path d="M50 14 L86 34 L50 54 L14 34 Z"/><path d="M14 50 L50 70 L86 50"/><path d="M14 66 L50 86 L86 66"/></svg>
-            <span>KEMLLM</span>
+            <svg class="brand-logo" data-brand-logo viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"><path d="M50 14 L86 34 L50 54 L14 34 Z"/><path d="M14 50 L50 70 L86 50"/><path d="M14 66 L50 86 L86 66"/></svg>
+            <span data-brand-name>KEMLLM</span>
           </div>
         </div>
         <!-- Background music player. Two backends:
@@ -351,6 +351,11 @@
               <div class="sp-swatch" data-color="#fb923c" style="background:#fb923c"></div>
               <div class="sp-swatch" data-color="#f87171" style="background:#f87171"></div>
             </div>
+          </div>
+          <div class="sp-row">
+            <label>Skin — reskin the whole app to look like another AI product</label>
+            <div id="sp-skins" class="sp-skins"></div>
+            <div class="sub">Each skin overrides colors, typography, bubble/input shape and the wordmark. Pick "KEMLLM" to go back to the original look.</div>
           </div>
         </div>
 
@@ -542,13 +547,13 @@
 
 <div id="toast"></div>
 
-<script src="js/state.js?v=124"></script>
-<script src="js/models.js?v=124"></script>
-<script src="js/api.js?v=124"></script>
-<script src="js/chat.js?v=124"></script>
-<script src="js/code.js?v=124"></script>
-<script src="js/agent.js?v=124"></script>
-<script src="js/ui.js?v=124"></script>
-<script src="js/app.js?v=124"></script>
+<script src="js/state.js?v=125"></script>
+<script src="js/models.js?v=125"></script>
+<script src="js/api.js?v=125"></script>
+<script src="js/chat.js?v=125"></script>
+<script src="js/code.js?v=125"></script>
+<script src="js/agent.js?v=125"></script>
+<script src="js/ui.js?v=125"></script>
+<script src="js/app.js?v=125"></script>
 </body>
 </html>

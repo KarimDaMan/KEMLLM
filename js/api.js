@@ -119,6 +119,8 @@ function loadAllSettings() {
     if (musicVolLabelEl) musicVolLabelEl.textContent = v + '%';
   }
   if (typeof syncHomeMusic === 'function') syncHomeMusic();
+  // Skin picker — rebuild the tiles and highlight the active one
+  if (typeof renderSkinPicker === 'function') renderSkinPicker();
 }
 function saveKey(provider) {
   const el = document.getElementById('key-' + provider);

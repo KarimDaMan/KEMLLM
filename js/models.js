@@ -3,7 +3,7 @@
 // https://replicate.com/<owner> pages. Every version listed is a real
 // Replicate model that can be invoked via the prediction API.
 //
-// Updated 2026-04-07.
+// Updated 2026-04-22.
 'use strict';
 
 const PROVIDER_COLORS = {
@@ -14,6 +14,8 @@ const PROVIDER_COLORS = {
   meta:      '#0467df',
   mistral:   '#fa520f',
   deepseek:  '#4d6bff',
+  qwen:      '#a855f7',
+  moonshot:  '#ffb347',
   custom:    '#a78bfa',
 };
 
@@ -39,6 +41,7 @@ const CHAT_MODELS = [
   { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'anthropic', apiId: 'claude-sonnet-4-6', requiresDirectKey: true },
   { id: 'claude-haiku-4-6',  name: 'Claude Haiku 4.6',  provider: 'anthropic', apiId: 'claude-haiku-4-6',  requiresDirectKey: true },
   // On Replicate AND direct API
+  { id: 'claude-opus-4.7',   name: 'Claude Opus 4.7',   provider: 'anthropic', replicateId: 'anthropic/claude-opus-4.7',   apiId: 'claude-opus-4-7' },
   { id: 'claude-opus-4.6',   name: 'Claude Opus 4.6',   provider: 'anthropic', replicateId: 'anthropic/claude-opus-4.6',   apiId: 'claude-opus-4-6' },
   { id: 'claude-4.5-sonnet', name: 'Claude 4.5 Sonnet', provider: 'anthropic', replicateId: 'anthropic/claude-4.5-sonnet', apiId: 'claude-sonnet-4-5' },
   { id: 'claude-4.5-haiku',  name: 'Claude 4.5 Haiku',  provider: 'anthropic', replicateId: 'anthropic/claude-4.5-haiku',  apiId: 'claude-haiku-4-5' },
@@ -108,6 +111,13 @@ const CHAT_MODELS = [
   // base/non-instruct models that don't accept chat-formatted prompts and
   // some require version pinning that breaks the universal predict path.
 
+  // ===== Qwen (Alibaba) =====
+  { id: 'qwen3-235b', name: 'Qwen 3 235B', provider: 'qwen', replicateId: 'qwen/qwen3-235b-a22b-instruct-2507' },
+
+  // ===== Moonshot (Kimi) =====
+  { id: 'kimi-k2.5',       name: 'Kimi K2.5',          provider: 'moonshot', replicateId: 'moonshotai/kimi-k2.5' },
+  { id: 'kimi-k2-thinking', name: 'Kimi K2 Thinking',  provider: 'moonshot', replicateId: 'moonshotai/kimi-k2-thinking' },
+
   // ===== Google DeepMind (open-weight Gemma family) =====
   { id: 'gemma-3-27b', name: 'Gemma 3 27B IT', provider: 'google', replicateId: 'google-deepmind/gemma-3-27b-it' },
   { id: 'gemma-3-12b', name: 'Gemma 3 12B IT', provider: 'google', replicateId: 'google-deepmind/gemma-3-12b-it' },
@@ -133,6 +143,11 @@ const IMAGE_MODELS = [
   { id: 'flux-dev',            name: 'FLUX Dev',            replicateId: 'black-forest-labs/flux-dev' },
   { id: 'flux-fill-pro',       name: 'FLUX Fill Pro',       replicateId: 'black-forest-labs/flux-fill-pro' },
   { id: 'flux-fill-dev',       name: 'FLUX Fill Dev',       replicateId: 'black-forest-labs/flux-fill-dev' },
+  { id: 'flux-kontext-pro',    name: 'FLUX Kontext Pro',    replicateId: 'black-forest-labs/flux-kontext-pro' },
+  { id: 'flux-kontext-max',    name: 'FLUX Kontext Max',    replicateId: 'black-forest-labs/flux-kontext-max' },
+  { id: 'flux-kontext-dev',    name: 'FLUX Kontext Dev',    replicateId: 'black-forest-labs/flux-kontext-dev' },
+  { id: 'flux-2-klein-9b',     name: 'FLUX 2 Klein 9B',     replicateId: 'black-forest-labs/flux-2-klein-9b' },
+  { id: 'flux-2-klein-4b',     name: 'FLUX 2 Klein 4B',     replicateId: 'black-forest-labs/flux-2-klein-4b' },
   // Google
   { id: 'nano-banana-pro', name: 'Nano Banana Pro', replicateId: 'google/nano-banana-pro' },
   { id: 'nano-banana-2',   name: 'Nano Banana 2',   replicateId: 'google/nano-banana-2' },
@@ -162,6 +177,27 @@ const IMAGE_MODELS = [
   { id: 'ideogram-v3-turbo',    name: 'Ideogram V3 Turbo',    replicateId: 'ideogram-ai/ideogram-v3-turbo' },
   { id: 'ideogram-v2',          name: 'Ideogram V2',          replicateId: 'ideogram-ai/ideogram-v2' },
   { id: 'ideogram-v2-turbo',    name: 'Ideogram V2 Turbo',    replicateId: 'ideogram-ai/ideogram-v2-turbo' },
+  { id: 'ideogram-v2a',         name: 'Ideogram V2a',         replicateId: 'ideogram-ai/ideogram-v2a' },
+  { id: 'ideogram-v2a-turbo',   name: 'Ideogram V2a Turbo',   replicateId: 'ideogram-ai/ideogram-v2a-turbo' },
+  { id: 'ideogram-character',   name: 'Ideogram Character',   replicateId: 'ideogram-ai/ideogram-character' },
+  // Recraft
+  { id: 'recraft-v4-pro',     name: 'Recraft V4 Pro',     replicateId: 'recraft-ai/recraft-v4-pro' },
+  { id: 'recraft-v4',         name: 'Recraft V4',         replicateId: 'recraft-ai/recraft-v4' },
+  { id: 'recraft-v4-pro-svg', name: 'Recraft V4 Pro SVG', replicateId: 'recraft-ai/recraft-v4-pro-svg' },
+  { id: 'recraft-v4-svg',     name: 'Recraft V4 SVG',     replicateId: 'recraft-ai/recraft-v4-svg' },
+  // ByteDance (Seedream)
+  { id: 'seedream-5-lite', name: 'Seedream 5.0 Lite', replicateId: 'bytedance/seedream-5-lite' },
+  { id: 'seedream-4.5',   name: 'Seedream 4.5',      replicateId: 'bytedance/seedream-4.5' },
+  { id: 'seedream-4',     name: 'Seedream 4',         replicateId: 'bytedance/seedream-4' },
+  // Qwen Image
+  { id: 'qwen-image-2-pro', name: 'Qwen Image 2 Pro', replicateId: 'qwen/qwen-image-2-pro' },
+  { id: 'qwen-image-2',     name: 'Qwen Image 2',     replicateId: 'qwen/qwen-image-2' },
+  // Luma
+  { id: 'photon',       name: 'Luma Photon',       replicateId: 'luma/photon' },
+  { id: 'photon-flash', name: 'Luma Photon Flash', replicateId: 'luma/photon-flash' },
+  // Wan
+  { id: 'wan-2.7-image-pro', name: 'Wan 2.7 Image Pro', replicateId: 'wan-video/wan-2.7-image-pro' },
+  { id: 'wan-2.7-image',     name: 'Wan 2.7 Image',     replicateId: 'wan-video/wan-2.7-image' },
   // Runway
   { id: 'gen4-image',       name: 'Runway Gen-4 Image',       replicateId: 'runwayml/gen4-image' },
   { id: 'gen4-image-turbo', name: 'Runway Gen-4 Image Turbo', replicateId: 'runwayml/gen4-image-turbo' },
@@ -191,13 +227,43 @@ const VIDEO_MODELS = [
   { id: 'hailuo-2.3',      name: 'Minimax Hailuo 2.3',      replicateId: 'minimax/hailuo-2.3' },
   { id: 'hailuo-2.3-fast', name: 'Minimax Hailuo 2.3 Fast', replicateId: 'minimax/hailuo-2.3-fast' },
   { id: 'hailuo-02',       name: 'Minimax Hailuo 02',       replicateId: 'minimax/hailuo-02' },
+  { id: 'hailuo-02-fast',  name: 'Minimax Hailuo 02 Fast', replicateId: 'minimax/hailuo-02-fast' },
   { id: 'minimax-video-01',name: 'Minimax Video 01',        replicateId: 'minimax/video-01' },
+  // ByteDance (Seedance)
+  { id: 'seedance-2.0',         name: 'Seedance 2.0',         replicateId: 'bytedance/seedance-2.0' },
+  { id: 'seedance-2.0-fast',    name: 'Seedance 2.0 Fast',    replicateId: 'bytedance/seedance-2.0-fast' },
+  { id: 'seedance-1.5-pro',     name: 'Seedance 1.5 Pro',     replicateId: 'bytedance/seedance-1.5-pro' },
+  { id: 'seedance-1-pro',       name: 'Seedance 1 Pro',       replicateId: 'bytedance/seedance-1-pro' },
+  { id: 'seedance-1-pro-fast',  name: 'Seedance 1 Pro Fast',  replicateId: 'bytedance/seedance-1-pro-fast' },
+  { id: 'seedance-1-lite',      name: 'Seedance 1 Lite',      replicateId: 'bytedance/seedance-1-lite' },
   // Lightricks LTX
-  { id: 'ltx-2-pro',  name: 'LTX 2 Pro',  replicateId: 'lightricks/ltx-2-pro' },
-  { id: 'ltx-2-fast', name: 'LTX 2 Fast', replicateId: 'lightricks/ltx-2-fast' },
-  { id: 'ltx-video',  name: 'LTX Video',  replicateId: 'lightricks/ltx-video' },
+  { id: 'ltx-2.3-pro',    name: 'LTX 2.3 Pro',    replicateId: 'lightricks/ltx-2.3-pro' },
+  { id: 'ltx-2.3-fast',   name: 'LTX 2.3 Fast',   replicateId: 'lightricks/ltx-2.3-fast' },
+  { id: 'ltx-2-pro',      name: 'LTX 2 Pro',      replicateId: 'lightricks/ltx-2-pro' },
+  { id: 'ltx-2-fast',     name: 'LTX 2 Fast',     replicateId: 'lightricks/ltx-2-fast' },
+  { id: 'ltx-2-distilled',name: 'LTX 2 Distilled', replicateId: 'lightricks/ltx-2-distilled' },
+  { id: 'ltx-2-retake',   name: 'LTX 2 Retake',   replicateId: 'lightricks/ltx-2-retake' },
+  { id: 'ltx-video',      name: 'LTX Video',       replicateId: 'lightricks/ltx-video' },
+  // Wan Video
+  { id: 'wan-2.7-t2v',       name: 'Wan 2.7 T2V',       replicateId: 'wan-video/wan-2.7-t2v' },
+  { id: 'wan-2.7-i2v',       name: 'Wan 2.7 I2V',       replicateId: 'wan-video/wan-2.7-i2v' },
+  { id: 'wan-2.7-r2v',       name: 'Wan 2.7 R2V',       replicateId: 'wan-video/wan-2.7-r2v' },
+  { id: 'wan-2.7-videoedit', name: 'Wan 2.7 VideoEdit',  replicateId: 'wan-video/wan-2.7-videoedit' },
   // xAI Grok video
-  { id: 'grok-imagine-video', name: 'Grok Imagine Video', replicateId: 'xai/grok-imagine-video' },
+  { id: 'grok-imagine-video',           name: 'Grok Imagine Video',     replicateId: 'xai/grok-imagine-video' },
+  { id: 'grok-imagine-r2v',             name: 'Grok Imagine R2V',       replicateId: 'xai/grok-imagine-r2v' },
+  { id: 'grok-imagine-video-extension', name: 'Grok Imagine Video Ext', replicateId: 'xai/grok-imagine-video-extension' },
+  // Luma Ray
+  { id: 'ray-2-720p',       name: 'Luma Ray 2 720p',       replicateId: 'luma/ray-2-720p' },
+  { id: 'ray-2-540p',       name: 'Luma Ray 2 540p',       replicateId: 'luma/ray-2-540p' },
+  { id: 'ray-flash-2-720p', name: 'Luma Ray Flash 2 720p', replicateId: 'luma/ray-flash-2-720p' },
+  { id: 'ray-flash-2-540p', name: 'Luma Ray Flash 2 540p', replicateId: 'luma/ray-flash-2-540p' },
+  { id: 'luma-modify-video', name: 'Luma Modify Video',    replicateId: 'luma/modify-video' },
+  // PixVerse
+  { id: 'pixverse-v4', name: 'PixVerse V4', replicateId: 'pixverse/pixverse-v4' },
+  // Vidu
+  { id: 'vidu-q3-pro',   name: 'Vidu Q3 Pro',   replicateId: 'vidu/q3-pro' },
+  { id: 'vidu-q3-turbo', name: 'Vidu Q3 Turbo', replicateId: 'vidu/q3-turbo' },
   // Kuaishou Kling — every model owned by the kwaivgi account on
   // Replicate (verified live from https://replicate.com/kwaivgi).
   // === v3 family (newest) ===

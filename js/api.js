@@ -921,13 +921,6 @@ async function callReplicateChat(model, messages, apiKey, onChunk) {
 // Known-working fallback image models on Replicate.
 // If the user-selected model 404s, we try these in order so the user
 // still gets an image instead of a cryptic error.
-const IMAGE_FALLBACK_IDS = [
-  'black-forest-labs/flux-schnell',
-  'black-forest-labs/flux-1.1-pro',
-  'stability-ai/stable-diffusion-3-medium',
-  'ideogram-ai/ideogram-v3-turbo',
-];
-
 // The ONLY image-edit fallback. If the user's selected image model can't
 // do editing (404 / 422 / no output), we fall back to this and nothing
 // else. Per user requirement: "use what's selected, if no editing then
@@ -1228,57 +1221,28 @@ async function generateImage(prompt, aspectRatio, extras) {
   const m = findModel(selectedImage, 'image');
   if (!m) throw new Error('No image model selected');
 
-  const idsToTry = [m.replicateId, ...IMAGE_FALLBACK_IDS.filter(id => id !== m.replicateId)];
-  let lastErr = null;
-  for (const id of idsToTry) {
-    try {
-      // Start with the user's chip extras, then layer the prompt + aspect
-      // ratio defaults on top so they always win over stale values.
-      const base = Object.assign({}, extras || {}, { prompt });
-      const input = addAspectRatioToInput(base, aspectRatio, id);
-      const res = await replicatePredict(id, input, apiKey);
-      if (res.status === 404) {
-        lastErr = new Error('Model "' + id + '" not found on Replicate');
-        continue;
-      }
-      if (res.status === 422) {
-        // Schema mismatch — either the model wants a different field
-        // name, OR (more commonly) it's an edit-only model that refuses
-        // to run without an `image` input. Either way we can't generate
-        // from this model — skip and try the next fallback.
-        const t = await res.text().catch(() => '');
-        lastErr = new Error('Model "' + id + '" rejected: ' + t.slice(0, 200));
-        continue;
-      }
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error('Image gen ' + res.status + ': ' + t.slice(0, 200));
-      }
-      let data = await res.json();
-      // Poll past Replicate's 60s Prefer:wait timeout for slow models.
-      data = await awaitPrediction(data, apiKey);
-      if (data.status === 'failed' || data.status === 'canceled') {
-        const errMsg = (data.error || 'unknown').toString();
-        lastErr = new Error('Model "' + id + '" ' + data.status + ': ' + errMsg);
-        // If it's an edit-only model or no-image error, skip to next
-        if (/image|edit|required/i.test(errMsg)) continue;
-        throw lastErr;
-      }
-      const url = extractOutputUrl(data.output);
-      if (!url) {
-        lastErr = new Error('Model "' + id + '" succeeded but returned no URL');
-        continue;
-      }
-      if (id !== m.replicateId) showToast('Used fallback: ' + id);
-      return url;
-    } catch (e) {
-      lastErr = e;
-      // Only propagate non-recoverable errors; everything that looks
-      // like a schema/edit-only/no-image rejection should try the next.
-      if (!/not found|rejected|edit|image is required|422/i.test(String(e.message))) throw e;
-    }
+  const base = Object.assign({}, extras || {}, { prompt });
+  const input = addAspectRatioToInput(base, aspectRatio, m.replicateId);
+  const res = await replicatePredict(m.replicateId, input, apiKey, m.version);
+  if (res.status === 404) {
+    throw new Error(`Model "${m.name}" (${m.replicateId}) was not found on Replicate. It may have been renamed or removed — pick a different image model.`);
   }
-  throw lastErr || new Error('All image models failed');
+  if (res.status === 422) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`Model "${m.name}" rejected the request: ${t.slice(0, 200)}`);
+  }
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error('Image gen ' + res.status + ': ' + t.slice(0, 200));
+  }
+  let data = await res.json();
+  data = await awaitPrediction(data, apiKey);
+  if (data.status === 'failed' || data.status === 'canceled') {
+    throw new Error(`Model "${m.name}" ${data.status}: ${(data.error || 'unknown').toString().slice(0, 200)}`);
+  }
+  const url = extractOutputUrl(data.output);
+  if (!url) throw new Error(`Model "${m.name}" succeeded but returned no image URL`);
+  return url;
 }
 
 async function generateVideo(prompt, aspectRatio, extras) {

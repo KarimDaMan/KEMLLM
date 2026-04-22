@@ -348,7 +348,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v129 · Model catalog refresh — 55+ new models: Claude Opus 4.7, Qwen 3, Kimi K2, FLUX Kontext, Recraft V4, Seedream, Seedance, Luma Ray/Photon, Wan 2.7, and more';
+const KEMLLM_BUILD = 'v130 · Fix image model lying — remove silent fallback chain, always run the model the user picked or show a clear error';
 
 // Announcement banner id. Bump this whenever index.html's banner text
 // changes so users who already dismissed the previous banner see the

@@ -348,7 +348,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v132 · Fix image prompt rewriting — AI now uses the user\'s exact words instead of over-elaborating into a verbose art-director description';
+const KEMLLM_BUILD = 'v133 · Force verbatim image prompts — AI must pass user\'s words as-is with no added style/color/lighting adjectives';
 
 // Announcement banner id. Bump this whenever index.html's banner text
 // changes so users who already dismissed the previous banner see the

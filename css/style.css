@@ -1287,3 +1287,18 @@ body[data-skin="perplexity"]{
 body[data-skin="perplexity"] #send-btn{background:#20b8cd;color:#fff;}
 body[data-skin="perplexity"] #input-box{border-radius:14px;background:#191a1a;border-color:#2a2c2c;}
 body[data-skin="perplexity"] .msg-u .bubble{background:#2a2c2c;color:#f7f7f6;padding:10px 18px;border-radius:14px;max-width:76%;text-align:left;border:1px solid #383a3a;}
+
+/* ========== ANNOUNCEMENT BANNER ========== */
+.banner{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:10px 18px;background:linear-gradient(90deg,rgba(124,90,224,.18),rgba(236,72,153,.18));border-bottom:1px solid var(--border2);color:var(--text);font-size:13px;line-height:1.4;position:relative;z-index:30;animation:bannerSlideIn .35s var(--ease-out);}
+.banner[hidden]{display:none;}
+.banner-body{flex:1;min-width:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.banner-tag{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#fff;background:linear-gradient(135deg,#7c5ae0,#ec4899);padding:3px 9px;border-radius:999px;flex-shrink:0;}
+.banner-text{color:var(--text2);}
+.banner-text strong{color:var(--text);font-weight:600;}
+.banner-x{background:none;border:none;color:var(--text3);cursor:pointer;font-size:22px;line-height:1;padding:4px 10px;border-radius:6px;flex-shrink:0;transition:color .15s,background .15s;font-family:inherit;}
+.banner-x:hover{color:var(--text);background:var(--bg3);}
+@keyframes bannerSlideIn{from{transform:translateY(-8px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+@media (max-width:640px){
+  .banner{padding:8px 12px;font-size:12px;gap:8px;}
+  .banner-tag{font-size:9px;padding:2px 7px;}
+}

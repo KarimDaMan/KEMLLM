@@ -348,7 +348,28 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v127 · Skins use real product names as labels, KEMLLM logo recolors to skin accent, background boot-code scoped to KEMLLM skin only';
+const KEMLLM_BUILD = 'v128 · GPT Image 2 added to the image-model catalog, announced via dismissible banner';
+
+// Announcement banner id. Bump this whenever index.html's banner text
+// changes so users who already dismissed the previous banner see the
+// new one. Dismissal is saved to localStorage so it sticks across
+// reloads on the same device.
+const KEMLLM_BANNER = 'gpt-image-2';
+function initBanner() {
+  const el = document.getElementById('banner');
+  if (!el) return;
+  try {
+    if (localStorage.getItem('banner-dismissed') === KEMLLM_BANNER) return;
+  } catch { /* private-mode localStorage throws; fall through and show */ }
+  el.hidden = false;
+  const close = document.getElementById('banner-close');
+  if (close) {
+    close.addEventListener('click', () => {
+      el.hidden = true;
+      try { localStorage.setItem('banner-dismissed', KEMLLM_BANNER); } catch {}
+    });
+  }
+}
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.
@@ -994,6 +1015,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderModelsPanel();
   createStars();
   termBootStart();
+  initBanner();
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && typeof pullSync === 'function') {
       pullSync({ silent: true });

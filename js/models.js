@@ -144,6 +144,7 @@ const IMAGE_MODELS = [
   { id: 'imagen-3-fast',   name: 'Imagen 3 Fast',   replicateId: 'google/imagen-3-fast' },
   { id: 'gemini-2.5-flash-image', name: 'Gemini 2.5 Flash Image', replicateId: 'google/gemini-2.5-flash-image' },
   // OpenAI
+  { id: 'gpt-image-2',     name: 'GPT Image 2',     replicateId: 'openai/gpt-image-2' },
   { id: 'gpt-image-1.5',   name: 'GPT Image 1.5',   replicateId: 'openai/gpt-image-1.5' },
   { id: 'gpt-image-1',     name: 'GPT Image 1',     replicateId: 'openai/gpt-image-1' },
   { id: 'gpt-image-1-mini',name: 'GPT Image 1 Mini',replicateId: 'openai/gpt-image-1-mini' },

@@ -1126,7 +1126,20 @@ function aspectRatioToWord(ar) {
 // Some models REQUIRE word form for aspect_ratio (Sora), others REQUIRE
 // numeric ("16:9") (most Flux/Nano/Kling variants). Detect by model id.
 function modelNeedsWordAspectRatio(modelId) {
-  return /sora|openai\//i.test(modelId || '');
+  return /sora/i.test(modelId || '');
+}
+
+// GPT Image models only accept a tiny set of aspect ratios. Map anything
+// outside that set to the closest supported value so the request doesn't 422.
+function clampGptImageAspectRatio(ar) {
+  const supported = ['1:1', '3:2', '2:3'];
+  if (supported.includes(ar)) return ar;
+  const m = (ar || '').match(/^(\d+)\s*[:x\/]\s*(\d+)$/);
+  if (!m) return '1:1';
+  const ratio = parseInt(m[1], 10) / parseInt(m[2], 10);
+  if (ratio > 1.15) return '3:2';
+  if (ratio < 0.85) return '2:3';
+  return '1:1';
 }
 
 // Add aspect_ratio + width/height to a Replicate input dict in-place if
@@ -1134,7 +1147,12 @@ function modelNeedsWordAspectRatio(modelId) {
 // on the target model's requirements.
 function addAspectRatioToInput(input, aspectRatio, modelId) {
   if (!aspectRatio) return input;
-  const normalized = normalizeAspectRatio(aspectRatio);
+  let normalized = normalizeAspectRatio(aspectRatio);
+  // GPT Image models only accept 1:1, 3:2, 2:3
+  if (/openai\/gpt-image/i.test(modelId || '')) {
+    input.aspect_ratio = clampGptImageAspectRatio(normalized);
+    return input;
+  }
   if (modelNeedsWordAspectRatio(modelId)) {
     // Sora-style: aspect_ratio must be "portrait" / "landscape" / "square"
     input.aspect_ratio = aspectRatioToWord(normalized);

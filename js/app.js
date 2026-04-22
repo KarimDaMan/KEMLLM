@@ -348,7 +348,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v130 · Fix image model lying — remove silent fallback chain, always run the model the user picked or show a clear error';
+const KEMLLM_BUILD = 'v131 · Fix GPT Image 2 aspect_ratio 422 — stop sending word-form to non-Sora OpenAI models, clamp to supported 1:1/3:2/2:3';
 
 // Announcement banner id. Bump this whenever index.html's banner text
 // changes so users who already dismissed the previous banner see the

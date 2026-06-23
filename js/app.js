@@ -346,7 +346,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v135 · Music removed';
+const KEMLLM_BUILD = 'v136 - Icons fixed; models updated';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.
@@ -415,27 +415,32 @@ const BOOT_LINES = [
   { text: '   → deepseek       (replicate)', cls: 'tb-white', stagger: true },
   { text: '   → replicate      (fallback)', cls: 'tb-white', stagger: true },
   { text: '/– importing chat models', cls: 'tb-blue' },
-  { text: '   Anthropic/Claude-Opus-4.6', cls: 'tb-white', stagger: true },
+  { text: '   Anthropic/Claude-Fable-5', cls: 'tb-white', stagger: true },
+  { text: '   Anthropic/Claude-Opus-4.8', cls: 'tb-white', stagger: true },
   { text: '   Anthropic/Claude-Sonnet-4.6', cls: 'tb-white', stagger: true },
   { text: '   Anthropic/Claude-Sonnet-4.5', cls: 'tb-white', stagger: true },
   { text: '   Anthropic/Claude-Haiku-4.5', cls: 'tb-white', stagger: true },
+  { text: '   OpenAI/GPT-5.5-Pro', cls: 'tb-white', stagger: true },
+  { text: '   OpenAI/GPT-5.5', cls: 'tb-white', stagger: true },
   { text: '   OpenAI/GPT-5.4', cls: 'tb-white', stagger: true },
   { text: '   OpenAI/GPT-5.4-Mini', cls: 'tb-white', stagger: true },
   { text: '   OpenAI/GPT-5.4-Nano', cls: 'tb-white', stagger: true },
   { text: '   OpenAI/GPT-5.3-Codex', cls: 'tb-white', stagger: true },
+  { text: '   OpenAI/GPT-5.2-Pro', cls: 'tb-white', stagger: true },
   { text: '   OpenAI/GPT-5.2', cls: 'tb-white', stagger: true },
   { text: '   OpenAI/GPT-5', cls: 'tb-white', stagger: true },
+  { text: '   OpenAI/o3-Pro', cls: 'tb-white', stagger: true },
   { text: '   OpenAI/GPT-4.1', cls: 'tb-white', stagger: true },
   { text: '   OpenAI/GPT-4o', cls: 'tb-white', stagger: true },
+  { text: '   Google/Gemini-3.5-Flash', cls: 'tb-white', stagger: true },
   { text: '   Google/Gemini-3.1-Pro', cls: 'tb-white', stagger: true },
-  { text: '   Google/Gemini-3-Flash', cls: 'tb-white', stagger: true },
   { text: '   Google/Gemini-3.1-Flash-Lite', cls: 'tb-white', stagger: true },
+  { text: '   Google/Gemini-3-Flash', cls: 'tb-white', stagger: true },
   { text: '   Google/Gemini-2.5-Pro', cls: 'tb-white', stagger: true },
   { text: '   Google/Gemini-2.5-Flash', cls: 'tb-white', stagger: true },
-  { text: '   xAI/Grok-4.20', cls: 'tb-white', stagger: true },
-  { text: '   xAI/Grok-4-Heavy', cls: 'tb-white', stagger: true },
-  { text: '   xAI/Grok-4.1', cls: 'tb-white', stagger: true },
-  { text: '   xAI/Grok-4.1-Fast', cls: 'tb-white', stagger: true },
+  { text: '   Google/Gemini-2.5-Flash-Lite', cls: 'tb-white', stagger: true },
+  { text: '   xAI/Grok-4.3', cls: 'tb-white', stagger: true },
+  { text: '   xAI/Grok-Build-0.1', cls: 'tb-white', stagger: true },
   { text: '   xAI/Grok-4', cls: 'tb-white', stagger: true },
   { text: '   xAI/Grok-3', cls: 'tb-white', stagger: true },
   { text: '   xAI/Grok-3-Mini', cls: 'tb-white', stagger: true },
@@ -587,7 +592,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }, { passive: false });
   document.getElementById('si-logo')?.addEventListener('click', () => siNav('chat'));
   document.getElementById('sb-viewall')?.addEventListener('click', toggleDrawer);
-  document.getElementById('sb-new-chat')?.addEventListener('click', newChat);
   document.getElementById('sb-new-project')?.addEventListener('click', createProject);
   document.getElementById('dr-close')?.addEventListener('click', closeDrawer);
   document.getElementById('dr-new')?.addEventListener('click', newChat);

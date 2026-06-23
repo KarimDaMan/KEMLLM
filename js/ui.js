@@ -33,8 +33,6 @@ function setHashForPanel(panel, chatId) {
 }
 
 function siNav(panel, skipHash) {
-  // Agent panel no longer exists — agent is now a mode inside chat
-  if (panel === 'agent') { panel = 'chat'; setChatMode('agent'); }
   if (!VALID_PANELS.includes(panel)) panel = 'chat';
   currentPanel = panel;
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -51,7 +49,6 @@ function siNav(panel, skipHash) {
   // Update document title so it shows in browser history / tab bar
   const pretty = panel.charAt(0).toUpperCase() + panel.slice(1);
   document.title = 'KEMLLM · ' + pretty;
-  if (typeof syncHomeMusic === 'function') syncHomeMusic();
   if (panel === 'media' && typeof renderMediaGrid === 'function') renderMediaGrid();
 }
 
@@ -204,182 +201,6 @@ function initRouter() {
   window.addEventListener('popstate', applyHashRoute);
   window.addEventListener('hashchange', applyHashRoute);
 }
-
-// ===== Background music =====
-// Two backends: <audio> for direct audio URLs, YT IFrame Player for
-// YouTube links. Plays only when home screen is visible AND the toggle
-// is enabled in Settings. Browser autoplay restrictions still apply —
-// the first user click anywhere unlocks playback.
-let _ytPlayer = null;
-let _ytApiReady = false;
-let _ytPendingId = null;
-
-// Hardcoded music URL — the user's chosen link. This is the ONLY track
-// that can play; there's no URL field in Settings. To change it, edit
-// this constant.
-const HOME_MUSIC_URL = 'https://www.youtube.com/watch?v=7cMp97PPzxc';
-
-function youtubeIdFromUrl(url) {
-  if (!url) return null;
-  // youtube.com/watch?v=ID, youtube.com/watch?...&v=ID, youtu.be/ID,
-  // youtube.com/embed/ID, music.youtube.com/watch?v=ID
-  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
-  return m ? m[1] : null;
-}
-
-function ensureYTApi() {
-  if (window.YT && window.YT.Player) { _ytApiReady = true; return; }
-  if (document.getElementById('yt-iframe-api-script')) return;
-  // The YT IFrame API calls window.onYouTubeIframeAPIReady when loaded
-  window.onYouTubeIframeAPIReady = function() {
-    _ytApiReady = true;
-    // Re-sync now that we have the API
-    if (typeof syncHomeMusic === 'function') syncHomeMusic();
-  };
-  const s = document.createElement('script');
-  s.id = 'yt-iframe-api-script';
-  s.src = 'https://www.youtube.com/iframe_api';
-  document.head.appendChild(s);
-}
-
-function stopHomeMusic() {
-  // Aggressive stop. YT.Player.destroy() replaces our element with a
-  // new <iframe>; we then need to replace it with an empty div again
-  // so the NEXT new YT.Player() call can find a mount point.
-  if (_ytPlayer) {
-    try { _ytPlayer.pauseVideo(); } catch {}
-    try { _ytPlayer.stopVideo(); } catch {}
-    try { _ytPlayer.destroy(); } catch {}
-    _ytPlayer = null;
-  }
-  // The destroy may have left an iframe OR nothing where the div was.
-  // Re-create a fresh empty div with the same id + offscreen styles.
-  let mount = document.getElementById('home-music-yt');
-  if (!mount) {
-    mount = document.createElement('div');
-    mount.id = 'home-music-yt';
-    mount.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;';
-    const chatPanel = document.getElementById('chat-panel');
-    if (chatPanel) chatPanel.appendChild(mount);
-  } else if (mount.tagName === 'IFRAME') {
-    // destroy() replaced our div with an iframe — swap it back
-    const parent = mount.parentNode;
-    const fresh = document.createElement('div');
-    fresh.id = 'home-music-yt';
-    fresh.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;';
-    if (parent) parent.replaceChild(fresh, mount);
-  } else {
-    // A div — just clear any leftover children
-    mount.innerHTML = '';
-  }
-  const audioEl = document.getElementById('home-music');
-  if (audioEl) {
-    try { audioEl.pause(); } catch {}
-    audioEl.src = '';
-    audioEl.removeAttribute('src');
-  }
-}
-
-function syncHomeMusic() {
-  const url = HOME_MUSIC_URL;
-  // Music is AUTO-ON by default. Only off if the user explicitly set music-on to '0'.
-  const musicOnPref = typeof profileGet === 'function' ? profileGet('music-on') : null;
-  const on = musicOnPref !== '0';
-  const vol = parseInt((typeof profileGet === 'function' && profileGet('music-vol')) || '50', 10);
-  const homeEl = document.getElementById('home-screen');
-  // Only play on the home screen of the chat panel — the "new tab" page.
-  // Any other panel (code, media, settings) OR any chat with currentChatId
-  // set means the user isn't on the new-tab home and music must stop.
-  const homeVisible = homeEl && !homeEl.classList.contains('hidden') && currentPanel === 'chat' && !currentChatId;
-  const ytId = youtubeIdFromUrl(url);
-  const audioEl = document.getElementById('home-music');
-
-  if (!on || !url || !homeVisible) {
-    stopHomeMusic();
-    return;
-  }
-
-  if (ytId) {
-    // YouTube path
-    if (audioEl && !audioEl.paused) { try { audioEl.pause(); } catch {} }
-    ensureYTApi();
-    if (!_ytApiReady) { _ytPendingId = ytId; return; }
-    if (!_ytPlayer) {
-      try {
-        _ytPlayer = new YT.Player('home-music-yt', {
-          height: '1',
-          width: '1',
-          videoId: ytId,
-          playerVars: {
-            autoplay: 1,
-            controls: 0,
-            disablekb: 1,
-            fs: 0,
-            modestbranding: 1,
-            rel: 0,
-            loop: 1,
-            playlist: ytId, // required for loop=1 to actually loop
-          },
-          events: {
-            onReady: function(e) {
-              try {
-                e.target.setVolume(vol);
-                e.target.playVideo();
-              } catch {}
-            },
-            onStateChange: function(e) {
-              // Restart on end (extra safety on top of loop=1)
-              if (e.data === YT.PlayerState.ENDED) {
-                try { e.target.playVideo(); } catch {}
-              }
-            },
-          },
-        });
-      } catch (err) { console.warn('[KEMLLM] YT player init failed', err); }
-    } else {
-      try {
-        _ytPlayer.setVolume(vol);
-        const cur = _ytPlayer.getVideoData && _ytPlayer.getVideoData();
-        if (cur && cur.video_id !== ytId) {
-          _ytPlayer.loadVideoById(ytId);
-        }
-        _ytPlayer.playVideo();
-      } catch {}
-    }
-  } else {
-    // Direct audio URL path
-    if (_ytPlayer) { try { _ytPlayer.pauseVideo(); } catch {} }
-    if (!audioEl) return;
-    if (audioEl.src !== url) audioEl.src = url;
-    audioEl.volume = Math.max(0, Math.min(1, vol / 100));
-    audioEl.loop = true;
-    audioEl.play().catch(() => {/* autoplay blocked, will retry on user click */});
-  }
-}
-
-// First-click unlock — browsers won't autoplay audio until the user
-// interacts with the page. Re-sync the music on the first pointer event.
-let _musicUnlocked = false;
-function _musicUnlockOnce() {
-  if (_musicUnlocked) return;
-  _musicUnlocked = true;
-  syncHomeMusic();
-}
-document.addEventListener('click', _musicUnlockOnce, { once: false, capture: true });
-document.addEventListener('keydown', _musicUnlockOnce, { once: false, capture: true });
-
-// Tab-switch / window-blur: stop the music when the user switches to
-// another browser tab or minimizes. Resume when they come back and are
-// still on the home screen.
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    stopHomeMusic();
-  } else {
-    syncHomeMusic();
-  }
-});
-window.addEventListener('blur', () => { stopHomeMusic(); });
-window.addEventListener('focus', () => { syncHomeMusic(); });
 
 function toggleDrawer() {
   const d = document.getElementById('drawer');

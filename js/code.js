@@ -89,73 +89,6 @@ async function runJavaScript(code) {
   });
 }
 
-// --- Remote execution via the HF Agent backend ---
-// emkc.org Piston is whitelist-only as of 2026-02; we no longer try it.
-// If the user has an HF Agent Backend configured, route non-Python/non-JS
-// languages through /sessions/{id}/exec on that backend.
-const REMOTE_LANG_CMD = {
-  c:      code => `cat > /tmp/m.c <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\ncc /tmp/m.c -o /tmp/m && /tmp/m`,
-  cpp:    code => `cat > /tmp/m.cpp <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\ng++ /tmp/m.cpp -o /tmp/m && /tmp/m`,
-  'c++':  code => `cat > /tmp/m.cpp <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\ng++ /tmp/m.cpp -o /tmp/m && /tmp/m`,
-  rust:   code => `cat > /tmp/m.rs <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\nrustc /tmp/m.rs -o /tmp/m 2>&1 && /tmp/m`,
-  rs:     code => `cat > /tmp/m.rs <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\nrustc /tmp/m.rs -o /tmp/m 2>&1 && /tmp/m`,
-  go:     code => `cat > /tmp/m.go <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\ngo run /tmp/m.go`,
-  java:   code => `cat > /tmp/Main.java <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\ncd /tmp && javac Main.java && java Main`,
-  csharp: code => `cat > /tmp/m.cs <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\necho "C# needs dotnet installed"`,
-  cs:     code => `cat > /tmp/m.cs <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\necho "C# needs dotnet installed"`,
-  bash:   code => code,
-  sh:     code => code,
-  lua:    code => `cat > /tmp/m.lua <<'KEMLLM_EOF'\n${code}\nKEMLLM_EOF\nlua /tmp/m.lua`,
-};
-
-async function runViaRemote(lang, code) {
-  const key = (lang || '').toLowerCase();
-  const builder = REMOTE_LANG_CMD[key];
-  if (!builder) {
-    throw new Error('Language "' + lang + '" needs the HF Agent Backend. Set it up in Settings → Agent Backend (see agent-backend/SETUP.md).');
-  }
-  // Route through the agent backend if configured and running
-  if (typeof hfFetch === 'function' && typeof getHfBackendUrl === 'function' && getHfBackendUrl()) {
-    // Boot the session if we don't have one
-    if (typeof agentSessionId !== 'undefined' && !agentSessionId && typeof agentStart === 'function') {
-      await agentStart();
-    }
-    if (typeof agentSessionId !== 'undefined' && agentSessionId) {
-      const tryExec = async () => hfFetch('/sessions/' + agentSessionId + '/exec', {
-        method: 'POST',
-        body: JSON.stringify({ command: builder(code) })
-      });
-      let r = await tryExec();
-      // Stale-session auto-recovery. If the backend returns 404 { code:
-      // 'no_session' }, the container restarted and our cached session
-      // id is dead. Reset + retry once. Note: agentSessionId is declared
-      // with `let` in agent.js, so we assign DIRECTLY (window.x wouldn't
-      // work — let variables aren't on window even in script-tag mode).
-      if (r.status === 404) {
-        try {
-          const txt = await r.clone().text();
-          if (/no_session|session not found/i.test(txt)) {
-            agentSessionId = '';
-            if (typeof agentStart === 'function') await agentStart();
-            if (agentSessionId) {
-              r = await tryExec();
-            }
-          }
-        } catch {}
-      }
-      if (!r.ok) throw new Error('Agent backend ' + r.status);
-      const d = await r.json();
-      return {
-        run: { stdout: d.stdout || '', stderr: d.stderr || '', code: d.exit_code || 0 },
-        runtime: 'agent-backend'
-      };
-    }
-  }
-  throw new Error('Running ' + lang + ' needs the HF Agent Backend. Go to Settings → Agent Backend URL and deploy it (5 min, see agent-backend/SETUP.md).');
-}
-
-// Unified entry point — replaces the old runViaPiston
-async function runViaPiston(lang, code) { return runCode(lang, code); }
 async function runCode(lang, code) {
   const l = (lang || '').toLowerCase();
   if (l === 'python' || l === 'py') return runPython(code);
@@ -168,15 +101,13 @@ async function runCode(lang, code) {
       .replace(/\btype\s+\w+\s*=[^;]+;/g, '');
     return runJavaScript(stripped);
   }
-  return runViaRemote(l, code);
+  throw new Error('This runner now supports Python, JavaScript, and TypeScript only.');
 }
 
 // ===== Code Panel =====
 const CODE_FILES = {
   'main.py': { lang: 'python', content: '# Welcome to KEMLLM Code Runner\nprint("Hello, world!")\n\nfor i in range(5):\n    print(f"i = {i}")\n' },
   'app.js': { lang: 'javascript', content: '// JavaScript example\nconst nums = [1, 2, 3, 4, 5];\nconst sum = nums.reduce((a, b) => a + b, 0);\nconsole.log("Sum:", sum);\n' },
-  'main.c': { lang: 'c', content: '#include <stdio.h>\n\nint main() {\n    printf("Hello from C!\\n");\n    return 0;\n}\n' },
-  'main.rs': { lang: 'rust', content: 'fn main() {\n    println!("Hello from Rust!");\n}\n' }
 };
 let currentFile = 'main.py';
 
@@ -214,7 +145,7 @@ async function runCurrentCode() {
   info.textContent = '';
   try {
     const start = Date.now();
-    const result = await runViaPiston(sel.value, editor.textContent);
+    const result = await runCode(sel.value, editor.textContent);
     const ms = Date.now() - start;
     const stdout = result.run?.stdout || '';
     const stderr = result.run?.stderr || '';

@@ -6,10 +6,7 @@ let currentChatId = null;
 let pendingAttachments = []; // {dataUrl, name}
 let abortCtrl = null;
 window.webSearchOn = false;
-let chatMode = 'chat'; // 'chat' | 'code' | 'agent'
-// Agent mode is always unlocked — the old lock was confusing and the
-// backend auto-spawns on first use anyway.
-let agentUnlocked = true;
+let chatMode = 'chat'; // 'chat' | 'image' | 'video'
 // Blocks the send button while an AI response is in progress — user must
 // wait (or press stop) before sending the next message. Matches ChatGPT's
 // interaction model.
@@ -45,52 +42,25 @@ Object.defineProperty(window, 'chatBusy', {
   get() { return busyChats.has(currentChatId || PENDING_DRAFT); },
 });
 
-// Agent loop state — lets the AI keep running autonomously until the task
-// is done, while the user can inject additional instructions mid-loop.
-let agentLoopRunning = false;
-let agentLoopAbort = false;
-let agentInjectQueue = []; // messages the user types while the loop is running
-const AGENT_LOOP_MAX_ITERATIONS = 25;
-
 function setChatMode(mode) {
+  if (!['chat', 'image', 'video'].includes(mode)) mode = 'chat';
   chatMode = mode;
   // Refresh the dynamic generator chip strip whenever the mode flips —
-  // shown for image/video, hidden for chat/agent.
+  // shown for image/video, hidden for chat.
   if (typeof renderGenChips === 'function') {
     Promise.resolve().then(renderGenChips).catch(() => {});
   }
   document.querySelectorAll('.mode-btn').forEach(b => {
-    // The desktop button has no data-mode and is allowed to be active
-    // ALONGSIDE the agent button — handled separately below.
-    if (b.id === 'chat-desktop-btn') return;
     b.classList.toggle('active', b.dataset.mode === mode);
   });
-  // Desktop button is a sub-button of Agent: only visible while in agent
-  // mode (and only if the /desktop probe has succeeded). It can be visually
-  // ACTIVE simultaneously with Agent — clicking it never deselects agent.
-  const dBtn = document.getElementById('chat-desktop-btn');
-  if (dBtn) {
-    const ready = dBtn.dataset.desktopReady === '1';
-    dBtn.classList.toggle('show', mode === 'agent' && ready);
-    // If we just left agent mode, drop the desktop active highlight too.
-    if (mode !== 'agent') dBtn.classList.remove('active');
-  }
   const input = document.getElementById('input-text');
   if (input) {
-    input.placeholder = mode === 'agent'
-      ? 'Agent mode · ask the AI to run commands in a sandbox'
-      : mode === 'code'
-      ? 'Code mode · ask for code, auto-runs in browser'
-      : mode === 'image'
+    input.placeholder = mode === 'image'
       ? 'Describe the image you want to generate…'
       : mode === 'video'
       ? 'Describe the video you want to generate…'
       : 'Ask anything, generate images, run code...';
   }
-  // NOTE: agent backend is no longer spawned just because the user
-  // clicked Agent. It spawns lazily on the first send in agent mode
-  // (see runAgentModeChat in sendMessage). This way clicking Agent
-  // never uses resources until the user actually starts chatting.
 }
 
 // NOTE: keyword-based IMG/VID/EDIT regex routing was REMOVED. Generation is
@@ -218,8 +188,7 @@ function parseMarkdown(md) {
     const b = blocks[+i];
     const id = 'cb_' + Math.random().toString(36).slice(2, 9);
     const runBtn = isRunnable(b.lang) ? `<button class="code-act" onclick="runCodeBlock('${id}','${escapeHTML(b.lang)}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>Run</button>` : '';
-    const agentBtn = (/^(bash|sh|shell)$/i.test(b.lang)) ? `<button class="code-act" onclick="runInAgent('${id}')" title="Run in Agent sandbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>Agent</button>` : '';
-    return `<pre><div class="codewrap" data-lang="${escapeHTML(b.lang)}"><div class="code-head"><span class="code-lang">${escapeHTML(b.lang || 'text')}</span><div class="code-acts"><button class="code-act" onclick="copyCode('${id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button>${runBtn}${agentBtn}</div></div><code id="${id}">${escapeHTML(b.code)}</code></div></pre>`;
+    return `<pre><div class="codewrap" data-lang="${escapeHTML(b.lang)}"><div class="code-head"><span class="code-lang">${escapeHTML(b.lang || 'text')}</span><div class="code-acts"><button class="code-act" onclick="copyCode('${id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button>${runBtn}</div></div><code id="${id}">${escapeHTML(b.code)}</code></div></pre>`;
   });
   return html;
 }
@@ -231,23 +200,8 @@ function copyCode(id) {
   showToast('Copied');
 }
 
-function runInAgent(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const cmd = el.textContent;
-  // Agent panel was removed — switch to chat panel and flip to agent mode
-  if (typeof setChatMode === 'function') setChatMode('agent');
-  if (typeof siNav === 'function') siNav('chat');
-  if (!agentReady) {
-    agentLog('› Pending: starting sandbox first…', 'sys');
-    agentStart().then(() => { if (agentReady) agentRun(cmd, true); });
-  } else {
-    agentRun(cmd, true);
-  }
-}
-
 function isRunnable(lang) {
-  return ['python', 'py', 'javascript', 'js', 'typescript', 'ts', 'c', 'cpp', 'c++', 'rust', 'rs', 'go', 'java', 'csharp', 'cs', 'bash', 'sh', 'lua'].includes((lang || '').toLowerCase());
+  return ['python', 'py', 'javascript', 'js', 'typescript', 'ts'].includes((lang || '').toLowerCase());
 }
 
 async function runCodeBlock(id, lang) {
@@ -264,7 +218,7 @@ async function runCodeBlock(id, lang) {
   result.innerHTML = `<div class="run-result-head"><span class="td"></span><span class="td"></span><span class="td"></span> Running...</div>`;
   try {
     const start = Date.now();
-    const out = await runViaPiston(lang, code);
+    const out = await runCode(lang, code);
     const ms = Date.now() - start;
     const stdout = out.run?.stdout || '';
     const stderr = out.run?.stderr || '';
@@ -435,9 +389,8 @@ async function sendMessage() {
   // Block a new send while the current response is still streaming in.
   // User must wait (or press the stop button) before sending the next
   // message IN THIS CHAT — same pattern as ChatGPT. Other chats with
-  // their own in-flight responses are unaffected. Agent-loop mode has
-  // its own injection queue so we let those pass through.
-  if (busyChats.has(currentChatId || PENDING_DRAFT) && chatMode !== 'agent') {
+  // their own in-flight responses are unaffected.
+  if (busyChats.has(currentChatId || PENDING_DRAFT)) {
     showToast('Wait for this chat to finish, or open a new chat');
     return;
   }
@@ -460,27 +413,6 @@ async function sendMessage() {
   // attachments (image-to-image source frame, etc.).
   if (chatMode === 'image' || chatMode === 'video') {
     if (typeof runGenSend === 'function') runGenSend(text, atts);
-    return;
-  }
-
-  // AGENT MODE: route through the agent flow
-  if (chatMode === 'agent') {
-    // If the loop is already running, queue the message as an interjection
-    // — it'll be merged into the next AI call, and the loop keeps running.
-    if (agentLoopRunning) {
-      renderUserMessage(text, atts);
-      agentInjectQueue.push(text);
-      renderSystemLine('✎ queued — will inject on next iteration');
-      return;
-    }
-    renderUserMessage(text, atts);
-    // Preserve attachments so vision + agent mode works
-    const agentUserMsg = atts.length
-      ? { role: 'user', content: text, attachments: atts }
-      : { role: 'user', content: text };
-    messages.push(agentUserMsg);
-    await runAgentModeChat(text);
-    saveCurrentChat();
     return;
   }
 
@@ -647,7 +579,7 @@ async function sendMessage() {
         const analysisEl = await runAnalysisBlock(aiEl, runnable);
         // HTML artifacts are terminal — no follow-up. The rendered card
         // IS the result. Don't ask Claude to "explain the empty output"
-        // because HTML doesn't run in Piston.
+        // because HTML artifacts are rendered directly.
         if (analysisEl && !analysisEl.isHtmlArtifact && currentChatId === originatingChatId) {
           const typing2 = renderTyping(model);
           try {
@@ -711,7 +643,6 @@ function stripAIMarkers(text) {
   if (!text) return '';
   return text
     .replace(/\[SHOW_PREVIEW\s+[^\]]+\]/gi, '')
-    .replace(/\[SHOW_DESKTOP\]/gi, '')
     .replace(/\[GENERATE_IMAGE\s+prompt=(?:"[^"]+"|'[^']+'|[^\]]+)\]/gi, '')
     .replace(/\[GENERATE_VIDEO\s+prompt=(?:"[^"]+"|'[^']+'|[^\]]+)\]/gi, '')
     .replace(/\[EDIT_IMAGE\s+prompt=(?:"[^"]+"|'[^']+'|[^\]]+)\]/gi, '')
@@ -745,7 +676,7 @@ function extractFirstRunnableBlock(md) {
 }
 
 // Detect HTML + interactive-JS apps that should render as a live
-// preview (Claude-artifact style) instead of being sent to Piston.
+// preview (Claude-artifact style) instead of being sent to the local runner.
 function isInteractiveApp(block) {
   const lang = (block.lang || '').toLowerCase();
   const code = block.code || '';
@@ -761,13 +692,13 @@ function isInteractiveApp(block) {
 
 // Render a slim "code execution strip" directly after the AI message bubble.
 // It's collapsed by default — just a thin bar saying "▶ Ran python · 120ms".
-// For HTML (and interactive JS apps) we don't run it through Piston —
+// For HTML (and interactive JS apps) we don't run it through the local runner —
 // we treat it as a Claude-style artifact, show a "Preview ready" strip,
 // and open it in the chat-preview pane on click.
 async function runAnalysisBlock(aiEl, block) {
   if (!aiEl || !aiEl.parentNode) return null;
 
-  // HTML artifact path — no Piston, just render a Claude-style artifact
+  // HTML artifact path: render a Claude-style artifact
   // card in the chat flow and open the preview pane.
   if (block.lang === 'html' || isInteractiveApp(block)) {
     const htmlCode = block.lang === 'html' ? block.code : `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Preview</title></head><body><script>${block.code}<\/script></body></html>`;
@@ -822,7 +753,7 @@ async function runAnalysisBlock(aiEl, block) {
   // chat flow — the user asked for no execution strips. Output still
   // gets fed back to the AI for explanation via the follow-up turn.
   try {
-    const out = await runViaPiston(block.lang, block.code);
+    const out = await runCode(block.lang, block.code);
     return {
       stdout: out.run?.stdout || '',
       stderr: out.run?.stderr || '',
@@ -1157,112 +1088,6 @@ async function handleVideoRequest(prompt, aspectRatio, extras) {
       renderAIMessage(fakeModel, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
     }
   }
-}
-
-// Agent mode — autonomous loop that keeps running until:
-//   1. the AI's response has no more bash/python blocks (task done)
-//   2. we hit AGENT_LOOP_MAX_ITERATIONS
-//   3. the user presses the stop button (sets agentLoopAbort = true)
-// While it's running, the user can type new messages that get queued
-// and merged into the next AI call, so you can steer the agent mid-task
-// without interrupting it.
-async function runAgentModeChat(userText) {
-  // Pre-set backend so the AI's first-turn system prompt reflects reality
-  if (profileGet('hf-backend-url')) agentBackend = 'hf';
-  if (!agentReady) {
-    showToast('Starting sandbox…');
-    await agentStart();
-    if (!agentReady) {
-      const model = findModel(selectedChat, 'chat');
-      renderAIMessage(model || { name: 'Agent', provider: 'custom' },
-        '<p style="color:var(--red)">Could not start agent sandbox. Check Settings → Agent Backend URL and token.</p>');
-      return;
-    }
-  }
-  const model = findModel(selectedChat, 'chat');
-  if (!model) { showToast('No model selected'); return; }
-  const agentSys = getAgentSystemPrompt();
-
-  // Set loop state
-  agentLoopRunning = true;
-  agentLoopAbort = false;
-  setAgentLoopUI(true);
-
-  try {
-    for (let iter = 0; iter < AGENT_LOOP_MAX_ITERATIONS; iter++) {
-      if (agentLoopAbort) { renderSystemLine('⏹ stopped by user'); break; }
-
-      // Inject any user messages that came in while we were running
-      if (agentInjectQueue.length) {
-        const extra = agentInjectQueue.splice(0).join('\n');
-        messages.push({ role: 'user', content: '[user interjection] ' + extra });
-        renderSystemLine('✎ user added: ' + extra);
-      }
-
-      const typingEl = renderTyping(model);
-      let full = '';
-      try {
-        await callChat(model, messages, (chunk) => { full += chunk; }, agentSys);
-      } catch (e) {
-        typingEl.remove();
-        renderAIMessage(model, `<p style="color:var(--red)">${escapeHTML(e.message)}</p>`);
-        break;
-      }
-      typingEl.remove();
-      renderAIMessage(model, parseMarkdown(full), full);
-      messages.push({ role: 'assistant', content: full });
-      processAIMarkers(full);
-
-      if (agentLoopAbort) { renderSystemLine('⏹ stopped by user'); break; }
-
-      // Find any runnable blocks in the latest response
-      const blocks = extractRunnableBlocks(full);
-      if (!blocks.length) {
-        // AI has nothing left to run → the task is done (or it's asking a question)
-        break;
-      }
-
-      // Execute every block, feed combined output back
-      let combined = '';
-      for (const b of blocks) {
-        if (agentLoopAbort) break;
-        const r = await agentRun(b.content, true, true);
-        const stdout = r.stdout || '';
-        const stderr = r.stderr || '';
-        const aiMsgEl = document.querySelector('#msgs .msg-a:last-child .ai-body');
-        if (aiMsgEl) {
-          const det = document.createElement('details');
-          det.className = 'think-block';
-          det.open = true;
-          det.innerHTML = `<summary>▶ Ran ${escapeHTML(b.lang)} · exit ${r.exitCode}</summary><div class="think-inner">${stdout ? '<div>' + escapeHTML(stdout) + '</div>' : ''}${stderr ? '<div style="color:var(--red);margin-top:6px;">' + escapeHTML(stderr) + '</div>' : ''}${!stdout && !stderr ? '<div style="color:var(--text3);">(no output)</div>' : ''}</div>`;
-          aiMsgEl.appendChild(det);
-          setTimeout(() => { det.open = false; }, 1500);
-        }
-        combined += '\n$ ' + b.content + '\n' + stdout +
-          (stderr ? '\n[stderr]\n' + stderr : '') +
-          (r.exitCode ? `\n[exit ${r.exitCode}]` : '');
-      }
-
-      if (agentLoopAbort) { renderSystemLine('⏹ stopped by user'); break; }
-
-      // Feed results back for the next iteration
-      messages.push({
-        role: 'user',
-        content: '[execution results]\n' + combined.trim() +
-          '\n\nContinue working on the task. If you need to run more commands, write another bash block. If the task is complete, say so in one line and stop.'
-      });
-    }
-  } finally {
-    agentLoopRunning = false;
-    agentLoopAbort = false;
-    setAgentLoopUI(false);
-  }
-}
-
-function stopAgentLoop() {
-  if (!agentLoopRunning) return;
-  agentLoopAbort = true;
-  showToast('Stopping agent…');
 }
 
 // ===== Inline image / video generator panel =====
@@ -1775,12 +1600,7 @@ function chatPreviewShow(url, title) {
   // Hide the raw-code view by default when loading a new URL
   const codeView = document.getElementById('chat-preview-code');
   if (codeView) codeView.style.display = 'none';
-  // Desktop mode: bigger pane (75% of screen instead of 50%). Detect by
-  // title (exact match) or by URL containing 'vnc' — both mean noVNC.
-  const isDesktop = title === 'AI Desktop' || /vnc(\.html|_lite)/.test(url || '');
-  pane.classList.toggle('mode-desktop', isDesktop);
-  const audioBtn = document.getElementById('chat-preview-audio');
-  if (audioBtn) audioBtn.style.display = isDesktop ? 'inline-block' : 'none';
+  pane.classList.remove('mode-desktop');
 }
 
 // Open an HTML artifact card's preview in the chat-preview pane.
@@ -1848,39 +1668,6 @@ function chatPreviewClose() {
   const frame = document.getElementById('chat-preview-frame');
   if (pane) { pane.classList.remove('show'); pane.classList.remove('fullscreen'); }
   if (frame) frame.src = 'about:blank';
-  // Tear down any running audio stream so ffmpeg on the backend can exit.
-  const audioEl = document.getElementById('chat-preview-audio-el');
-  const audioBtn = document.getElementById('chat-preview-audio');
-  if (audioEl) { audioEl.pause(); audioEl.src = ''; audioEl.removeAttribute('src'); }
-  if (audioBtn) { audioBtn.textContent = '🔇'; audioBtn.dataset.on = '0'; audioBtn.style.display = 'none'; }
-}
-
-// Toggle desktop audio streaming. First click starts an <audio> element
-// pointed at /api/audio (ffmpeg → mp3) which plays through the browser.
-function togglePreviewAudio() {
-  const btn = document.getElementById('chat-preview-audio');
-  const el = document.getElementById('chat-preview-audio-el');
-  if (!btn || !el) return;
-  const base = typeof getHfBackendUrl === 'function' ? getHfBackendUrl() : '';
-  const tok = typeof getHfBackendToken === 'function' ? getHfBackendToken() : '';
-  if (!base) { showToast('No HF backend configured'); return; }
-  if (btn.dataset.on === '1') {
-    el.pause();
-    el.src = '';
-    el.removeAttribute('src');
-    btn.textContent = '🔇 Audio';
-    btn.dataset.on = '0';
-    btn.title = 'Enable desktop audio';
-  } else {
-    el.src = `${base}/api/audio?token=${encodeURIComponent(tok)}`;
-    el.play().then(() => {
-      btn.textContent = '🔊 Audio';
-      btn.dataset.on = '1';
-      btn.title = 'Disable desktop audio';
-    }).catch((e) => {
-      showToast('Audio failed: ' + (e.message || e));
-    });
-  }
 }
 function chatPreviewReload() {
   const frame = document.getElementById('chat-preview-frame');
@@ -1894,7 +1681,6 @@ function chatPreviewFullscreen() {
 // Parse AI-emitted markers from a response and act on them. Supported:
 //   [SHOW_PREVIEW path=foo.html title="My page"]
 //   [SHOW_PREVIEW url=https://...]
-//   [SHOW_DESKTOP]
 //   [GENERATE_IMAGE prompt="sunset over a mountain lake"]
 //   [GENERATE_VIDEO prompt="slow pan across a rainforest"]
 //   [EDIT_IMAGE prompt="make the house white"]  (uses last generated image)
@@ -1913,17 +1699,9 @@ function processAIMarkers(text) {
     const title = titleMatch ? titleMatch[1] : 'Preview';
     if (urlMatch) {
       chatPreviewShow(urlMatch[1], title);
-    } else if (pathMatch && agentSessionId) {
-      const base = getHfBackendUrl();
-      const tok = getHfBackendToken();
-      const path = pathMatch[1].replace(/^\/?/, '');
-      const url = `${base}/sessions/${agentSessionId}/files/${encodeURI(path)}?token=${encodeURIComponent(tok)}`;
-      chatPreviewShow(url, title);
+    } else if (pathMatch) {
+      showToast('Preview paths need a URL in this build');
     }
-  }
-  // [SHOW_DESKTOP]
-  if (/\[SHOW_DESKTOP\]/i.test(text)) {
-    showAgentDesktop();
   }
   // If the AI emitted BOTH a GENERATE_IMAGE and an EDIT_IMAGE marker in
   // the same response, EDIT_IMAGE wins. The model is confused and we
@@ -2008,69 +1786,6 @@ function processAIMarkers(text) {
   }
 }
 
-// Probe the HF backend's /desktop endpoint to see if the new Dockerfile
-// (with Xvfb + noVNC) has been deployed. If so, reveal the floating
-// Desktop button in the chat panel.
-let _desktopProbedOnce = false;
-// Two-layout desktop detection:
-//   NEW layout  = nginx front door, noVNC at /vnc.html, Flask at /api/*
-//   OLD layout  = Flask at root, noVNC (if any) proxied via /desktop/*
-// Returns { path, layout } where path is the iframe URL to load.
-async function detectDesktopLayout(base) {
-  // quality=9 compression=0 = highest-fidelity JPEG with no extra zlib
-  // compression overhead. On L4 with 48 vCPU and fast network the
-  // bottleneck is decode latency, not bandwidth — so max quality + zero
-  // compression gives the smoothest, least-laggy result. resize=scale
-  // fits the iframe; reconnect=1 auto-reconnects; show_dot=true keeps
-  // the cursor visible at all times.
-  const NEW_PARAMS = 'autoconnect=1&resize=scale&reconnect=1&quality=9&compression=0&show_dot=true';
-  const OLD_PARAMS = 'path=desktop/websockify&autoconnect=1&resize=scale&quality=9&compression=0&show_dot=true';
-  // Try NEW layout first — noVNC at the root.
-  try {
-    const r = await fetch(base + '/vnc.html', { method: 'GET' });
-    if (r.ok) {
-      const body = await r.text().catch(() => '');
-      if (body.includes('noVNC') || body.includes('novnc') || body.includes('vnc_canvas')) {
-        return { layout: 'new', path: '/vnc.html?' + NEW_PARAMS };
-      }
-    }
-  } catch {}
-  // Fall back to OLD layout — Flask proxy at /desktop/.
-  try {
-    const r = await fetch(base + '/desktop/vnc.html', { method: 'GET' });
-    if (r.ok) {
-      const body = await r.text().catch(() => '');
-      if (body.includes('noVNC') || body.includes('novnc') || body.includes('vnc_canvas')) {
-        return { layout: 'old', path: '/desktop/vnc.html?' + OLD_PARAMS };
-      }
-    }
-  } catch {}
-  return null;
-}
-
-async function probeDesktopSupport() {
-  const btn = document.getElementById('chat-desktop-btn');
-  if (!btn) return;
-  const base = getHfBackendUrl();
-  const hide = () => {
-    btn.dataset.desktopReady = '0';
-    btn.classList.remove('show');
-    btn.classList.remove('active');
-  };
-  if (!base) return hide();
-  const detected = await detectDesktopLayout(base);
-  if (detected) {
-    btn.dataset.desktopReady = '1';
-    btn.dataset.desktopLayout = detected.layout;
-    btn.dataset.desktopPath = detected.path;
-    _desktopProbedOnce = true;
-    if (chatMode === 'agent') btn.classList.add('show');
-  } else {
-    hide();
-  }
-}
-
-// Start or restart a noVNC desktop inside the sandbox and show it in the preview
 // Live progress line that updates in-place instead of adding new lines
 function renderProgressLine(initialText) {
   const msgs = document.getElementById('msgs');
@@ -2096,80 +1811,6 @@ function renderProgressLine(initialText) {
   };
 }
 
-async function waitForHFReady(base, tok, maxSeconds, progress) {
-  maxSeconds = maxSeconds || 90;
-  const start = Date.now();
-  while ((Date.now() - start) / 1000 < maxSeconds) {
-    const elapsed = Math.round((Date.now() - start) / 1000);
-    if (progress) progress.update(`waking HF Space… ${elapsed}s`);
-    try {
-      // Try the Flask health endpoint at /api/ first (new nginx layout),
-      // then fall back to / (old slim Dockerfile with Flask at root).
-      const r = await fetch(base + '/api/', { method: 'GET' });
-      if (r.ok) {
-        const d = await r.json().catch(() => null);
-        if (d && d.ok) return true;
-      }
-      const r2 = await fetch(base + '/', { method: 'GET' });
-      if (r2.ok) {
-        const ct = r2.headers.get('Content-Type') || '';
-        // Either the old Flask health JSON, OR noVNC HTML from the new
-        // layout — both mean the Space is up.
-        if (ct.includes('application/json')) {
-          const d = await r2.json().catch(() => null);
-          if (d && d.ok) return true;
-        } else if (ct.includes('text/html')) {
-          return true;
-        }
-      }
-    } catch {}
-    await new Promise(res => setTimeout(res, 2000));
-  }
-  return false;
-}
-
-async function showAgentDesktop() {
-  const home = document.getElementById('home-screen');
-  if (home) home.classList.add('hidden');
-  if (typeof termBootStop === 'function') termBootStop();
-
-  const base = getHfBackendUrl();
-  if (!base) { showToast('Set the HF backend URL in Settings first'); return; }
-
-  // Step 1: make sure the Space is awake.
-  const p = renderProgressLine('checking HF Space…');
-  let ready = false;
-  try {
-    const quick = await Promise.race([
-      fetch(base + '/vnc.html').then(r => r.ok),
-      new Promise(res => setTimeout(() => res(false), 2500)),
-    ]);
-    ready = quick === true;
-  } catch {}
-  if (!ready) {
-    ready = await waitForHFReady(base, getHfBackendToken(), 90, p);
-    if (!ready) {
-      p.fail('HF Space did not come online after 90s. Check the Logs tab on your Space — it may still be rebuilding or the build may have failed.');
-      return;
-    }
-  }
-  p.done('HF Space is up', '✓');
-
-  // Step 2: auto-detect which container layout we're talking to.
-  const pc = renderProgressLine('detecting noVNC layout…');
-  const detected = await detectDesktopLayout(base);
-  if (!detected) {
-    pc.fail('noVNC not reachable at / or /desktop/. Your HF Space is either still rebuilding, running the SLIM Dockerfile (no desktop), or the build failed — check the Logs tab on the Space.');
-    return;
-  }
-  pc.done(`noVNC layout: ${detected.layout}`, '✓');
-
-  // Step 3: load the iframe with whichever path the detection found.
-  const url = base + detected.path;
-  chatPreviewShow(url, 'AI Desktop');
-  renderSystemLine('🖥 desktop loaded — tap and drag in the preview to interact. If it stays blank, open the URL in a new tab to debug: ' + url);
-}
-
 function renderSystemLine(text) {
   const msgs = document.getElementById('msgs');
   if (!msgs) return;
@@ -2181,44 +1822,20 @@ function renderSystemLine(text) {
   scrollToBottom();
 }
 
-function setAgentLoopUI(running) {
-  const sendBtn = document.getElementById('send-btn');
-  const stopBtn = document.getElementById('stop-btn');
-  if (sendBtn) sendBtn.classList.toggle('hide', running);
-  if (stopBtn) stopBtn.classList.toggle('show', running);
-  // Change the input placeholder so the user knows they're injecting, not starting a new turn
-  const input = document.getElementById('input-text');
-  if (input) {
-    input.placeholder = running
-      ? 'Agent is working… type to inject a message into the loop'
-      : 'Agent mode · ask the AI to run commands in a sandbox';
-  }
-}
-
 function newChat(skipHash) {
-  // If an agent loop is running, stop it cleanly first
-  if (agentLoopRunning) {
-    agentLoopAbort = true;
-  }
   messages = [];
   currentChatId = null;
   pendingAttachments = [];
-  agentInjectQueue = [];
   renderAttachPreview();
   const msgsEl = document.getElementById('msgs');
   if (msgsEl) {
     msgsEl.innerHTML = '';
-    // Also purge any stray agent-log lines that leaked in from a
-    // previous sandbox start. Defense in depth on top of the agentLog
-    // guard in agent.js.
-    msgsEl.querySelectorAll('.agent-log').forEach(el => el.remove());
   }
   const home = document.getElementById('home-screen');
   if (home) home.classList.remove('hidden');
   if (window.termBootStart) window.termBootStart();
   closeDrawer();
-  // Make sure we're on the chat panel (so the home screen is visible and
-  // the music plays — music only runs when currentPanel === 'chat').
+  // Make sure we're on the chat panel so the home screen is visible.
   if (typeof siNav === 'function' && currentPanel !== 'chat') {
     siNav('chat', !!skipHash);
   }
@@ -2232,14 +1849,12 @@ function newChat(skipHash) {
   }
   document.title = 'KEMLLM · Chat';
   if (typeof refreshBusyUI === 'function') refreshBusyUI();
-  if (typeof syncHomeMusic === 'function') syncHomeMusic();
 }
 
 // ===== Attachments =====
 // Accept ANY file type. Images are passed to the AI as vision input.
 // Non-image files (ISO, PDF, zip, txt, code, anything) are base64-read and
-// attached to the message; in Agent mode they're uploaded to the sandbox
-// filesystem so the AI can cat/unzip/mount/inspect them.
+// attached to the message when the provider can read them.
 function addAttachment(file) {
   const isImage = file.type.startsWith('image/');
   const reader = new FileReader();
@@ -2253,35 +1868,9 @@ function addAttachment(file) {
       isImage
     });
     renderAttachPreview();
-    // In Agent mode, auto-upload to the sandbox so it's usable
-    if (chatMode === 'agent' && agentReady && !isImage) {
-      uploadAttachmentToSandbox(pendingAttachments[pendingAttachments.length - 1]);
-    }
   };
   reader.readAsDataURL(file);
 }
-
-async function uploadAttachmentToSandbox(att) {
-  if (agentBackend !== 'hf' || !agentSessionId) return;
-  try {
-    // Strip the "data:<mime>;base64," prefix
-    const b64 = att.dataUrl.split(',')[1] || '';
-    // Use a simple python one-liner to write the file by decoding the b64
-    const py = `import base64; open('/home/agent/sessions/${agentSessionId}/${escapeShell(att.name)}','wb').write(base64.b64decode('${b64}'))`;
-    // Actually just POST to /write with content — but content would be binary.
-    // Easier: do it via the exec endpoint with a python one-liner.
-    await hfFetch('/sessions/' + agentSessionId + '/exec', {
-      method: 'POST',
-      body: JSON.stringify({
-        command: `python3 -c "import base64,sys; open('${escapeShell(att.name)}','wb').write(base64.b64decode(sys.stdin.read()))" <<'EOF_B64'\n${b64}\nEOF_B64`
-      })
-    });
-    showToast('Uploaded ' + att.name + ' to sandbox');
-  } catch (e) {
-    showToast('Upload failed: ' + e.message);
-  }
-}
-function escapeShell(s) { return String(s).replace(/['"\\`$]/g, '_'); }
 
 function formatBytes(n) {
   if (n < 1024) return n + ' B';

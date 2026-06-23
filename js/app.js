@@ -167,8 +167,6 @@ function loadChat(id, skipHash) {
   // Refresh send/stop button — the new chat may have its own in-flight
   // response (or not), independent of the chat we just left.
   if (typeof refreshBusyUI === 'function') refreshBusyUI();
-  // Pause home-screen music since we're now in a chat
-  if (typeof syncHomeMusic === 'function') syncHomeMusic();
 }
 function deleteChat(id) {
   let list = loadHistory();
@@ -348,28 +346,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v134 · Image prompt: pure verbatim copy of user message, ZERO additions including parenthetical clarifiers';
-
-// Announcement banner id. Bump this whenever index.html's banner text
-// changes so users who already dismissed the previous banner see the
-// new one. Dismissal is saved to localStorage so it sticks across
-// reloads on the same device.
-const KEMLLM_BANNER = 'gpt-image-2';
-function initBanner() {
-  const el = document.getElementById('banner');
-  if (!el) return;
-  try {
-    if (localStorage.getItem('banner-dismissed') === KEMLLM_BANNER) return;
-  } catch { /* private-mode localStorage throws; fall through and show */ }
-  el.hidden = false;
-  const close = document.getElementById('banner-close');
-  if (close) {
-    close.addEventListener('click', () => {
-      el.hidden = true;
-      try { localStorage.setItem('banner-dismissed', KEMLLM_BANNER); } catch {}
-    });
-  }
-}
+const KEMLLM_BUILD = 'v135 · Music removed';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.
@@ -426,7 +403,7 @@ const BOOT_LINES = [
   { text: '/– booting KEMLLM runtime v1.0.0', cls: 'tb-blue' },
   { text: '/– loading config from ~/.kemllm/config.toml', cls: 'tb-grey' },
   { text: '/– connecting to Replicate API', cls: 'tb-blue', spin: true },
-  { text: '/– connecting to Piston sandbox', cls: 'tb-blue', spin: true },
+  { text: '/– starting local sandbox', cls: 'tb-blue', spin: true },
   { text: '/– negotiating WebSocket transport     [OK]', cls: 'tb-green' },
   { text: '/– loading provider adapters', cls: 'tb-blue' },
   { text: '   → anthropic      (auto)', cls: 'tb-white', stagger: true },
@@ -612,7 +589,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('sb-viewall')?.addEventListener('click', toggleDrawer);
   document.getElementById('sb-new-chat')?.addEventListener('click', newChat);
   document.getElementById('sb-new-project')?.addEventListener('click', createProject);
-  document.getElementById('tb-new-chat')?.addEventListener('click', newChat);
   document.getElementById('dr-close')?.addEventListener('click', closeDrawer);
   document.getElementById('dr-new')?.addEventListener('click', newChat);
 
@@ -662,16 +638,6 @@ document.addEventListener('DOMContentLoaded', () => {
     menu.querySelectorAll('.plus-mode').forEach(el => {
       el.classList.toggle('active', el.dataset.mode === chatMode);
     });
-    // Desktop sub-item: visible only when we're in agent mode AND the
-    // hidden floating chat-desktop-btn has been marked desktopReady=1 by
-    // probeDesktopSupport (which only succeeds when the configured HF
-    // backend has a noVNC layer at /vnc.html).
-    const dItem = menu.querySelector('.plus-desktop');
-    if (dItem) {
-      const dBtn = document.getElementById('chat-desktop-btn');
-      const ready = dBtn?.dataset?.desktopReady === '1';
-      dItem.style.display = (chatMode === 'agent' && ready) ? '' : 'none';
-    }
     const willOpen = !menu.classList.contains('open');
     if (willOpen) {
       positionPlusMenu();
@@ -708,12 +674,6 @@ document.addEventListener('DOMContentLoaded', () => {
       setChatMode('image');
     } else if (act === 'video') {
       setChatMode('video');
-    } else if (act === 'desktop') {
-      // Desktop sub-action — synthesize a click on the floating
-      // chat-desktop-btn so the existing open-desktop pipeline (probe,
-      // agentStart, showAgentDesktop, preview-pane wiring) is reused.
-      const dBtn = document.getElementById('chat-desktop-btn');
-      if (dBtn) dBtn.click();
     } else if (act && act.startsWith('mode-')) {
       setChatMode(btn.dataset.mode);
     }
@@ -750,7 +710,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tb-img-model')?.addEventListener('click', toggleImgDrop);
   document.getElementById('tb-vid-model')?.addEventListener('click', toggleVidDrop);
   document.getElementById('tb-web')?.addEventListener('click', toggleWebSearch);
-  document.getElementById('tb-settings')?.addEventListener('click', () => siNav('settings'));
 
   // Topbar tabs
 
@@ -786,45 +745,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   document.getElementById('send-btn')?.addEventListener('click', sendMessage);
   document.getElementById('stop-btn')?.addEventListener('click', () => {
-    // Stop the agent loop if running, OR clear the busy flag for a normal chat
-    if (typeof agentLoopRunning !== 'undefined' && agentLoopRunning) {
-      stopAgentLoop();
-    } else if (typeof chatBusy !== 'undefined' && chatBusy) {
+    if (typeof chatBusy !== 'undefined' && chatBusy) {
       setChatBusy(false);
       showToast('Cancelled (response may still finish in the background)');
     }
   });
 
-  // Desktop button — sub-button of Agent. Visible only in agent mode (the
-  // probe + setChatMode handle that). Clicking it does NOT switch modes;
-  // Agent stays selected. The desktop button itself just gets the active
-  // class while the preview pane is open.
-  document.getElementById('chat-desktop-btn')?.addEventListener('click', async () => {
-    const btn = document.getElementById('chat-desktop-btn');
-    if (!btn) return;
-    btn.classList.add('loading');
-    btn.classList.add('active');
-    try {
-      // If state is stuck (ready but wrong backend, or ready with no
-      // session), nuke it so agentStart starts fresh — but stay in agent
-      // mode the whole time.
-      if (agentReady && (agentBackend !== 'hf' || !agentSessionId) && getHfBackendUrl()) {
-        agentReset();
-      }
-      await agentStart();
-      await showAgentDesktop();
-    } finally {
-      btn.classList.remove('loading');
-    }
-  });
-  // When the preview pane is closed, drop the desktop active highlight.
-  document.getElementById('chat-preview-close')?.addEventListener('click', () => {
-    document.getElementById('chat-desktop-btn')?.classList.remove('active');
-  });
-
   // Chat preview pane controls
   document.getElementById('chat-preview-close')?.addEventListener('click', chatPreviewClose);
-  document.getElementById('chat-preview-audio')?.addEventListener('click', togglePreviewAudio);
   document.getElementById('chat-preview-toggle')?.addEventListener('click', chatPreviewToggleMode);
   document.getElementById('chat-preview-copy')?.addEventListener('click', chatPreviewCopyArtifact);
   document.getElementById('chat-preview-dl')?.addEventListener('click', chatPreviewDownloadArtifact);
@@ -860,30 +788,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Background music — hardcoded URL + auto-on by default. Only the
-  // on/off toggle and volume slider are user-controllable.
-  const musicOnEl = document.getElementById('sp-music-on');
-  const musicVolEl = document.getElementById('sp-music-vol');
-  const musicVolLabelEl = document.getElementById('sp-music-vol-label');
-  if (musicOnEl) {
-    musicOnEl.addEventListener('change', () => {
-      profileSet('music-on', musicOnEl.checked ? '1' : '0');
-      syncHomeMusic();
-    });
-  }
-  if (musicVolEl) {
-    musicVolEl.addEventListener('input', () => {
-      const v = parseInt(musicVolEl.value, 10);
-      if (musicVolLabelEl) musicVolLabelEl.textContent = v + '%';
-      profileSet('music-vol', String(v));
-      const a = document.getElementById('home-music');
-      if (a) a.volume = v / 100;
-      if (typeof _ytPlayer !== 'undefined' && _ytPlayer) {
-        try { _ytPlayer.setVolume(v); } catch {}
-      }
-    });
-  }
-
   // Debug log
   document.getElementById('sp-debug-clear')?.addEventListener('click', clearDebugLog);
   // Render debug log when Settings panel becomes active (lazy)
@@ -916,9 +820,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('img-viewer')?.addEventListener('click', (e) => {
     if (e.target.id === 'img-viewer' || e.target.id === 'img-viewer-stage') closeImageViewer();
   });
-  document.getElementById('chat-preview-reload')?.addEventListener('click', chatPreviewReload);
-  document.getElementById('chat-preview-fs')?.addEventListener('click', chatPreviewFullscreen);
-
   // Click outside to close dropdowns
   document.addEventListener('click', (e) => {
     if (e.target.closest('.tb-model') || e.target.closest('.drop')) return;
@@ -944,40 +845,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   setupCodeEditor();
 
-  // Mode pills under chat input. The Desktop button has its own handler
-  // and no data-mode attribute — skip it here so we don't clobber state
-  // with setChatMode(undefined).
+  // Mode pills under chat input.
   document.querySelectorAll('.mode-btn').forEach(b => {
     if (!b.dataset.mode) return;
     b.addEventListener('click', () => setChatMode(b.dataset.mode));
   });
 
-  // Agent backend (HF Space)
-  document.getElementById('save-hf-url')?.addEventListener('click', () => {
-    const v = document.getElementById('hf-backend-url').value.trim().replace(/\/$/, '');
-    profileSet('hf-backend-url', v);
-    showToast('Backend URL saved');
-    probeDesktopSupport();
-  });
-  document.getElementById('save-hf-token')?.addEventListener('click', () => {
-    const v = document.getElementById('hf-backend-token').value.trim();
-    profileSet('hf-backend-token', v);
-    showToast('Backend token saved');
-  });
-  document.getElementById('test-hf-url')?.addEventListener('click', async () => {
-    const url = document.getElementById('hf-backend-url').value.trim().replace(/\/$/, '');
-    const tok = document.getElementById('hf-backend-token').value.trim();
-    if (!url) { showToast('Enter a URL first'); return; }
-    showToast('Testing backend…');
-    try {
-      const r = await fetch(url + '/', { headers: tok ? { 'Authorization': 'Bearer ' + tok } : {} });
-      if (!r.ok) { showToast('✗ ' + r.status); return; }
-      const d = await r.json();
-      showToast(d.ok ? '✓ backend up · auth=' + (d.auth_required ? 'on' : 'off') : '✗ unknown response');
-    } catch (e) {
-      showToast('✗ ' + (e.message || 'failed'));
-    }
-  });
   // Replicate key test
   document.getElementById('test-rep-key')?.addEventListener('click', async () => {
     const k = document.getElementById('rep-key').value.trim() || getRepKey();
@@ -1015,7 +888,6 @@ document.addEventListener('DOMContentLoaded', () => {
   renderModelsPanel();
   createStars();
   termBootStart();
-  initBanner();
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && typeof pullSync === 'function') {
       pullSync({ silent: true });

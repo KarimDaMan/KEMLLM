@@ -172,8 +172,6 @@ function activateProfile(id) {
   applyTheme(profileGet('theme') || 'dark');
   applyAccent(profileGet('accent') || '#4a9eff');
   if (typeof applySkin === 'function') applySkin(profileGet('skin') || 'kemllm');
-  // Check if HF backend supports the desktop stack → reveal the floating button
-  if (typeof probeDesktopSupport === 'function') probeDesktopSupport();
   // Pull synced data from the cloud (chats/settings/custom models from
   // any other device the user has signed in on with the same GitHub account)
   if (typeof pullSync === 'function') pullSync();
@@ -258,18 +256,11 @@ const SYNC_KEYS = [
   'key-openai',
   'key-google',
   'key-xai',
-  // Agent backend
-  'hf-backend-url',
-  'hf-backend-token',
   // Memory (user-editable) and AI-written memory
   'memories',
   'ai-memory',
   // Sandbox toggle
   'sandbox-web',
-  // Background music
-  'music-on',
-  'music-url',
-  'music-vol',
 ];
 const SYNC_POLL_INTERVAL_MS = 30 * 1000; // re-pull every 30s while open
 let _syncPollTimer = null;
@@ -296,8 +287,6 @@ const SENSITIVE_KEYS = [
   'key-openai',
   'key-google',
   'key-xai',
-  'hf-backend-url',
-  'hf-backend-token',
 ];
 
 async function pullSync(opts) {

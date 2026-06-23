@@ -7,14 +7,15 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>KEMLLM</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 14 86 34 50 54 14 34Z' fill='none' stroke='%2338bdf8' stroke-width='9' stroke-linejoin='round'/%3E%3Cpath d='M14 50 50 70 86 50M14 66 50 86 86 66' fill='none' stroke='%2338bdf8' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=134">
+<link rel="stylesheet" href="css/style.css?v=135">
 <!-- KaTeX for math rendering (lazy-loaded by chat.js when first math is detected) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" media="print" onload="this.media='all'">
 </head>
-<body data-kemllm-build="134">
+<body data-kemllm-build="135">
 
 <!-- Plus button popover menu — sits at the top of <body> on purpose so it
      uses position:fixed against the viewport and is never affected by any
@@ -26,11 +27,6 @@
   <button class="plus-item" data-act="video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg><span>Generate video</span></button>
   <div class="plus-sep"></div>
   <button class="plus-item plus-mode" data-act="mode-chat" data-mode="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Chat mode</span></button>
-  <button class="plus-item plus-mode" data-act="mode-agent" data-mode="agent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><polyline points="6 8 10 12 6 16"/><line x1="12" y1="16" x2="17" y2="16"/></svg><span>Agent mode</span></button>
-  <!-- Desktop sub-action — only visible while in agent mode AND the
-       /vnc.html probe found a noVNC layer on the configured HF backend.
-       Visibility is toggled by the plus-btn click handler in app.js. -->
-  <button class="plus-item plus-desktop" data-act="desktop" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>Show AI desktop</span></button>
 </div>
 
 <!-- ========== LOGIN SCREEN ========== -->
@@ -122,18 +118,6 @@
   <!-- MAIN -->
   <div id="main">
 
-    <!-- Announcement banner. Visible once per new announcement id; a click
-         on the dismiss button stores the id in localStorage so it doesn't
-         come back. To announce a new feature, bump KEMLLM_BANNER in
-         js/app.js and edit the text here. -->
-    <div id="banner" class="banner" hidden>
-      <div class="banner-body">
-        <span class="banner-tag">New</span>
-        <span class="banner-text">GPT Image 2 is live — pick it from the image-model dropdown.</span>
-      </div>
-      <button id="banner-close" class="banner-x" aria-label="Dismiss">&times;</button>
-    </div>
-
     <!-- TOPBAR -->
     <div id="topbar">
       <button id="sb-toggle" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
@@ -152,9 +136,7 @@
 
       <div class="tb-spacer"></div>
 
-      <button id="tb-new-chat" class="ib-icon" title="New chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
       <button id="tb-web" class="ib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Web</button>
-      <button id="tb-settings" class="ib-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
       <button id="tb-ava" class="tb-ava" title="Profile"></button>
     </div>
 
@@ -168,13 +150,11 @@
             <button id="chat-preview-toggle" class="code-btn" style="padding:4px 10px;font-size:11px;" title="Toggle View/Code">Code</button>
             <button id="chat-preview-copy" class="code-btn" style="padding:4px 10px;font-size:11px;" title="Copy source">Copy</button>
             <button id="chat-preview-dl" class="code-btn" style="padding:4px 10px;font-size:11px;" title="Download">↓</button>
-            <button id="chat-preview-audio" class="code-btn" style="padding:4px 12px;font-size:11px;display:none;" title="Enable / disable desktop audio">🔇 Audio</button>
             <button id="chat-preview-reload" class="code-btn" style="padding:4px 10px;font-size:11px;">↻</button>
             <button id="chat-preview-fs" class="code-btn" style="padding:4px 10px;font-size:11px;" title="Fullscreen">⛶</button>
             <button id="chat-preview-close" class="code-btn" style="padding:4px 10px;font-size:11px;" title="Close">✕</button>
           </div>
         </div>
-        <audio id="chat-preview-audio-el" preload="none" style="display:none;"></audio>
         <iframe id="chat-preview-frame" class="chat-preview-frame" sandbox="allow-scripts allow-forms allow-popups allow-same-origin" src="about:blank"></iframe>
         <div id="chat-preview-code" class="chat-preview-code" style="display:none;"></div>
       </div>
@@ -186,17 +166,11 @@
             <span data-brand-name>KEMLLM</span>
           </div>
         </div>
-        <!-- Background music player. Two backends:
-             - Direct audio URLs go through <audio id="home-music">.
-             - YouTube URLs go through the YouTube IFrame Player which
-               creates an invisible <iframe> inside #home-music-yt. -->
-        <audio id="home-music" preload="none" loop></audio>
-        <div id="home-music-yt" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;"></div>
         <div id="msgs"></div>
       </div>
       <div id="input-wrap">
         <div id="attach-preview" class="attach-preview"></div>
-        <!-- Dynamic generator chips. Hidden in chat/agent mode. When the
+        <!-- Dynamic generator chips. Hidden in chat mode. When the
              user picks "Generate image" / "Generate video" from the +
              menu we set chatMode to 'image' / 'video', read the selected
              Replicate model's openapi_schema, and render a row of chips
@@ -207,7 +181,6 @@
           <button id="plus-btn" class="attach-btn" title="Add — attach, generate, switch mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
           <input id="attach-input" type="file" multiple style="display:none">
           <textarea id="input-text" rows="1" placeholder="Ask anything, generate images, run code..."></textarea>
-          <button id="chat-desktop-btn" class="ib-icon desktop-icon" title="Show AI desktop (noVNC live view)" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></button>
           <button id="send-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
           <button id="stop-btn" title="Stop"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></button>
         </div>
@@ -222,8 +195,6 @@
           <div class="code-tree-h">Files</div>
           <div class="code-file active" data-file="main.py"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>main.py</div>
           <div class="code-file" data-file="app.js"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>app.js</div>
-          <div class="code-file" data-file="main.c"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>main.c</div>
-          <div class="code-file" data-file="main.rs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>main.rs</div>
         </div>
         <div class="code-main">
           <div class="code-toolbar">
@@ -231,14 +202,6 @@
               <option value="python">Python 3.12</option>
               <option value="javascript">JavaScript Node 18</option>
               <option value="typescript">TypeScript</option>
-              <option value="c">C</option>
-              <option value="cpp">C++</option>
-              <option value="rust">Rust</option>
-              <option value="go">Go</option>
-              <option value="java">Java</option>
-              <option value="csharp">C#</option>
-              <option value="bash">Bash</option>
-              <option value="lua">Lua</option>
             </select>
             <div class="code-tb-spacer"></div>
             <button id="code-ai-btn" class="code-btn">Ask AI</button>
@@ -294,24 +257,6 @@
               <button id="test-rep-key" class="sp-btn sec">Test</button>
             </div>
             <div class="sub">Get a key at replicate.com/account/api-tokens. Calls are proxied through your Cloudflare worker (CORS-safe).</div>
-          </div>
-
-          <div class="sp-row">
-            <label>Agent Backend URL — real Ubuntu sandbox (optional, for Agent Mode)</label>
-            <div style="display:flex;gap:8px;">
-              <input id="hf-backend-url" class="sp-input" type="text" placeholder="https://yourname-kemllm-agent.hf.space">
-              <button id="save-hf-url" class="sp-btn">Save</button>
-              <button id="test-hf-url" class="sp-btn sec">Test</button>
-            </div>
-            <div class="sub">Deploy your own Ubuntu sandbox in 5 minutes — see <a href="https://github.com/karimdaman/kemllm/blob/main/agent-backend/SETUP.md" target="_blank" style="color:var(--accent);">agent-backend/SETUP.md</a>. Without this, Agent Mode falls back to in-browser Pyodide (Python only).</div>
-          </div>
-
-          <div class="sp-row">
-            <label>Agent Backend Token</label>
-            <div style="display:flex;gap:8px;">
-              <input id="hf-backend-token" class="sp-input" type="password" placeholder="the AGENT_TOKEN you set on your Space">
-              <button id="save-hf-token" class="sp-btn">Save</button>
-            </div>
           </div>
 
           <div class="sp-row" style="margin-top:22px;">
@@ -404,29 +349,13 @@
         </div>
 
         <div class="sp-section">
-          <div class="sp-h">Background music</div>
-          <div class="sp-row">
-            <label class="sp-toggle">
-              <input id="sp-music-on" type="checkbox">
-              <span>Play music on the home screen</span>
-            </label>
-            <div class="sub" style="margin-top:6px;">Plays a fixed track on the home screen only. Stops when you open a chat. Browsers block autoplay until you click the page once.</div>
-            <div style="margin-top:12px;display:flex;align-items:center;gap:10px;">
-              <span class="sub" style="min-width:60px;">Volume</span>
-              <input id="sp-music-vol" type="range" min="0" max="100" value="50" style="flex:1;">
-              <span id="sp-music-vol-label" class="sub" style="min-width:36px;text-align:right;">50%</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="sp-section">
           <div class="sp-h">Sandbox</div>
           <div class="sp-row">
             <label class="sp-toggle">
               <input id="sp-sandbox-web" type="checkbox">
               <span>Allow web access in code execution</span>
             </label>
-            <div class="sub">Off by default. When off, Pyodide's pyfetch is blocked and the HF backend is instructed to refuse network calls. Turn on only when you explicitly need the sandbox to hit the internet.</div>
+            <div class="sub">Off by default. When off, browser-sandboxed code cannot make network calls. Turn on only when you explicitly need a sandbox to hit the internet.</div>
           </div>
         </div>
 
@@ -559,13 +488,12 @@
 
 <div id="toast"></div>
 
-<script src="js/state.js?v=134"></script>
-<script src="js/models.js?v=134"></script>
-<script src="js/api.js?v=134"></script>
-<script src="js/chat.js?v=134"></script>
-<script src="js/code.js?v=134"></script>
-<script src="js/agent.js?v=134"></script>
-<script src="js/ui.js?v=134"></script>
-<script src="js/app.js?v=134"></script>
+<script src="js/state.js?v=135"></script>
+<script src="js/models.js?v=135"></script>
+<script src="js/api.js?v=135"></script>
+<script src="js/chat.js?v=135"></script>
+<script src="js/code.js?v=135"></script>
+<script src="js/ui.js?v=135"></script>
+<script src="js/app.js?v=135"></script>
 </body>
 </html>

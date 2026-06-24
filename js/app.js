@@ -56,9 +56,17 @@ function saveCurrentChat() {
 function renderHistory() {
   const all = loadHistory();
   // Apply project filter if one is active
-  const list = currentProjectFilter
+  const search = (document.getElementById('sb-chat-search')?.value || '').trim().toLowerCase();
+  let list = currentProjectFilter
     ? all.filter(c => c.projectId === currentProjectFilter)
     : all;
+  if (search) {
+    list = list.filter(c => {
+      const title = (c.title || '').toLowerCase();
+      const body = (c.messages || []).map(m => typeof m.content === 'string' ? m.content : '').join('\n').toLowerCase();
+      return title.includes(search) || body.includes(search);
+    });
+  }
   const projs = loadProjects();
   const projMap = {};
   projs.forEach(p => { projMap[p.id] = p; });
@@ -346,7 +354,7 @@ function createStars() { /* stars disabled per spec */ }
 
 // Build version — bumped on every commit. Shown in console + toast on load
 // so you can tell at a glance whether you're on the latest JS.
-const KEMLLM_BUILD = 'v136 - Icons fixed; models updated';
+const KEMLLM_BUILD = 'v137 - Workspace features';
 
 // On first load: if the HTML file cached by the browser/GitHub Pages CDN
 // is older than the JS bundle, force a hard reload so index.html updates.
@@ -576,6 +584,11 @@ document.addEventListener('DOMContentLoaded', () => {
       siNav('chat');
       return;
     }
+    if (action === 'search-chat') {
+      toggleDrawer();
+      setTimeout(() => document.getElementById('sb-chat-search')?.focus(), 60);
+      return;
+    }
     const p = el.dataset.panel;
     if (p) siNav(p);
   }
@@ -591,11 +604,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, { passive: false });
   document.getElementById('si-logo')?.addEventListener('click', () => siNav('chat'));
+  document.getElementById('sb-chat-search')?.addEventListener('input', renderHistory);
   document.getElementById('sb-viewall')?.addEventListener('click', toggleDrawer);
   document.getElementById('sb-new-project')?.addEventListener('click', createProject);
   document.getElementById('dr-close')?.addEventListener('click', closeDrawer);
   document.getElementById('dr-new')?.addEventListener('click', newChat);
 
+  // Workspace
+  document.querySelectorAll('.ow-tab').forEach(btn => {
+    btn.addEventListener('click', () => owSetTab(btn.dataset.owTab));
+  });
+  document.getElementById('ow-kb-add')?.addEventListener('click', owAddKnowledge);
+  document.getElementById('ow-kb-query')?.addEventListener('input', owSearchKnowledge);
+  document.getElementById('ow-prompt-add')?.addEventListener('click', owAddPrompt);
+  document.getElementById('ow-note-add')?.addEventListener('click', owAddNote);
+  document.getElementById('ow-auto-add')?.addEventListener('click', owAddAutomation);
+  document.getElementById('ow-channel-add')?.addEventListener('click', owAddChannel);
+  document.getElementById('ow-export')?.addEventListener('click', owExportWorkspace);
   // Mobile sidebar toggle
   document.getElementById('sb-toggle')?.addEventListener('click', toggleSidebar);
   document.getElementById('sb-backdrop')?.addEventListener('click', closeSidebar);

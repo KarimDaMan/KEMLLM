@@ -11,7 +11,7 @@ let currentPanel = 'chat';
 //   #/chat/<chatId>     → a specific chat by id
 //   #/code, #/models, #/settings → other panels
 // Legacy (no hash) → defaults to chat.
-const VALID_PANELS = ['chat', 'media', 'settings'];
+const VALID_PANELS = ['chat', 'workspace', 'models', 'media', 'code', 'settings'];
 
 function parseHash() {
   const raw = (location.hash || '').replace(/^#\/?/, '');
@@ -50,6 +50,8 @@ function siNav(panel, skipHash) {
   const pretty = panel.charAt(0).toUpperCase() + panel.slice(1);
   document.title = 'KEMLLM · ' + pretty;
   if (panel === 'media' && typeof renderMediaGrid === 'function') renderMediaGrid();
+  if (panel === 'workspace' && typeof renderWorkspace === 'function') renderWorkspace();
+  if (panel === 'models' && typeof renderModelsPanel === 'function') renderModelsPanel();
 }
 
 // ===== Media panel =====
@@ -163,6 +165,335 @@ document.addEventListener('click', (e) => {
   _mediaFilter = t.dataset.mediaTab || 'all';
   renderMediaGrid();
 });
+
+// ===== Workspace =====
+let _owActiveTab = 'knowledge';
+const OW_TOOL_DEFAULTS = [
+  { id: 'web', name: 'Web Search', desc: 'Search the web from chat and cite sources.', key: 'sandbox-web' },
+  { id: 'url', name: 'URL Fetch', desc: 'Pull page text into a prompt with the # URL pattern.' },
+  { id: 'code', name: 'Code Interpreter', desc: 'Run Python and JavaScript from chat.' },
+  { id: 'image', name: 'Image Generation', desc: 'Create and edit images from the composer.' },
+  { id: 'knowledge', name: 'Knowledge Retrieval', desc: 'Use local workspace documents as context.' },
+  { id: 'memory', name: 'Memory', desc: 'Inject saved preferences into new chats.' },
+];
+
+function owGet(key, fallback) { return profileGetJSON('ow_' + key, fallback); }
+function owSet(key, value) { profileSetJSON('ow_' + key, value); }
+function owUid(prefix) { return prefix + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7); }
+function owRenderEmpty(text) { return `<div class="ow-empty">${escapeHTML(text)}</div>`; }
+
+function owSetTab(tab) {
+  _owActiveTab = tab || 'knowledge';
+  document.querySelectorAll('.ow-tab').forEach(t => t.classList.toggle('active', t.dataset.owTab === _owActiveTab));
+  document.querySelectorAll('.ow-panel').forEach(p => p.classList.toggle('active', p.dataset.owPanel === _owActiveTab));
+  renderWorkspace();
+}
+
+async function owAddKnowledge() {
+  const nameEl = document.getElementById('ow-kb-name');
+  const descEl = document.getElementById('ow-kb-desc');
+  const modeEl = document.getElementById('ow-kb-mode');
+  const filesEl = document.getElementById('ow-kb-files');
+  const files = Array.from(filesEl?.files || []);
+  const name = (nameEl?.value || '').trim() || (files[0]?.name ? files[0].name.replace(/\.[^.]+$/, '') : '');
+  if (!name && !files.length) { showToast('Add a name or file'); return; }
+  const readFiles = [];
+  for (const f of files) {
+    let text = '';
+    try { text = await f.text(); } catch {}
+    readFiles.push({ id: owUid('file'), name: f.name, size: f.size, type: f.type || 'text/plain', text: text.slice(0, 180000), ts: Date.now() });
+  }
+  const list = owGet('knowledge', []);
+  list.unshift({ id: owUid('kb'), name: name || 'Untitled knowledge', desc: (descEl?.value || '').trim(), mode: modeEl?.value || 'focused', files: readFiles, ts: Date.now() });
+  owSet('knowledge', list);
+  if (nameEl) nameEl.value = '';
+  if (descEl) descEl.value = '';
+  if (filesEl) filesEl.value = '';
+  renderWorkspace();
+  showToast('Knowledge added');
+}
+function owDeleteKnowledge(id) { owSet('knowledge', owGet('knowledge', []).filter(k => k.id !== id)); renderWorkspace(); }
+function owUseKnowledge(id) {
+  const kb = owGet('knowledge', []).find(k => k.id === id);
+  if (!kb) return;
+  const input = document.getElementById('input-text');
+  const fileText = (kb.files || []).map(f => `### ${f.name}\n${f.text || ''}`).join('\n\n').slice(0, 24000);
+  const prompt = kb.mode === 'full'
+    ? `Use this knowledge base as full context:\n\n# ${kb.name}\n${kb.desc || ''}\n\n${fileText}\n\nTask: `
+    : `Search the knowledge base "${kb.name}" for relevant context before answering. Summary: ${kb.desc || 'No description'}\n\nTask: `;
+  if (input) {
+    input.value = prompt;
+    input.dispatchEvent(new Event('input'));
+    input.focus();
+  }
+  siNav('chat');
+}
+function owSearchKnowledge() {
+  const q = (document.getElementById('ow-kb-query')?.value || '').trim().toLowerCase();
+  const host = document.getElementById('ow-kb-results');
+  if (!host) return;
+  if (!q) { host.innerHTML = owRenderEmpty('Type to search local knowledge'); return; }
+  const hits = [];
+  owGet('knowledge', []).forEach(kb => {
+    (kb.files || []).forEach(file => {
+      const hay = `${kb.name}\n${file.name}\n${file.text || ''}`.toLowerCase();
+      const at = hay.indexOf(q);
+      if (at >= 0) {
+        const raw = file.text || '';
+        const start = Math.max(0, raw.toLowerCase().indexOf(q) - 90);
+        hits.push({ kb, file, excerpt: raw.slice(start, start + 220) || file.name });
+      }
+    });
+  });
+  host.innerHTML = hits.length ? hits.slice(0, 8).map(h => `
+    <div class="ow-item">
+      <div class="ow-item-main">
+        <div class="ow-item-title">${escapeHTML(h.file.name)}</div>
+        <div class="ow-item-sub">${escapeHTML(h.kb.name)} - ${escapeHTML(h.excerpt)}</div>
+      </div>
+      <button class="ow-mini" onclick="owUseKnowledge('${h.kb.id}')">Use</button>
+    </div>`).join('') : owRenderEmpty('No matches');
+}
+function renderKnowledge() {
+  const list = document.getElementById('ow-kb-list');
+  if (!list) return;
+  const data = owGet('knowledge', []);
+  owSearchKnowledge();
+  if (!data.length) { list.innerHTML = owRenderEmpty('No knowledge bases yet'); return; }
+  list.innerHTML = data.map(k => {
+    const files = (k.files || []).map(f => `<span class="ow-pill">${escapeHTML(f.name)}</span>`).join('');
+    return `<div class="ow-item">
+      <div class="ow-item-main">
+        <div class="ow-item-title">${escapeHTML(k.name)} <span class="ow-tag">${k.mode === 'full' ? 'full context' : 'focused retrieval'}</span></div>
+        <div class="ow-item-sub">${escapeHTML(k.desc || 'No description')}</div>
+        <div class="ow-pills">${files || '<span class="ow-pill">no files</span>'}</div>
+      </div>
+      <button class="ow-mini" onclick="owUseKnowledge('${k.id}')">Use</button>
+      <button class="ow-mini danger" onclick="owDeleteKnowledge('${k.id}')">Delete</button>
+    </div>`;
+  }).join('');
+}
+
+function owAddPrompt() {
+  const title = (document.getElementById('ow-prompt-title')?.value || '').trim();
+  const body = (document.getElementById('ow-prompt-body')?.value || '').trim();
+  if (!title || !body) { showToast('Prompt title and body required'); return; }
+  const list = owGet('prompts', []);
+  list.unshift({ id: owUid('prompt'), title, body, ts: Date.now() });
+  owSet('prompts', list);
+  document.getElementById('ow-prompt-title').value = '';
+  document.getElementById('ow-prompt-body').value = '';
+  renderWorkspace();
+}
+function owDeletePrompt(id) { owSet('prompts', owGet('prompts', []).filter(p => p.id !== id)); renderWorkspace(); }
+function owUsePrompt(id) {
+  const p = owGet('prompts', []).find(x => x.id === id);
+  if (!p) return;
+  const input = document.getElementById('input-text');
+  if (input) {
+    input.value = p.body
+      .replace(/\{\{\s*date\s*\}\}/gi, new Date().toLocaleDateString())
+      .replace(/\{\{\s*model\s*\}\}/gi, findModel(selectedChat, 'chat')?.name || 'selected model');
+    input.dispatchEvent(new Event('input'));
+    input.focus();
+  }
+  siNav('chat');
+}
+function renderPrompts() {
+  const host = document.getElementById('ow-prompt-list');
+  if (!host) return;
+  const list = owGet('prompts', []);
+  host.innerHTML = list.length ? list.map(p => `<div class="ow-item">
+    <div class="ow-item-main"><div class="ow-item-title">${escapeHTML(p.title)}</div><div class="ow-item-sub">${escapeHTML(p.body.slice(0, 180))}</div></div>
+    <button class="ow-mini" onclick="owUsePrompt('${p.id}')">Use</button>
+    <button class="ow-mini danger" onclick="owDeletePrompt('${p.id}')">Delete</button>
+  </div>`).join('') : owRenderEmpty('No saved prompts');
+}
+
+function owToolsState() {
+  const saved = owGet('tools', {});
+  const state = {};
+  OW_TOOL_DEFAULTS.forEach(t => {
+    if (t.key === 'sandbox-web') state[t.id] = profileGet(t.key) !== '0';
+    else state[t.id] = saved[t.id] !== false;
+  });
+  return state;
+}
+function owToggleTool(id) {
+  const state = owToolsState();
+  state[id] = !state[id];
+  if (id === 'web') {
+    profileSet('sandbox-web', state[id] ? '1' : '0');
+    window.webSearchOn = state[id];
+    if (typeof updateWebButton === 'function') updateWebButton();
+  }
+  owSet('tools', state);
+  renderTools();
+}
+function renderTools() {
+  const host = document.getElementById('ow-tool-list');
+  if (!host) return;
+  const state = owToolsState();
+  host.innerHTML = OW_TOOL_DEFAULTS.map(t => `<button class="ow-tool ${state[t.id] ? 'on' : ''}" onclick="owToggleTool('${t.id}')">
+    <span class="ow-tool-dot"></span>
+    <span><strong>${escapeHTML(t.name)}</strong><small>${escapeHTML(t.desc)}</small></span>
+  </button>`).join('');
+}
+
+function owAddNote() {
+  const title = (document.getElementById('ow-note-title')?.value || '').trim();
+  const body = (document.getElementById('ow-note-body')?.value || '').trim();
+  if (!title && !body) return;
+  const list = owGet('notes', []);
+  list.unshift({ id: owUid('note'), title: title || 'Untitled note', body, ts: Date.now() });
+  owSet('notes', list);
+  document.getElementById('ow-note-title').value = '';
+  document.getElementById('ow-note-body').value = '';
+  renderWorkspace();
+}
+function owDeleteNote(id) { owSet('notes', owGet('notes', []).filter(n => n.id !== id)); renderWorkspace(); }
+function owUseNote(id) {
+  const n = owGet('notes', []).find(x => x.id === id);
+  if (!n) return;
+  const input = document.getElementById('input-text');
+  if (input) {
+    input.value = `Use this note as context:\n\n# ${n.title}\n${n.body}\n\nTask: `;
+    input.dispatchEvent(new Event('input'));
+  }
+  siNav('chat');
+}
+function renderNotes() {
+  const host = document.getElementById('ow-note-list');
+  if (!host) return;
+  const list = owGet('notes', []);
+  host.innerHTML = list.length ? list.map(n => `<div class="ow-item">
+    <div class="ow-item-main"><div class="ow-item-title">${escapeHTML(n.title)}</div><div class="ow-item-sub">${escapeHTML(n.body.slice(0, 220))}</div></div>
+    <button class="ow-mini" onclick="owUseNote('${n.id}')">Use</button>
+    <button class="ow-mini danger" onclick="owDeleteNote('${n.id}')">Delete</button>
+  </div>`).join('') : owRenderEmpty('No notes yet');
+}
+
+function owAddAutomation() {
+  const name = (document.getElementById('ow-auto-name')?.value || '').trim();
+  const when = (document.getElementById('ow-auto-when')?.value || '').trim();
+  const prompt = (document.getElementById('ow-auto-prompt')?.value || '').trim();
+  if (!name || !prompt) { showToast('Automation name and prompt required'); return; }
+  const list = owGet('automations', []);
+  list.unshift({ id: owUid('auto'), name, when: when || 'manual', prompt, enabled: true, ts: Date.now() });
+  owSet('automations', list);
+  ['ow-auto-name', 'ow-auto-when', 'ow-auto-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  renderWorkspace();
+}
+function owDeleteAutomation(id) { owSet('automations', owGet('automations', []).filter(a => a.id !== id)); renderWorkspace(); }
+function owRunAutomation(id) {
+  const a = owGet('automations', []).find(x => x.id === id);
+  if (!a) return;
+  const input = document.getElementById('input-text');
+  if (input) {
+    input.value = a.prompt;
+    input.dispatchEvent(new Event('input'));
+  }
+  siNav('chat');
+}
+function renderAutomations() {
+  const host = document.getElementById('ow-auto-list');
+  if (!host) return;
+  const list = owGet('automations', []);
+  host.innerHTML = list.length ? list.map(a => `<div class="ow-item">
+    <div class="ow-item-main"><div class="ow-item-title">${escapeHTML(a.name)} <span class="ow-tag">${escapeHTML(a.when)}</span></div><div class="ow-item-sub">${escapeHTML(a.prompt.slice(0, 220))}</div></div>
+    <button class="ow-mini" onclick="owRunAutomation('${a.id}')">Run</button>
+    <button class="ow-mini danger" onclick="owDeleteAutomation('${a.id}')">Delete</button>
+  </div>`).join('') : owRenderEmpty('No automations yet');
+}
+
+function owAddChannel() {
+  const name = (document.getElementById('ow-channel-name')?.value || '').trim();
+  const models = (document.getElementById('ow-channel-models')?.value || '').trim();
+  if (!name) return;
+  const list = owGet('channels', []);
+  list.unshift({ id: owUid('channel'), name, models, ts: Date.now() });
+  owSet('channels', list);
+  document.getElementById('ow-channel-name').value = '';
+  document.getElementById('ow-channel-models').value = '';
+  renderWorkspace();
+}
+function owDeleteChannel(id) { owSet('channels', owGet('channels', []).filter(c => c.id !== id)); renderWorkspace(); }
+function owOpenChannel(id) {
+  const c = owGet('channels', []).find(x => x.id === id);
+  if (!c) return;
+  const input = document.getElementById('input-text');
+  if (input) {
+    input.value = `Channel: ${c.name}\nModels: ${c.models || 'selected model'}\n\n`;
+    input.dispatchEvent(new Event('input'));
+  }
+  siNav('chat');
+}
+function renderChannels() {
+  const host = document.getElementById('ow-channel-list');
+  if (!host) return;
+  const list = owGet('channels', []);
+  host.innerHTML = list.length ? list.map(c => `<div class="ow-item">
+    <div class="ow-item-main"><div class="ow-item-title"># ${escapeHTML(c.name)}</div><div class="ow-item-sub">${escapeHTML(c.models || 'No model mentions')}</div></div>
+    <button class="ow-mini" onclick="owOpenChannel('${c.id}')">Open</button>
+    <button class="ow-mini danger" onclick="owDeleteChannel('${c.id}')">Delete</button>
+  </div>`).join('') : owRenderEmpty('No channels yet');
+}
+
+function renderAdmin() {
+  const providers = document.getElementById('ow-admin-providers');
+  if (providers) {
+    const rows = [
+      ['Replicate', !!profileGet('rep-key')],
+      ['OpenAI', !!profileGet('key-openai')],
+      ['Anthropic', !!profileGet('key-anthropic')],
+      ['Google AI', !!profileGet('key-google')],
+      ['xAI', !!profileGet('key-xai')],
+    ];
+    providers.innerHTML = rows.map(([name, ok]) => `<div class="ow-status"><span>${name}</span><b class="${ok ? 'ok' : ''}">${ok ? 'connected' : 'needs key'}</b></div>`).join('');
+  }
+  const perms = document.getElementById('ow-admin-permissions');
+  if (perms) perms.innerHTML = ['Chat', 'Workspace', 'Tools', 'Media', 'Settings'].map(x => `<div class="ow-status"><span>${x}</span><b class="ok">owner</b></div>`).join('');
+  const runtime = document.getElementById('ow-admin-runtime');
+  if (runtime) {
+    runtime.innerHTML = [
+      ['PWA shell', 'ready'],
+      ['Code runner', 'browser'],
+      ['Sync', activeProfileId ? 'profile' : 'local'],
+    ].map(([a, b]) => `<div class="ow-status"><span>${a}</span><b class="ok">${b}</b></div>`).join('');
+  }
+}
+
+function renderWorkspace() {
+  document.querySelectorAll('.ow-tab').forEach(t => t.classList.toggle('active', t.dataset.owTab === _owActiveTab));
+  document.querySelectorAll('.ow-panel').forEach(p => p.classList.toggle('active', p.dataset.owPanel === _owActiveTab));
+  renderKnowledge();
+  renderPrompts();
+  renderTools();
+  renderNotes();
+  renderAutomations();
+  renderChannels();
+  renderAdmin();
+}
+
+function owExportWorkspace() {
+  const data = {
+    exported_at: new Date().toISOString(),
+    knowledge: owGet('knowledge', []),
+    prompts: owGet('prompts', []),
+    tools: owToolsState(),
+    notes: owGet('notes', []),
+    automations: owGet('automations', []),
+    channels: owGet('channels', []),
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'kemllm-workspace-' + Date.now() + '.json';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1000);
+}
 
 // Apply whatever the URL hash currently says: switch panel + load chat
 // if a chatId is present. Used by initRouter, popstate, and hashchange.
